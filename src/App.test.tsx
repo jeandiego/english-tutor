@@ -36,6 +36,7 @@ describe("English Coach shell", () => {
     expect(await screen.findByText("Desktop runtime ready")).toBeInTheDocument();
     expect(screen.getByText("macos")).toBeInTheDocument();
     expect(screen.getByText("aarch64")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
   });
 
   it("surfaces the native error when the command rejects", async () => {
@@ -51,5 +52,6 @@ describe("English Coach shell", () => {
       screen.getByText("Restart the desktop app and try again."),
     ).toBeInTheDocument();
     expect(screen.getByText("Error:", { exact: false })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeDisabled();
   });
 });

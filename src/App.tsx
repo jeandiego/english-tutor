@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { ConversationStage } from "./components/ConversationStage";
 import { SystemDiagnostics } from "./components/SystemDiagnostics";
 import { TalkControl } from "./components/TalkControl";
+import { usePushToTalk } from "./hooks/usePushToTalk";
 import { getRuntimeHealth } from "./native/health";
 import type { HealthState } from "./types/runtime";
 import "./App.css";
@@ -9,6 +10,9 @@ import "./App.css";
 function App() {
   const [healthState, setHealthState] = useState<HealthState>({
     status: "checking",
+  });
+  const recording = usePushToTalk({
+    enabled: healthState.status === "ready",
   });
 
   useEffect(() => {
@@ -48,8 +52,13 @@ function App() {
         </div>
       </header>
 
-      <ConversationStage />
-      <TalkControl />
+      <ConversationStage state={recording.state} />
+      <TalkControl
+        disabled={healthState.status !== "ready"}
+        onEnd={(owner) => void recording.end(owner)}
+        onStart={(owner) => void recording.begin(owner)}
+        state={recording.state}
+      />
       <SystemDiagnostics state={healthState} />
     </main>
   );
