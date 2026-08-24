@@ -3,10 +3,13 @@ import { AppHeader, type AppPage } from "./components/AppHeader";
 import { ConversationStage } from "./components/ConversationStage";
 import { SettingsPage } from "./components/SettingsPage";
 import { SystemDiagnostics } from "./components/SystemDiagnostics";
-import type { TranscriptionDiagnostic } from "./components/SystemDiagnostics";
+import type {
+  TranscriptionDiagnostic,
+  TutorDiagnostic,
+} from "./components/SystemDiagnostics";
 import { TalkControl } from "./components/TalkControl";
-import { usePushToTalk } from "./hooks/usePushToTalk";
 import { useRuntimeSetup } from "./hooks/useRuntimeSetup";
+import { useTutorConversation } from "./hooks/useTutorConversation";
 import "./App.css";
 
 function App() {
@@ -14,28 +17,41 @@ function App() {
   const {
     healthState,
     reloadTranscriptionSetup,
+    reloadTutorSetup,
     resetSettingsDraft,
+    resetTutorSettingsDraft,
     saveSettings,
+    saveTutorSettings,
     settingsDirty,
     settingsDraft,
     setSettingsDraft,
+    setTutorSettingsDraft,
     transcriptionReady,
     transcriptionState,
+    tutorReady,
+    tutorSettingsDirty,
+    tutorSettingsDraft,
+    tutorState,
   } = useRuntimeSetup();
-  const recording = usePushToTalk({
+  const conversation = useTutorConversation({
     enabled:
       activePage === "conversation" &&
       healthState.status === "ready" &&
-      transcriptionReady,
+      transcriptionReady &&
+      tutorReady,
   });
   const voiceBusy =
-    recording.state.status === "requesting" ||
-    recording.state.status === "recording" ||
-    recording.state.status === "transcribing";
+    conversation.state.status === "requesting" ||
+    conversation.state.status === "recording" ||
+    conversation.state.status === "transcribing" ||
+    conversation.thinking;
   const settingsNeedsAttention =
     transcriptionState.status === "error" ||
     (transcriptionState.status === "loaded" &&
-      transcriptionState.setup.preflight.status !== "ready");
+      transcriptionState.setup.preflight.status !== "ready") ||
+    tutorState.status === "error" ||
+    (tutorState.status === "loaded" &&
+      tutorState.setup.preflight.status !== "ready");
   const voiceDisabledHint =
     healthState.status !== "ready"
       ? "Voice input is available when the desktop runtime is ready"
@@ -43,7 +59,11 @@ function App() {
         ? "Voice input is available after the local transcription check"
         : !transcriptionReady
           ? "Open Settings to complete local transcription setup"
-          : undefined;
+          : tutorState.status === "checking"
+            ? "Voice input is available after the local tutor check"
+            : !tutorReady
+              ? "Open Settings to complete local tutor setup"
+              : undefined;
   const transcriptionDiagnostic: TranscriptionDiagnostic =
     transcriptionState.status === "checking" ||
     (transcriptionState.status === "loaded" && transcriptionState.saving)
@@ -69,6 +89,39 @@ function App() {
                 : "Local transcription needs setup",
             canOpenSettings: true,
           };
+  const tutorDiagnostic: TutorDiagnostic =
+    tutorState.status === "checking" ||
+    (tutorState.status === "loaded" && tutorState.saving)
+      ? {
+          status: "checking",
+          message:
+            tutorState.status === "loaded"
+              ? "Verifying local tutor"
+              : "Checking local tutor",
+          canOpenSettings: false,
+        }
+      : tutorReady
+        ? {
+            status: "ready",
+            message: "Local tutor ready",
+            meta:
+              tutorState.status === "loaded"
+                ? tutorState.setup.settings.modelName
+                : undefined,
+            canOpenSettings: false,
+          }
+        : {
+            status: "error",
+            message:
+              tutorState.status === "error"
+                ? "Local tutor unavailable"
+                : tutorState.setup.preflight.status === "ollamaUnavailable"
+                  ? "Ollama unavailable"
+                  : tutorState.setup.preflight.status === "noModelConfigured"
+                    ? "Tutor model not configured"
+                    : "Tutor model unavailable",
+            canOpenSettings: true,
+          };
 
   return (
     <main
@@ -84,33 +137,48 @@ function App() {
 
       {activePage === "conversation" ? (
         <>
-          <ConversationStage state={recording.state} />
+          <ConversationStage
+            exchanges={conversation.exchanges}
+            state={conversation.state}
+            thinking={conversation.thinking}
+          />
           <TalkControl
             disabled={
               healthState.status !== "ready" ||
               !transcriptionReady ||
-              recording.state.status === "transcribing"
+              !tutorReady ||
+              conversation.state.status === "transcribing" ||
+              conversation.thinking
             }
             disabledHint={voiceDisabledHint}
-            onEnd={(owner) => void recording.end(owner)}
-            onStart={(owner) => void recording.begin(owner)}
-            state={recording.state}
+            onEnd={(owner) => void conversation.end(owner)}
+            onStart={(owner) => void conversation.begin(owner)}
+            state={conversation.state}
+            thinking={conversation.thinking}
           />
           <SystemDiagnostics
             healthState={healthState}
             onOpenSettings={() => setActivePage("settings")}
             transcription={transcriptionDiagnostic}
+            tutor={tutorDiagnostic}
           />
         </>
       ) : (
         <SettingsPage
-          dirty={settingsDirty}
-          draft={settingsDraft}
-          onDraftChange={setSettingsDraft}
-          onReset={resetSettingsDraft}
-          onRetry={reloadTranscriptionSetup}
-          onSave={saveSettings}
-          state={transcriptionState}
+          onTranscriptionDraftChange={setSettingsDraft}
+          onTranscriptionReset={resetSettingsDraft}
+          onTranscriptionRetry={reloadTranscriptionSetup}
+          onTranscriptionSave={saveSettings}
+          onTutorDraftChange={setTutorSettingsDraft}
+          onTutorReset={resetTutorSettingsDraft}
+          onTutorRetry={reloadTutorSetup}
+          onTutorSave={saveTutorSettings}
+          transcriptionDirty={settingsDirty}
+          transcriptionDraft={settingsDraft}
+          transcriptionState={transcriptionState}
+          tutorDirty={tutorSettingsDirty}
+          tutorDraft={tutorSettingsDraft}
+          tutorState={tutorState}
         />
       )}
     </main>

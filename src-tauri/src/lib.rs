@@ -8,6 +8,9 @@ pub fn run() {
             commands::transcription::load_transcription_setup,
             commands::transcription::save_transcription_settings,
             commands::transcription::transcribe_audio,
+            commands::tutor::load_tutor_setup,
+            commands::tutor::save_tutor_settings,
+            commands::tutor::generate_tutor_turn,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

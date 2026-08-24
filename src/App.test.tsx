@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { getRuntimeHealth } from "./native/health";
 import {
@@ -7,6 +7,11 @@ import {
   saveTranscriptionSettings,
 } from "./native/transcription";
 import type { TranscriptionSetup } from "./types/transcription";
+import {
+  loadTutorSetup,
+  saveTutorSettings,
+} from "./native/tutor";
+import type { TutorSetup } from "./types/tutor";
 
 vi.mock("./native/health", () => ({
   getRuntimeHealth: vi.fn(),
@@ -22,9 +27,21 @@ vi.mock("./native/transcription", async (importOriginal) => {
   };
 });
 
+vi.mock("./native/tutor", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./native/tutor")>();
+  return {
+    ...actual,
+    loadTutorSetup: vi.fn(),
+    saveTutorSettings: vi.fn(),
+    requestTutorTurn: vi.fn(),
+  };
+});
+
 const getRuntimeHealthMock = vi.mocked(getRuntimeHealth);
 const loadTranscriptionSetupMock = vi.mocked(loadTranscriptionSetup);
 const saveTranscriptionSettingsMock = vi.mocked(saveTranscriptionSettings);
+const loadTutorSetupMock = vi.mocked(loadTutorSetup);
+const saveTutorSettingsMock = vi.mocked(saveTutorSettings);
 
 const readySetup: TranscriptionSetup = {
   settings: {
@@ -82,6 +99,32 @@ const incompleteSetup: TranscriptionSetup = {
   },
 };
 
+const readyTutorSetup: TutorSetup = {
+  settings: {
+    baseUrl: "http://127.0.0.1:11434",
+    modelName: "qwen3.5:9b",
+  },
+  preflight: {
+    status: "ready",
+    message: "Ollama is ready with qwen3.5:9b.",
+    version: "0.20.4",
+    availableModels: [{ name: "qwen3.5:9b", parameterSize: "9B" }],
+  },
+};
+
+const unavailableTutorSetup: TutorSetup = {
+  settings: {
+    baseUrl: "http://127.0.0.1:11434",
+    modelName: "",
+  },
+  preflight: {
+    status: "ollamaUnavailable",
+    message: "Ollama is unavailable at http://127.0.0.1:11434.",
+    technicalMessage: "connection refused",
+    availableModels: [],
+  },
+};
+
 function readyHealth() {
   return {
     appStatus: "ready" as const,
@@ -89,6 +132,10 @@ function readyHealth() {
     architecture: "aarch64",
   };
 }
+
+beforeEach(() => {
+  loadTutorSetupMock.mockResolvedValue(readyTutorSetup);
+});
 
 afterEach(() => {
   cleanup();
@@ -107,7 +154,7 @@ describe("English Coach shell", () => {
     expect(screen.getByRole("button", { name: /hold to talk/i })).toBeDisabled();
   });
 
-  it("enables voice input only when desktop and transcription runtimes are ready", async () => {
+  it("enables voice input only when desktop, transcription, and tutor runtimes are ready", async () => {
     getRuntimeHealthMock.mockResolvedValue(readyHealth());
     loadTranscriptionSetupMock.mockResolvedValue(readySetup);
 
@@ -115,6 +162,7 @@ describe("English Coach shell", () => {
 
     expect(await screen.findByText("Desktop runtime ready")).toBeInTheDocument();
     expect(await screen.findByText("Local transcription ready")).toBeInTheDocument();
+    expect(await screen.findByText("Local tutor ready")).toBeInTheDocument();
     expect(screen.getByText("macos · aarch64")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
@@ -135,9 +183,11 @@ describe("English Coach shell", () => {
     expect(screen.queryByLabelText("Whisper executable")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: /hold to talk/i })).toBeDisabled();
 
-    fireEvent.click(screen.getByRole("button", { name: "Open settings" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Open transcription settings" }),
+    );
 
-    expect(await screen.findByRole("heading", { name: "Local transcription" })).toBeInTheDocument();
+    expect(await screen.findByRole("heading", { name: "Local runtimes" })).toBeInTheDocument();
     expect(screen.getByText("Set the Whisper executable path.")).toBeInTheDocument();
     expect(screen.getByText("Set the Whisper model path.")).toBeInTheDocument();
     expect(screen.getByLabelText("Whisper executable")).toBeInTheDocument();
@@ -154,7 +204,7 @@ describe("English Coach shell", () => {
     render(<App />);
 
     fireEvent.click(
-      await screen.findByRole("button", { name: "Open settings" }),
+      await screen.findByRole("button", { name: "Open transcription settings" }),
     );
     expect(
       await screen.findByText("Transcription settings could not be loaded."),
@@ -255,5 +305,36 @@ describe("English Coach shell", () => {
       screen.getByText("Restart the desktop app and try again."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /hold to talk/i })).toBeDisabled();
+  });
+
+  it("shows actionable Ollama setup and saves a selected local model", async () => {
+    getRuntimeHealthMock.mockResolvedValue(readyHealth());
+    loadTranscriptionSetupMock.mockResolvedValue(readySetup);
+    loadTutorSetupMock.mockResolvedValue(unavailableTutorSetup);
+    saveTutorSettingsMock.mockResolvedValue(readyTutorSetup);
+
+    render(<App />);
+
+    expect(await screen.findByText("Ollama unavailable")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeDisabled();
+    fireEvent.click(screen.getByRole("button", { name: "Open tutor settings" }));
+
+    expect(await screen.findByLabelText("Ollama URL")).toHaveValue(
+      "http://127.0.0.1:11434",
+    );
+    fireEvent.change(screen.getByLabelText("Tutor model"), {
+      target: { value: "qwen3.5:9b" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Save and verify tutor" }),
+    );
+
+    await waitFor(() =>
+      expect(saveTutorSettingsMock).toHaveBeenCalledWith({
+        baseUrl: "http://127.0.0.1:11434",
+        modelName: "qwen3.5:9b",
+      }),
+    );
+    expect(await screen.findByText("Ready")).toBeInTheDocument();
   });
 });

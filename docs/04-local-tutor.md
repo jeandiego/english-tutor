@@ -79,6 +79,10 @@ type TutorTurn = {
     suggestion: string;
     explanation?: string;
   }>;
+  performance?: {
+    outputTokens: number;
+    tokensPerSecond: number;
+  };
 };
 ```
 
@@ -106,6 +110,8 @@ Render:
 
 - user transcript
 - tutor textual reply
+- end-to-end response time and Ollama output throughput (`tok/s`) for each
+  completed exchange when the local runtime reports generation metrics
 
 Store corrections in state, but do not build the corrections panel yet. They may be visible only in developer diagnostics for this slice.
 

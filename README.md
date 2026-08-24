@@ -20,6 +20,16 @@ For installation commands, configuration steps, the acceptance sentence, and
 troubleshooting, see the
 [local transcription setup and test guide](docs/03-local-transcription-setup.md).
 
+## Local tutor setup
+
+Slice 04 sends completed transcripts only to an Ollama service running on this
+Mac. Start Ollama, make sure a conversational model is already installed, then
+open **Settings** and configure its exact local model name. English Coach never
+pulls or selects a model automatically and rejects non-loopback Ollama URLs.
+
+For setup commands, runtime status meanings, and the two-turn acceptance test,
+see the [local tutor setup and test guide](docs/04-local-tutor-setup.md).
+
 The implementation must evolve through small vertical slices. Each slice must leave the application runnable and testable. Do not implement future slices early.
 
 ## Target stack
