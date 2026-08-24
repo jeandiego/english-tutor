@@ -1,49 +1,56 @@
-import { useState } from "react";
-import reactLogo from "./assets/react.svg";
-import { invoke } from "@tauri-apps/api/core";
+import { useEffect, useState } from "react";
+import { ConversationStage } from "./components/ConversationStage";
+import { SystemDiagnostics } from "./components/SystemDiagnostics";
+import { TalkControl } from "./components/TalkControl";
+import { getRuntimeHealth } from "./native/health";
+import type { HealthState } from "./types/runtime";
 import "./App.css";
 
 function App() {
-  const [greetMsg, setGreetMsg] = useState("");
-  const [name, setName] = useState("");
+  const [healthState, setHealthState] = useState<HealthState>({
+    status: "checking",
+  });
 
-  async function greet() {
-    // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
-    setGreetMsg(await invoke("greet", { name }));
-  }
+  useEffect(() => {
+    let ignore = false;
+
+    async function checkDesktopRuntime() {
+      try {
+        const health = await getRuntimeHealth();
+
+        if (!ignore) {
+          setHealthState({ status: "ready", health });
+        }
+      } catch (error) {
+        if (!ignore) {
+          setHealthState({
+            status: "error",
+            message: error instanceof Error ? error.message : String(error),
+          });
+        }
+      }
+    }
+
+    void checkDesktopRuntime();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   return (
-    <main className="container">
-      <h1>Welcome to Tauri + React</h1>
+    <main className="coach-shell">
+      <header className="app-header">
+        <h1>English Coach</h1>
+        <div className="local-status" aria-label="Runs locally">
+          <span className="local-status__dot" aria-hidden="true" />
+          <span>Local</span>
+        </div>
+      </header>
 
-      <div className="row">
-        <a href="https://vite.dev" target="_blank">
-          <img src="/vite.svg" className="logo vite" alt="Vite logo" />
-        </a>
-        <a href="https://tauri.app" target="_blank">
-          <img src="/tauri.svg" className="logo tauri" alt="Tauri logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <p>Click on the Tauri, Vite, and React logos to learn more.</p>
-
-      <form
-        className="row"
-        onSubmit={(e) => {
-          e.preventDefault();
-          greet();
-        }}
-      >
-        <input
-          id="greet-input"
-          onChange={(e) => setName(e.currentTarget.value)}
-          placeholder="Enter a name..."
-        />
-        <button type="submit">Greet</button>
-      </form>
-      <p>{greetMsg}</p>
+      <ConversationStage />
+      <TalkControl />
+      <SystemDiagnostics state={healthState} />
     </main>
   );
 }

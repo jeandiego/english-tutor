@@ -1,0 +1,232 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-24T18:22:14Z",
+  "title": "Design System: English Coach",
+  "extensions": {
+    "colorMeta": {
+      "canvas-mist": {
+        "role": "neutral",
+        "displayName": "Canvas Mist",
+        "canonical": "#f4f7fb",
+        "tonalRamp": ["oklch(15% 0.006 255.5)", "oklch(27% 0.006 255.5)", "oklch(39% 0.006 255.5)", "oklch(51% 0.006 255.5)", "oklch(63% 0.006 255.5)", "oklch(75% 0.006 255.5)", "oklch(87% 0.006 255.5)", "oklch(95% 0.006 255.5)"]
+      },
+      "shell-frost": {
+        "role": "neutral",
+        "displayName": "Shell Frost",
+        "canonical": "#f8fafe",
+        "tonalRamp": ["oklch(15% 0.006 264.5)", "oklch(27% 0.006 264.5)", "oklch(39% 0.006 264.5)", "oklch(51% 0.006 264.5)", "oklch(63% 0.006 264.5)", "oklch(75% 0.006 264.5)", "oklch(87% 0.006 264.5)", "oklch(95% 0.006 264.5)"]
+      },
+      "chrome-white": {
+        "role": "neutral",
+        "displayName": "Chrome White",
+        "canonical": "#fbfcfe",
+        "tonalRamp": ["oklch(15% 0.003 264.5)", "oklch(27% 0.003 264.5)", "oklch(39% 0.003 264.5)", "oklch(51% 0.003 264.5)", "oklch(63% 0.003 264.5)", "oklch(75% 0.003 264.5)", "oklch(87% 0.003 264.5)", "oklch(95% 0.003 264.5)"]
+      },
+      "stage-white": {
+        "role": "neutral",
+        "displayName": "Stage White",
+        "canonical": "#ffffff",
+        "tonalRamp": ["oklch(15% 0.000 89.9)", "oklch(27% 0.000 89.9)", "oklch(39% 0.000 89.9)", "oklch(51% 0.000 89.9)", "oklch(63% 0.000 89.9)", "oklch(75% 0.000 89.9)", "oklch(87% 0.000 89.9)", "oklch(95% 0.000 89.9)"]
+      },
+      "deep-navy-ink": {
+        "role": "neutral",
+        "displayName": "Deep Navy Ink",
+        "canonical": "#132238",
+        "tonalRamp": ["oklch(15% 0.047 257.9)", "oklch(27% 0.047 257.9)", "oklch(39% 0.047 257.9)", "oklch(51% 0.047 257.9)", "oklch(63% 0.047 257.9)", "oklch(75% 0.047 257.9)", "oklch(87% 0.047 257.9)", "oklch(95% 0.047 257.9)"]
+      },
+      "masthead-ink": {
+        "role": "neutral",
+        "displayName": "Masthead Ink",
+        "canonical": "#0c1d35",
+        "tonalRamp": ["oklch(15% 0.052 257.3)", "oklch(27% 0.052 257.3)", "oklch(39% 0.052 257.3)", "oklch(51% 0.052 257.3)", "oklch(63% 0.052 257.3)", "oklch(75% 0.052 257.3)", "oklch(87% 0.052 257.3)", "oklch(95% 0.052 257.3)"]
+      },
+      "subtitle-ink": {
+        "role": "neutral",
+        "displayName": "Subtitle Ink",
+        "canonical": "#30415a",
+        "tonalRamp": ["oklch(15% 0.049 257.9)", "oklch(27% 0.049 257.9)", "oklch(39% 0.049 257.9)", "oklch(51% 0.049 257.9)", "oklch(63% 0.049 257.9)", "oklch(75% 0.049 257.9)", "oklch(87% 0.049 257.9)", "oklch(95% 0.049 257.9)"]
+      },
+      "muted-slate": {
+        "role": "neutral",
+        "displayName": "Muted Slate",
+        "canonical": "#617087",
+        "tonalRamp": ["oklch(15% 0.040 258.8)", "oklch(27% 0.040 258.8)", "oklch(39% 0.040 258.8)", "oklch(51% 0.040 258.8)", "oklch(63% 0.040 258.8)", "oklch(75% 0.040 258.8)", "oklch(87% 0.040 258.8)", "oklch(95% 0.040 258.8)"]
+      },
+      "cool-rule": {
+        "role": "neutral",
+        "displayName": "Cool Rule",
+        "canonical": "#d8e0eb",
+        "tonalRamp": ["oklch(15% 0.017 256.3)", "oklch(27% 0.017 256.3)", "oklch(39% 0.017 256.3)", "oklch(51% 0.017 256.3)", "oklch(63% 0.017 256.3)", "oklch(75% 0.017 256.3)", "oklch(87% 0.017 256.3)", "oklch(95% 0.017 256.3)"]
+      },
+      "frame-blue-gray": {
+        "role": "neutral",
+        "displayName": "Frame Blue-Gray",
+        "canonical": "#aec0d8",
+        "tonalRamp": ["oklch(15% 0.039 255.6)", "oklch(27% 0.039 255.6)", "oklch(39% 0.039 255.6)", "oklch(51% 0.039 255.6)", "oklch(63% 0.039 255.6)", "oklch(75% 0.039 255.6)", "oklch(87% 0.039 255.6)", "oklch(95% 0.039 255.6)"]
+      },
+      "signal-blue": {
+        "role": "primary",
+        "displayName": "Signal Blue",
+        "canonical": "#1769e0",
+        "tonalRamp": ["oklch(15% 0.197 259.2)", "oklch(27% 0.197 259.2)", "oklch(39% 0.197 259.2)", "oklch(51% 0.197 259.2)", "oklch(63% 0.197 259.2)", "oklch(75% 0.197 259.2)", "oklch(87% 0.197 259.2)", "oklch(95% 0.197 259.2)"]
+      },
+      "signal-blue-ink": {
+        "role": "primary",
+        "displayName": "Signal Blue Ink",
+        "canonical": "#1559bc",
+        "tonalRamp": ["oklch(15% 0.169 259.0)", "oklch(27% 0.169 259.0)", "oklch(39% 0.169 259.0)", "oklch(51% 0.169 259.0)", "oklch(63% 0.169 259.0)", "oklch(75% 0.169 259.0)", "oklch(87% 0.169 259.0)", "oklch(95% 0.169 259.0)"]
+      },
+      "disabled-control": {
+        "role": "neutral",
+        "displayName": "Disabled Control",
+        "canonical": "#e9eef5",
+        "tonalRamp": ["oklch(15% 0.011 256.7)", "oklch(27% 0.011 256.7)", "oklch(39% 0.011 256.7)", "oklch(51% 0.011 256.7)", "oklch(63% 0.011 256.7)", "oklch(75% 0.011 256.7)", "oklch(87% 0.011 256.7)", "oklch(95% 0.011 256.7)"]
+      },
+      "disabled-ink": {
+        "role": "neutral",
+        "displayName": "Disabled Ink",
+        "canonical": "#647187",
+        "tonalRamp": ["oklch(15% 0.038 260.9)", "oklch(27% 0.038 260.9)", "oklch(39% 0.038 260.9)", "oklch(51% 0.038 260.9)", "oklch(63% 0.038 260.9)", "oklch(75% 0.038 260.9)", "oklch(87% 0.038 260.9)", "oklch(95% 0.038 260.9)"]
+      },
+      "runtime-ready": {
+        "role": "tertiary",
+        "displayName": "Runtime Ready",
+        "canonical": "#277557",
+        "tonalRamp": ["oklch(15% 0.090 164.0)", "oklch(27% 0.090 164.0)", "oklch(39% 0.090 164.0)", "oklch(51% 0.090 164.0)", "oklch(63% 0.090 164.0)", "oklch(75% 0.090 164.0)", "oklch(87% 0.090 164.0)", "oklch(95% 0.090 164.0)"]
+      },
+      "runtime-error": {
+        "role": "tertiary",
+        "displayName": "Runtime Error",
+        "canonical": "#a5363f",
+        "tonalRamp": ["oklch(15% 0.146 19.6)", "oklch(27% 0.146 19.6)", "oklch(39% 0.146 19.6)", "oklch(51% 0.146 19.6)", "oklch(63% 0.146 19.6)", "oklch(75% 0.146 19.6)", "oklch(87% 0.146 19.6)", "oklch(95% 0.146 19.6)"]
+      },
+      "runtime-error-ink": {
+        "role": "tertiary",
+        "displayName": "Runtime Error Ink",
+        "canonical": "#7f3138",
+        "tonalRamp": ["oklch(15% 0.108 17.6)", "oklch(27% 0.108 17.6)", "oklch(39% 0.108 17.6)", "oklch(51% 0.108 17.6)", "oklch(63% 0.108 17.6)", "oklch(75% 0.108 17.6)", "oklch(87% 0.108 17.6)", "oklch(95% 0.108 17.6)"]
+      },
+      "runtime-error-surface": {
+        "role": "tertiary",
+        "displayName": "Runtime Error Surface",
+        "canonical": "#fff8f8",
+        "tonalRamp": ["oklch(15% 0.007 17.3)", "oklch(27% 0.007 17.3)", "oklch(39% 0.007 17.3)", "oklch(51% 0.007 17.3)", "oklch(63% 0.007 17.3)", "oklch(75% 0.007 17.3)", "oklch(87% 0.007 17.3)", "oklch(95% 0.007 17.3)"]
+      }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display", "purpose": "The broad talk-control label." },
+      "headline": { "displayName": "Headline", "purpose": "Centered conversation-stage copy." },
+      "title": { "displayName": "Title", "purpose": "The compact product masthead." },
+      "body": { "displayName": "Body", "purpose": "Current runtime status messaging." },
+      "label": { "displayName": "Label", "purpose": "Local identity and diagnostics labels." },
+      "hint": { "displayName": "Hint", "purpose": "Secondary action explanation." },
+      "micro": { "displayName": "Micro", "purpose": "Runtime metadata and error-supporting copy." }
+    },
+    "shadows": [
+      {
+        "name": "disabled-control-ambient",
+        "value": "0 8px 22px rgb(35 57 84 / 7%)",
+        "purpose": "Modest separation beneath the large disabled control."
+      },
+      {
+        "name": "error-detail-ambient",
+        "value": "0 8px 22px rgb(67 27 31 / 10%)",
+        "purpose": "Warm local separation for open technical details."
+      }
+    ],
+    "motion": [
+      {
+        "name": "runtime-check",
+        "value": "900ms cubic-bezier(0.22, 1, 0.36, 1) infinite",
+        "purpose": "Rotates the checking indicator; removed when reduced motion is requested."
+      }
+    ],
+    "breakpoints": [
+      { "name": "compact-width", "value": "700px" },
+      { "name": "compact-height", "value": "520px" },
+      { "name": "narrow-width", "value": "560px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Local Status Chip",
+      "kind": "chip",
+      "refersTo": "local-status",
+      "description": "Noninteractive notation confirming that the product runs locally.",
+      "html": "<span class=\"ds-local-status\"><span class=\"ds-local-status__dot\" aria-hidden=\"true\"></span>Local</span>",
+      "css": ".ds-local-status { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.36rem 0.7rem; border: 1px solid #cbd8e8; border-radius: 999px; color: #1559bc; background: #f7faff; font-family: -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Helvetica Neue\", Arial, sans-serif; font-size: 0.82rem; font-weight: 650; } .ds-local-status__dot { width: 0.48rem; height: 0.48rem; border-radius: 50%; background: #1769e0; }"
+    },
+    {
+      "name": "Conversation Stage",
+      "kind": "custom",
+      "refersTo": "conversation-stage",
+      "description": "A clear subtitle-safe field for conversational copy.",
+      "html": "<section class=\"ds-stage\"><span class=\"ds-stage__mark ds-stage__mark--tl\"></span><span class=\"ds-stage__mark ds-stage__mark--tc\"></span><span class=\"ds-stage__mark ds-stage__mark--tr\"></span><p>Your conversation will appear here</p><span class=\"ds-stage__mark ds-stage__mark--bl\"></span><span class=\"ds-stage__mark ds-stage__mark--bc\"></span><span class=\"ds-stage__mark ds-stage__mark--br\"></span></section>",
+      "css": ".ds-stage { position: relative; display: grid; place-items: center; min-height: 12rem; overflow: hidden; background: #ffffff; } .ds-stage p { max-width: 34rem; margin: 0; padding: 2rem; color: #30415a; font-family: -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Helvetica Neue\", Arial, sans-serif; font-size: clamp(1.05rem, 2.2vw, 1.32rem); font-weight: 520; line-height: 1.4; letter-spacing: -0.018em; text-align: center; text-wrap: balance; } .ds-stage__mark { position: absolute; width: 1.55rem; height: 1.55rem; border-color: #aec0d8; border-style: solid; } .ds-stage__mark--tl { top: 1.5rem; left: 1.5rem; border-width: 1px 0 0 1px; } .ds-stage__mark--tc, .ds-stage__mark--bc { left: 50%; width: 1px; height: 1rem; border-width: 0 0 0 1px; transform: translateX(-50%); } .ds-stage__mark--tc { top: 1.5rem; } .ds-stage__mark--tr { top: 1.5rem; right: 1.5rem; border-width: 1px 1px 0 0; } .ds-stage__mark--bl { bottom: 1.5rem; left: 1.5rem; border-width: 0 0 1px 1px; } .ds-stage__mark--bc { bottom: 1.5rem; } .ds-stage__mark--br { right: 1.5rem; bottom: 1.5rem; border-width: 0 1px 1px 0; }"
+    },
+    {
+      "name": "Disabled Talk Control",
+      "kind": "button",
+      "refersTo": "talk-control-disabled",
+      "description": "The broad voice action shown honestly before voice input is connected.",
+      "html": "<button class=\"ds-talk-control\" type=\"button\" disabled><span class=\"ds-talk-control__label\">Hold to talk</span><span class=\"ds-talk-control__hint\">Voice input is not connected yet</span></button>",
+      "css": ".ds-talk-control { display: grid; gap: 0.28rem; width: min(100%, 70rem); min-height: 5.2rem; padding: 1rem 1.5rem; border: 1px solid #cbd5e2; border-radius: 12px; color: #647187; background: #e9eef5; box-shadow: 0 8px 22px rgb(35 57 84 / 7%); font-family: -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Helvetica Neue\", Arial, sans-serif; text-align: center; cursor: not-allowed; opacity: 1; } .ds-talk-control__label { font-size: clamp(1.12rem, 2.5vw, 1.48rem); font-weight: 680; letter-spacing: -0.025em; } .ds-talk-control__hint { color: #738096; font-size: 0.85rem; font-weight: 470; }"
+    },
+    {
+      "name": "System Diagnostics — Checking",
+      "kind": "custom",
+      "refersTo": "system-strip",
+      "description": "The live native-runtime ledger while the desktop health check is pending.",
+      "html": "<section class=\"ds-diagnostics\"><strong>System</strong><span class=\"ds-diagnostics__checking\" aria-hidden=\"true\"></span><span class=\"ds-diagnostics__message\">Checking desktop runtime</span></section>",
+      "css": ".ds-diagnostics { display: flex; align-items: center; gap: 0.65rem; min-height: 4.5rem; padding: 0.75rem clamp(1.25rem, 3vw, 2.5rem); border-top: 1px solid #d8e0eb; color: #25374f; background: #fbfcfe; font-family: -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Helvetica Neue\", Arial, sans-serif; } .ds-diagnostics strong { padding-right: 1.15rem; border-right: 1px solid #c8d2df; color: #1769e0; font-size: 0.82rem; font-weight: 720; } .ds-diagnostics__checking { flex: 0 0 auto; width: 0.55rem; height: 0.55rem; border: 2px solid #708099; border-right-color: transparent; border-radius: 50%; animation: ds-runtime-check 900ms cubic-bezier(0.22, 1, 0.36, 1) infinite; } .ds-diagnostics__message { font-size: 0.9rem; font-weight: 560; } @keyframes ds-runtime-check { to { transform: rotate(360deg); } } @media (prefers-reduced-motion: reduce) { .ds-diagnostics__checking { animation: none; border-right-color: #708099; } }"
+    },
+    {
+      "name": "System Diagnostics — Ready",
+      "kind": "custom",
+      "refersTo": "system-strip",
+      "description": "The successful runtime state with compact platform metadata.",
+      "html": "<section class=\"ds-diagnostics-ready\"><strong>System</strong><span class=\"ds-diagnostics-ready__mark\" aria-hidden=\"true\"></span><span class=\"ds-diagnostics-ready__message\">Desktop runtime ready</span><span class=\"ds-diagnostics-ready__meta\">macOS · arm64</span></section>",
+      "css": ".ds-diagnostics-ready { display: flex; align-items: center; gap: 0.65rem; min-height: 4.5rem; padding: 0.75rem clamp(1.25rem, 3vw, 2.5rem); border-top: 1px solid #d8e0eb; color: #25374f; background: #fbfcfe; font-family: -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Helvetica Neue\", Arial, sans-serif; } .ds-diagnostics-ready strong { padding-right: 1.15rem; border-right: 1px solid #c8d2df; color: #1769e0; font-size: 0.82rem; font-weight: 720; } .ds-diagnostics-ready__mark { width: 0.55rem; height: 0.55rem; border: 2px solid #277557; border-radius: 50%; background: #277557; } .ds-diagnostics-ready__message { font-size: 0.9rem; font-weight: 560; } .ds-diagnostics-ready__meta { margin-left: auto; color: #617087; font-size: 0.76rem; }"
+    },
+    {
+      "name": "System Diagnostics — Error",
+      "kind": "custom",
+      "refersTo": "error-detail",
+      "description": "The unavailable runtime state with direct recovery and inspectable technical detail.",
+      "html": "<section class=\"ds-diagnostics-error\"><strong>System</strong><span class=\"ds-diagnostics-error__mark\" aria-hidden=\"true\"></span><span class=\"ds-diagnostics-error__message\">Desktop runtime unavailable</span><span class=\"ds-diagnostics-error__recovery\">Restart the desktop app and try again.</span><details><summary>Technical details</summary><code>Runtime command failed</code></details></section>",
+      "css": ".ds-diagnostics-error { display: flex; align-items: center; gap: 0.65rem; min-height: 4.5rem; padding: 0.75rem clamp(1.25rem, 3vw, 2.5rem); border-top: 1px solid #d8e0eb; color: #25374f; background: #fbfcfe; font-family: -apple-system, BlinkMacSystemFont, \"SF Pro Text\", \"Helvetica Neue\", Arial, sans-serif; } .ds-diagnostics-error strong { padding-right: 1.15rem; border-right: 1px solid #c8d2df; color: #1769e0; font-size: 0.82rem; font-weight: 720; } .ds-diagnostics-error__mark { width: 0.55rem; height: 0.55rem; border: 2px solid #a5363f; border-radius: 2px; background: #a5363f; } .ds-diagnostics-error__message { font-size: 0.9rem; font-weight: 560; } .ds-diagnostics-error__recovery, .ds-diagnostics-error details { color: #a5363f; font-size: 0.76rem; } .ds-diagnostics-error__recovery { margin-left: auto; } .ds-diagnostics-error details { position: relative; } .ds-diagnostics-error summary { color: #7f3138; cursor: pointer; white-space: nowrap; } .ds-diagnostics-error code { position: absolute; right: 0; bottom: calc(100% + 0.6rem); width: min(30rem, 70vw); padding: 0.65rem 0.75rem; border: 1px solid #e2bcc0; border-radius: 8px; color: #7f3138; background: #fff8f8; box-shadow: 0 8px 22px rgb(67 27 31 / 10%); line-height: 1.4; white-space: normal; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Subtitled rehearsal",
+    "overview": "English Coach should feel like a quiet place to rehearse a spoken line: cool, private, attentive, and free of generic chat-product spectacle. The visual system borrows the restraint of a subtitle-safe frame—deep ink, pale fields, precise notation, and generous calm—while keeping the product's local runtime state legible.\n\nConversation remains visually primary and coaching remains secondary. Native macOS typography, thin rules, and a small signal-blue vocabulary make the interface feel direct rather than branded for its own sake; semantic green and red appear only when runtime health requires them.",
+    "keyCharacteristics": [
+      "Cool white and blue-gray tonal layering.",
+      "Deep navy text with sparing signal-blue notation.",
+      "Subtitle-like centered conversational copy.",
+      "Thin rules and frame marks instead of nested cards.",
+      "Calm, explicit runtime feedback with reduced-motion support."
+    ],
+    "rules": [
+      { "name": "The Signal, Not Decoration Rule", "body": "Blue identifies local product structure; green and red report runtime truth. None of the three colors is ambient decoration.", "section": "colors" },
+      { "name": "The Clearest Field Rule", "body": "Conversation content gets the cleanest white surface so it remains visually primary.", "section": "colors" },
+      { "name": "The Native Voice Rule", "body": "Use the platform sans stack throughout; hierarchy comes from scale, weight, and placement rather than decorative font switching.", "section": "typography" },
+      { "name": "The Subtitle Restraint Rule", "body": "Reserve centered, balanced, slightly tightened copy for the conversational voice—not for every piece of interface chrome.", "section": "typography" },
+      { "name": "The Stable Topology Rule", "body": "Responsive changes compress and wrap; they do not reorder the learner's task or hide runtime truth.", "section": "layout" },
+      { "name": "The Flat-by-Default Rule", "body": "Region boundaries come from tone and one-pixel rules. Shadows belong only to a control or temporary disclosure that must separate from its immediate surface.", "section": "elevation" },
+      { "name": "The Open Frame Rule", "body": "Use sparse corner or center notation when a quiet area needs definition; avoid enclosing important content in another card by default.", "section": "shapes" }
+    ],
+    "dos": [
+      "Do keep conversation on the clearest surface and runtime coaching or diagnostics in subordinate chrome.",
+      "Do use thin cool-gray rules, restrained blue notation, and native system typography to establish hierarchy.",
+      "Do preserve visible checking, ready, and error states, including a nonanimated reduced-motion fallback.",
+      "Do compress spacing and wrap secondary diagnostics in compact windows without changing task order."
+    ],
+    "donts": [
+      "Don't introduce generic chat bubbles, AI gradients, glowing assistant effects, or ornamental brand imagery.",
+      "Don't use semantic green or red outside runtime health and recovery states.",
+      "Don't turn each region into a floating rounded card; tonal fields and rules are the default structure.",
+      "Don't promote the current surface's row composition into a system-wide template; keep surface composition in its surface brief."
+    ]
+  }
+}

@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "englisher",
+  "productName": "English Coach",
   "version": "0.1.0",
   "identifier": "com.jeandiego.englisher",
   "build": {
@@ -12,9 +12,11 @@
   "app": {
     "windows": [
       {
-        "title": "englisher",
+        "title": "English Coach",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "minWidth": 640,
+        "minHeight": 480
       }
     ],
     "security": {
