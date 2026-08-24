@@ -8,6 +8,7 @@ import {
 import { ConversationStage } from "../components/ConversationStage";
 import { TalkControl } from "../components/TalkControl";
 import { usePushToTalk } from "./usePushToTalk";
+import type { TranscriptionResult } from "../types/transcription";
 
 function createRecording(playbackUrl = "blob:recording"): RecordedAudio {
   const blob = new Blob(["local audio"], { type: "audio/webm" });
@@ -34,11 +35,13 @@ function createRecorder() {
 function RecorderHarness({
   enabled = true,
   recorder,
+  transcribe = async () => ({ text: "This is a local transcript." }),
 }: {
   enabled?: boolean;
   recorder: AudioRecorder;
+  transcribe?: (recording: RecordedAudio) => Promise<TranscriptionResult>;
 }) {
-  const recording = usePushToTalk({ enabled, recorder });
+  const recording = usePushToTalk({ enabled, recorder, transcribe });
 
   return (
     <>
@@ -49,6 +52,7 @@ function RecorderHarness({
       <ConversationStage state={recording.state} />
       <TalkControl
         disabled={!enabled}
+        disabledHint={!enabled ? "Complete local setup" : undefined}
         onEnd={(owner) => void recording.end(owner)}
         onStart={(owner) => void recording.begin(owner)}
         state={recording.state}
@@ -63,7 +67,7 @@ afterEach(() => {
 });
 
 describe("usePushToTalk interactions", () => {
-  it("records on pointer hold and exposes local playback metadata", async () => {
+  it("records, transcribes, and exposes local playback metadata", async () => {
     const recorder = createRecorder();
     render(<RecorderHarness recorder={recorder} />);
     const control = screen.getByRole("button", { name: /hold to talk/i });
@@ -75,8 +79,9 @@ describe("usePushToTalk interactions", () => {
 
     fireEvent.pointerUp(control, { button: 0, pointerId: 1 });
 
-    expect(await screen.findByText("Recording ready")).toBeInTheDocument();
-    expect(screen.getByLabelText("Play recording ready")).toHaveAttribute(
+    expect(await screen.findByText("This is a local transcript.")).toBeInTheDocument();
+    expect(screen.getByText("You")).toBeInTheDocument();
+    expect(screen.getByLabelText("Play recorded audio")).toHaveAttribute(
       "src",
       "blob:recording",
     );
@@ -96,7 +101,7 @@ describe("usePushToTalk interactions", () => {
     expect(recorder.start).toHaveBeenCalledOnce();
 
     fireEvent.keyUp(window, { code: "Space" });
-    await screen.findByText("Recording ready");
+    await screen.findByText("This is a local transcript.");
 
     expect(recorder.stop).toHaveBeenCalledOnce();
   });
@@ -115,7 +120,7 @@ describe("usePushToTalk interactions", () => {
       screen.getByRole("button", { name: /release to finish/i }),
       { detail: 0 },
     );
-    await screen.findByText("Recording ready");
+    await screen.findByText("This is a local transcript.");
 
     expect(recorder.stop).toHaveBeenCalledOnce();
   });
@@ -193,7 +198,7 @@ describe("usePushToTalk interactions", () => {
     fireEvent.keyDown(window, { code: "Space" });
     await screen.findByText("Listening");
     fireEvent.keyUp(window, { code: "Space" });
-    await screen.findByText("Recording ready");
+    await screen.findByText("This is a local transcript.");
 
     recorder.start.mockRejectedValueOnce(
       new RecordingError("device-busy", "Microphone busy.", "NotReadableError"),
@@ -213,10 +218,60 @@ describe("usePushToTalk interactions", () => {
     await screen.findByText("Listening");
     fireEvent.keyUp(window, { code: "Space" });
     await waitFor(() => expect(recorder.dispose).toHaveBeenCalledWith(first));
-    expect(screen.getByLabelText("Play recording ready")).toHaveAttribute(
+    expect(screen.getByLabelText("Play recorded audio")).toHaveAttribute(
       "src",
       "blob:second",
     );
+  });
+
+  it("shows a local processing state and blocks another recording", async () => {
+    const recorder = createRecorder();
+    let resolveTranscription:
+      | ((result: TranscriptionResult) => void)
+      | undefined;
+    const transcribe = vi.fn(
+      () =>
+        new Promise<TranscriptionResult>((resolve) => {
+          resolveTranscription = resolve;
+        }),
+    );
+    render(<RecorderHarness recorder={recorder} transcribe={transcribe} />);
+
+    fireEvent.keyDown(window, { code: "Space" });
+    await screen.findByText("Listening");
+    fireEvent.keyUp(window, { code: "Space" });
+
+    expect(await screen.findByText("Transcribing locally")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /transcribing/i })).toBeDisabled();
+    fireEvent.keyDown(window, { code: "Space" });
+    expect(recorder.start).toHaveBeenCalledOnce();
+
+    resolveTranscription?.({ text: "Finished locally." });
+    expect(await screen.findByText("Finished locally.")).toBeInTheDocument();
+  });
+
+  it("keeps failed audio and surfaces actionable transcription errors", async () => {
+    const recorder = createRecorder();
+    const transcribe = vi.fn().mockRejectedValue({
+      code: "conversion-failed",
+      message: "FFmpeg could not convert this recording.",
+      technicalMessage: "Invalid input data",
+    });
+    render(<RecorderHarness recorder={recorder} transcribe={transcribe} />);
+
+    fireEvent.keyDown(window, { code: "Space" });
+    await screen.findByText("Listening");
+    fireEvent.keyUp(window, { code: "Space" });
+
+    expect(await screen.findByText("Transcription unavailable")).toBeInTheDocument();
+    expect(
+      screen.getByText("FFmpeg could not convert this recording."),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Play untranscribed audio")).toHaveAttribute(
+      "src",
+      "blob:recording",
+    );
+    expect(screen.getByText("Invalid input data")).toBeInTheDocument();
   });
 
   it("does not start while the desktop runtime is unavailable", () => {

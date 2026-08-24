@@ -6,6 +6,12 @@ import {
   type AudioRecorder,
   type RecordedAudio,
 } from "../audio/recorder";
+import {
+  transcribeRecording,
+  toTranscriptionError,
+  TranscriptionError,
+} from "../native/transcription";
+import type { TranscriptionResult } from "../types/transcription";
 
 export type PressOwner = "assistive" | "keyboard" | "pointer";
 
@@ -17,16 +23,18 @@ export type RecordingState =
       elapsedMs: number;
       recording: RecordedAudio | null;
     }
-  | { status: "recorded"; recording: RecordedAudio }
+  | { status: "transcribing"; recording: RecordedAudio }
+  | { status: "transcribed"; recording: RecordedAudio; text: string }
   | {
       status: "error";
-      error: RecordingError;
+      error: RecordingError | TranscriptionError;
       recording: RecordedAudio | null;
     };
 
 type UsePushToTalkOptions = {
   enabled: boolean;
   recorder?: AudioRecorder;
+  transcribe?: (recording: RecordedAudio) => Promise<TranscriptionResult>;
 };
 
 function isEditableTarget(target: EventTarget | null): boolean {
@@ -49,6 +57,7 @@ function isCancelledStart(error: unknown): boolean {
 export function usePushToTalk({
   enabled,
   recorder: providedRecorder,
+  transcribe: providedTranscriber,
 }: UsePushToTalkOptions) {
   const recorderRef = useRef<AudioRecorder | null>(null);
 
@@ -60,6 +69,11 @@ export function usePushToTalk({
     status: "idle",
     recording: null,
   });
+  const settledStateRef = useRef<RecordingState>({
+    status: "idle",
+    recording: null,
+  });
+  const transcriberRef = useRef(providedTranscriber ?? transcribeRecording);
   const abortControllerRef = useRef<AbortController | null>(null);
   const elapsedTimerRef = useRef<number | null>(null);
   const mountedRef = useRef(true);
@@ -76,13 +90,9 @@ export function usePushToTalk({
   }, []);
 
   const restorePreviousRecording = useCallback(() => {
-    const previous = recordingRef.current;
-    phaseRef.current = previous ? "recorded" : "idle";
-    setState(
-      previous
-        ? { status: "recorded", recording: previous }
-        : { status: "idle", recording: null },
-    );
+    const settledState = settledStateRef.current;
+    phaseRef.current = settledState.status;
+    setState(settledState);
   }, []);
 
   const begin = useCallback(
@@ -91,7 +101,8 @@ export function usePushToTalk({
         !enabled ||
         ownerRef.current ||
         phaseRef.current === "requesting" ||
-        phaseRef.current === "recording"
+        phaseRef.current === "recording" ||
+        phaseRef.current === "transcribing"
       ) {
         return;
       }
@@ -164,11 +175,13 @@ export function usePushToTalk({
 
         ownerRef.current = null;
         phaseRef.current = "error";
-        setState({
+        const errorState: RecordingState = {
           status: "error",
           error: toRecordingError(error),
           recording: recordingRef.current,
-        });
+        };
+        settledStateRef.current = errorState;
+        setState(errorState);
       }
     },
     [enabled, restorePreviousRecording],
@@ -209,11 +222,41 @@ export function usePushToTalk({
 
         const previousRecording = recordingRef.current;
         recordingRef.current = nextRecording;
-        phaseRef.current = "recorded";
-        setState({ status: "recorded", recording: nextRecording });
+        phaseRef.current = "transcribing";
+        setState({ status: "transcribing", recording: nextRecording });
 
         if (previousRecording) {
           recorder.dispose(previousRecording);
+        }
+
+        try {
+          const result = await transcriberRef.current(nextRecording);
+
+          if (!mountedRef.current) {
+            return;
+          }
+
+          phaseRef.current = "transcribed";
+          const transcribedState: RecordingState = {
+            status: "transcribed",
+            recording: nextRecording,
+            text: result.text,
+          };
+          settledStateRef.current = transcribedState;
+          setState(transcribedState);
+        } catch (error) {
+          if (!mountedRef.current) {
+            return;
+          }
+
+          phaseRef.current = "error";
+          const errorState: RecordingState = {
+            status: "error",
+            error: toTranscriptionError(error),
+            recording: nextRecording,
+          };
+          settledStateRef.current = errorState;
+          setState(errorState);
         }
       } catch (error) {
         if (!mountedRef.current) {
@@ -221,11 +264,13 @@ export function usePushToTalk({
         }
 
         phaseRef.current = "error";
-        setState({
+        const errorState: RecordingState = {
           status: "error",
           error: toRecordingError(error),
           recording: recordingRef.current,
-        });
+        };
+        settledStateRef.current = errorState;
+        setState(errorState);
       }
     },
     [clearElapsedTimer],

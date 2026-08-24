@@ -2,29 +2,31 @@
 version: 1
 slug: "src-app-tsx"
 primary_target: "src/App.tsx"
-related_targets: ["src/App.css","index.html"]
+related_targets: ["src/App.css","index.html","src/components/AppHeader.tsx","src/components/SettingsPage.tsx","src/components/SystemDiagnostics.tsx","src/hooks/useRuntimeSetup.ts"]
 ---
 
 ## Scope and mode
 
-Operate-mode desktop shell for `src/App.tsx`, covering the empty conversation, push-to-talk recording and playback states, and native runtime diagnostics.
+Operate-mode desktop shell for `src/App.tsx`, covering separate Conversation and Settings surfaces, push-to-talk recording and playback states, compact native readiness on the rehearsal surface, and detailed local transcription configuration on the settings surface.
 
 ## Audience and job
 
-A B2 learner on a personal Mac needs to confirm the local desktop runtime, hold a control to record speech, and verify the captured take without leaving the app.
+A B2 learner on a personal Mac needs to rehearse spoken English without configuration interrupting the session, while retaining a clear place to inspect and maintain the local Whisper, model, and FFmpeg paths.
 
 ## Direction
 
-Subtitled rehearsal. The approved comp is `.impeccable/mocks/subtitled-rehearsal-a.png`: a compact masthead, dominant cinema-safe dialogue stage, broad action control, and subordinate system strip. The memorable moment is the quiet stage becoming an unmistakable listening surface, then presenting the captured local take without turning into a chat card.
+Subtitled rehearsal with a separate technical room. Conversation preserves the approved `.impeccable/mocks/subtitled-rehearsal-a.png` composition: compact masthead, dominant cinema-safe dialogue stage, broad action control, and subordinate system strip. Settings extends the same visual world as a calm, ruled utility page with runtime checks first and editable paths second. A persistent two-item masthead makes the separation explicit.
 
 ## Implementation grammar
 
 - Cool white and soft blue-gray surfaces, deep navy ink, signal blue for local identity, and semantic green/red only for health.
-- Native system sans; subtitle-like centered empty copy; thin rules and corner markers instead of nested cards.
-- Flat surfaces, 1px cool-gray rules, modest 12px corner language only on the talk control, and no decorative elevation.
+- Native system sans; subtitle-like centered conversation copy; thin rules and alignment instead of nested cards.
+- Conversation and Settings are peer pages controlled by the app shell; Settings is not a modal, drawer, or expanded diagnostic panel.
+- Configuration state and persistence live in `useRuntimeSetup`; the settings form lives in `SettingsPage`; conversation receives only readiness and recovery summaries.
+- Flat surfaces, 1px cool-gray rules, modest 12px corner language only on primary controls, and restrained elevation.
 - Semantic HTML/CSS owns every ingredient; native audio controls provide local playback and no raster asset is required in the shipped UI.
-- Fluid from 640×480 upward; compact windows reduce padding and stage markers without changing topology.
+- Fluid from 320px upward; narrow windows stack settings headings, checks, labels, controls, and actions without horizontal overflow.
 
 ## Boundaries
 
-No transcription, waveform, correction pane, settings, routing, persistence, remote assets, or invented product claims.
+No conversation history, waveform, correction pane, external routing, cloud requests, downloads, remote assets, or persistence beyond the existing local transcription settings. Future settings categories should extend the dedicated Settings page rather than re-entering the Conversation surface.

@@ -2,6 +2,7 @@ import type { PressOwner, RecordingState } from "../hooks/usePushToTalk";
 
 type TalkControlProps = {
   disabled: boolean;
+  disabledHint?: string;
   onEnd: (owner: PressOwner) => void;
   onStart: (owner: PressOwner) => void;
   state: RecordingState;
@@ -16,21 +17,31 @@ function formatElapsedTime(durationMs: number): string {
 
 export function TalkControl({
   disabled,
+  disabledHint,
   onEnd,
   onStart,
   state,
 }: TalkControlProps) {
   const isHeld = state.status === "requesting" || state.status === "recording";
-  const label = state.status === "recording" ? "Release to finish" : "Hold to talk";
+  const isDisabled = disabled || state.status === "transcribing";
+  const label =
+    state.status === "recording"
+      ? "Release to finish"
+      : state.status === "transcribing"
+        ? "Transcribing…"
+        : "Hold to talk";
   let hint = "Hold the button or Space to speak";
 
-  if (disabled) {
-    hint = "Voice input is available when the desktop runtime is ready";
+  if (state.status === "transcribing") {
+    hint = "Processing your recording locally";
+  } else if (isDisabled) {
+    hint =
+      disabledHint ?? "Voice input is available when the desktop runtime is ready";
   } else if (state.status === "requesting") {
     hint = "Keep holding while macOS asks for microphone access";
   } else if (state.status === "recording") {
     hint = `${formatElapsedTime(state.elapsedMs)} elapsed`;
-  } else if (state.status === "recorded") {
+  } else if (state.status === "transcribed") {
     hint = "Hold the button or Space to record another take";
   } else if (state.status === "error") {
     hint = "Hold the button or Space to try again";
@@ -55,7 +66,7 @@ export function TalkControl({
         aria-label={label}
         aria-pressed={isHeld}
         className={`talk-control talk-control--${state.status}`}
-        disabled={disabled}
+        disabled={isDisabled}
         onClick={(event) => {
           event.preventDefault();
 
@@ -70,7 +81,7 @@ export function TalkControl({
         onLostPointerCapture={() => onEnd("pointer")}
         onPointerCancel={finishPointerPress}
         onPointerDown={(event) => {
-          if (disabled || event.button !== 0) {
+          if (isDisabled || event.button !== 0) {
             return;
           }
 

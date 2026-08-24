@@ -2,6 +2,24 @@
 
 Goal: ship a usable local English conversation coach on macOS today.
 
+## Local transcription setup
+
+Slice 03 uses external local tools and never downloads them automatically. Before
+recording, install `whisper-cli` from whisper.cpp, obtain a compatible local GGML
+Whisper model, and install FFmpeg. Open the app's **Settings** page and enter:
+
+- the `whisper-cli` command name or executable path;
+- the absolute model-file path;
+- the `ffmpeg` command name or executable path.
+
+The app checks each value before enabling push-to-talk. FFmpeg is a temporary V0
+dependency used only to convert WebKit recordings to mono, 16 kHz, 16-bit PCM WAV
+inside an automatically cleaned operating-system temp directory.
+
+For installation commands, configuration steps, the acceptance sentence, and
+troubleshooting, see the
+[local transcription setup and test guide](docs/03-local-transcription-setup.md).
+
 The implementation must evolve through small vertical slices. Each slice must leave the application runnable and testable. Do not implement future slices early.
 
 ## Target stack

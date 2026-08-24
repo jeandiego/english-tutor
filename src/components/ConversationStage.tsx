@@ -1,5 +1,6 @@
 import type { RecordedAudio } from "../audio/recorder";
 import type { RecordingState } from "../hooks/usePushToTalk";
+import { TranscriptionError } from "../native/transcription";
 
 type ConversationStageProps = {
   state: RecordingState;
@@ -101,20 +102,40 @@ function StageContent({ state }: ConversationStageProps) {
     );
   }
 
-  if (state.status === "recorded") {
+  if (state.status === "transcribing") {
     return (
-      <RecordingPlayback
-        announce
-        recording={state.recording}
-        title="Recording ready"
-      />
+      <div className="recording-status recording-status--processing" role="status">
+        <span className="recording-status__mark" aria-hidden="true" />
+        <p>Transcribing locally</p>
+        <span className="recording-status__time">Your audio stays on this Mac</span>
+      </div>
+    );
+  }
+
+  if (state.status === "transcribed") {
+    return (
+      <article className="user-turn" aria-label="Your latest conversation turn">
+        <p className="user-turn__speaker">You</p>
+        <p className="user-turn__text" role="status">
+          {state.text}
+        </p>
+        <RecordingPlayback
+          recording={state.recording}
+          title="Recorded audio"
+        />
+      </article>
     );
   }
 
   if (state.status === "error") {
+    const isTranscriptionError = state.error instanceof TranscriptionError;
     return (
       <div className="recording-error" role="alert">
-        <p className="recording-error__title">Microphone unavailable</p>
+        <p className="recording-error__title">
+          {isTranscriptionError
+            ? "Transcription unavailable"
+            : "Microphone unavailable"}
+        </p>
         <p>{state.error.message}</p>
         {state.error.technicalMessage !== state.error.message && (
           <details>
@@ -125,7 +146,7 @@ function StageContent({ state }: ConversationStageProps) {
         {state.recording && (
           <RecordingPlayback
             recording={state.recording}
-            title="Previous recording"
+            title={isTranscriptionError ? "Untranscribed audio" : "Previous recording"}
           />
         )}
       </div>

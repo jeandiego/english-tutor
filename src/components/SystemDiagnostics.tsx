@@ -1,59 +1,79 @@
 import type { HealthState } from "../types/runtime";
 
+export type TranscriptionDiagnostic = {
+  status: "checking" | "ready" | "error";
+  message: string;
+  canOpenSettings: boolean;
+};
+
 type SystemDiagnosticsProps = {
-  state: HealthState;
+  healthState: HealthState;
+  transcription: TranscriptionDiagnostic;
+  onOpenSettings: () => void;
 };
 
-const STATUS_LABELS: Record<HealthState["status"], string> = {
-  checking: "Checking",
-  ready: "Ready",
-  error: "Error",
-};
-
-export function SystemDiagnostics({ state }: SystemDiagnosticsProps) {
-  const stateLabel = STATUS_LABELS[state.status];
-
+function stateIndicator(status: "checking" | "ready" | "error") {
   return (
-    <section
-      className="system-diagnostics"
-      aria-labelledby="system-title"
-      aria-live={state.status === "error" ? "assertive" : "polite"}
-    >
+    <span
+      className={`system-diagnostics__indicator system-diagnostics__indicator--${status}`}
+      aria-hidden="true"
+    />
+  );
+}
+
+export function SystemDiagnostics({
+  healthState,
+  transcription,
+  onOpenSettings,
+}: SystemDiagnosticsProps) {
+  return (
+    <section className="system-diagnostics" aria-labelledby="system-title">
       <h2 id="system-title">System</h2>
-      <div className="system-diagnostics__content">
-        <span
-          className={`system-diagnostics__indicator system-diagnostics__indicator--${state.status}`}
-          aria-hidden="true"
-        />
-        <p className="system-diagnostics__message">
-          <span className="visually-hidden">{stateLabel}: </span>
-          {state.status === "checking" && "Checking desktop runtime"}
-          {state.status === "ready" && "Desktop runtime ready"}
-          {state.status === "error" && "Desktop runtime unavailable"}
-        </p>
+      <div className="system-diagnostics__items">
+        <div
+          className="system-diagnostics__item"
+          aria-live={healthState.status === "error" ? "assertive" : "polite"}
+        >
+          {stateIndicator(healthState.status)}
+          <p className="system-diagnostics__message">
+            {healthState.status === "checking" && "Checking desktop runtime"}
+            {healthState.status === "ready" && "Desktop runtime ready"}
+            {healthState.status === "error" && "Desktop runtime unavailable"}
+          </p>
+          {healthState.status === "ready" && (
+            <span className="system-diagnostics__meta">
+              {healthState.health.operatingSystem} · {healthState.health.architecture}
+            </span>
+          )}
+          {healthState.status === "error" && (
+            <>
+              <span className="system-diagnostics__meta system-diagnostics__meta--error">
+                Restart the desktop app and try again.
+              </span>
+              <details className="system-diagnostics__details">
+                <summary>Details</summary>
+                <code>{healthState.message}</code>
+              </details>
+            </>
+          )}
+        </div>
 
-        {state.status === "ready" && (
-          <dl className="runtime-details">
-            <div>
-              <dt>Operating system</dt>
-              <dd>{state.health.operatingSystem}</dd>
-            </div>
-            <div>
-              <dt>Architecture</dt>
-              <dd>{state.health.architecture}</dd>
-            </div>
-          </dl>
-        )}
-
-        {state.status === "error" && (
-          <div className="system-diagnostics__error">
-            <span>Restart the desktop app and try again.</span>
-            <details>
-              <summary>Technical details</summary>
-              <code>{state.message}</code>
-            </details>
-          </div>
-        )}
+        <div
+          className="system-diagnostics__item"
+          aria-live={transcription.status === "error" ? "assertive" : "polite"}
+        >
+          {stateIndicator(transcription.status)}
+          <p className="system-diagnostics__message">{transcription.message}</p>
+          {transcription.canOpenSettings && (
+            <button
+              className="system-diagnostics__action"
+              onClick={onOpenSettings}
+              type="button"
+            >
+              Open settings
+            </button>
+          )}
+        </div>
       </div>
     </section>
   );

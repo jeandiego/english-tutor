@@ -1,5 +1,8 @@
 # Slice 03 — Local Speech-to-Text
 
+For hands-on installation, configuration, and acceptance testing, see the
+[local transcription setup and test guide](03-local-transcription-setup.md).
+
 ## Objective
 
 Convert the push-to-talk recording into English text using a local Whisper runtime.
