@@ -6,6 +6,7 @@ import type {
 } from "../hooks/useTutorConversation";
 import type { RecordingState } from "../hooks/usePushToTalk";
 import { TranscriptionError } from "../native/transcription";
+import type { BetterExpression, TutorCorrection, TutorTurn } from "../types/tutor";
 
 type ConversationStageProps = {
   state: RecordingState;
@@ -62,6 +63,10 @@ function formatSize(sizeBytes: number): string {
   }
 
   return `${(sizeBytes / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function capitalize(value: string): string {
+  return value.length === 0 ? value : value.charAt(0).toUpperCase() + value.slice(1);
 }
 
 function RecordingPlayback({
@@ -210,6 +215,78 @@ export function ConversationStage(props: ConversationStageProps) {
   return <ConversationStageContent {...props} />;
 }
 
+function Corrections({ corrections }: { corrections: TutorCorrection[] }) {
+  if (corrections.length === 0) {
+    return null;
+  }
+
+  return (
+    <ul className="corrections" aria-label="Corrections for this turn">
+      {corrections.map((correction, index) => (
+        <li className="correction" key={index}>
+          <p className="correction__row">
+            <span className="correction__row-label">You said</span>
+            <span className="correction__quote">“{correction.original}”</span>
+          </p>
+          <p className="correction__row">
+            <span className="correction__row-label">Better</span>
+            <span className="correction__quote correction__quote--better">
+              “{correction.correction}”
+            </span>
+          </p>
+          <p className="correction__explanation">{correction.explanation}</p>
+          <p className="correction__meta">
+            {capitalize(correction.category)} · {capitalize(correction.severity)}
+          </p>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function BetterExpressions({ expressions }: { expressions: BetterExpression[] }) {
+  if (expressions.length === 0) {
+    return null;
+  }
+
+  return (
+    <ul className="better-expressions" aria-label="Better ways to say this">
+      {expressions.map((expression, index) => (
+        <li className="better-expression" key={index}>
+          {expression.original && (
+            <p className="better-expression__row">
+              <span className="better-expression__row-label">Instead of</span>
+              <span className="better-expression__quote">“{expression.original}”</span>
+            </p>
+          )}
+          <p className="better-expression__row">
+            <span className="better-expression__row-label">Try</span>
+            <span className="better-expression__quote better-expression__quote--better">
+              “{expression.suggestion}”
+            </span>
+          </p>
+          {expression.explanation && (
+            <p className="better-expression__explanation">{expression.explanation}</p>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+function TutorCoaching({ tutorTurn }: { tutorTurn: TutorTurn }) {
+  if (tutorTurn.corrections.length === 0 && tutorTurn.betterExpressions.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="tutor-coaching">
+      <Corrections corrections={tutorTurn.corrections} />
+      <BetterExpressions expressions={tutorTurn.betterExpressions} />
+    </div>
+  );
+}
+
 function TutorFailure({ exchange }: { exchange: ConversationExchange }) {
   if (!exchange.error) {
     return null;
@@ -300,6 +377,8 @@ function ConversationLog({
                 </div>
               </div>
             )}
+
+            {exchange.tutorTurn && <TutorCoaching tutorTurn={exchange.tutorTurn} />}
 
             {isLatest && thinking && !exchange.tutorTurn && !exchange.error && (
               <div className="recording-status recording-status--processing tutor-thinking" role="status">

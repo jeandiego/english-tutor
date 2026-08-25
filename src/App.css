@@ -601,6 +601,84 @@ code {
   padding: 0.8rem 0 0;
 }
 
+.tutor-coaching {
+  display: grid;
+  gap: 0.85rem;
+  width: 100%;
+  max-width: 40rem;
+  margin: 0.4rem auto 0;
+  padding-top: 0.9rem;
+  border-top: 1px solid var(--rule);
+}
+
+.corrections,
+.better-expressions {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.correction,
+.better-expression {
+  display: grid;
+  gap: 0.2rem;
+}
+
+.correction + .correction,
+.better-expression + .better-expression {
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--rule);
+}
+
+.correction__row,
+.better-expression__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin: 0;
+}
+
+.correction__row-label,
+.better-expression__row-label {
+  flex: 0 0 auto;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 650;
+}
+
+.correction__quote,
+.better-expression__quote {
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 560;
+  line-height: 1.4;
+}
+
+.correction__quote--better,
+.better-expression__quote--better {
+  color: #132238;
+  font-weight: 600;
+}
+
+.correction__explanation,
+.better-expression__explanation {
+  margin: 0.15rem 0 0;
+  color: #30415a;
+  font-size: 0.85rem;
+  font-weight: 470;
+  line-height: 1.45;
+}
+
+.correction__meta {
+  margin: 0.1rem 0 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  letter-spacing: 0.01em;
+}
+
 .tutor-turn-error {
   display: grid;
   justify-items: center;
@@ -1191,6 +1269,16 @@ code {
   .conversation-exchange {
     gap: 1rem;
     padding-block: 1.35rem;
+  }
+
+  .tutor-coaching {
+    gap: 0.65rem;
+    padding-top: 0.75rem;
+  }
+
+  .corrections,
+  .better-expressions {
+    gap: 0.6rem;
   }
 
   .recording-result audio {

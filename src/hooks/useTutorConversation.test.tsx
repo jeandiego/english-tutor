@@ -144,7 +144,7 @@ describe("useTutorConversation", () => {
     );
   });
 
-  it("shows thinking, stores hidden corrections, and sends prior context on turn two", async () => {
+  it("shows thinking, displays corrections separately, and sends prior context on turn two", async () => {
     const recorder = createRecorder();
     const transcribe = vi
       .fn()
@@ -187,7 +187,9 @@ describe("useTutorConversation", () => {
         "That is substantial React experience. What backend area interests you?",
       ),
     ).toBeInTheDocument();
-    expect(screen.queryByText("for many years")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("for many years", { exact: false }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
 
     await recordOneTurn();
@@ -260,7 +262,9 @@ describe("useTutorConversation", () => {
       "That opening is clear. What kinds of international roles interest you?",
     );
     expect(speak).not.toHaveBeenCalledWith(expect.stringContaining("for many years"));
-    expect(screen.queryByText("for many years")).not.toBeInTheDocument();
+    expect(
+      screen.getByText("for many years", { exact: false }),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Speaking…" })).toBeDisabled();
 
     fireEvent.keyDown(window, { code: "Space" });
