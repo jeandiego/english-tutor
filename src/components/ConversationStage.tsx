@@ -1,12 +1,17 @@
 import { useEffect, useRef } from "react";
 import type { RecordedAudio } from "../audio/recorder";
-import type { ConversationExchange } from "../hooks/useTutorConversation";
+import type {
+  ConversationExchange,
+  ConversationLoopState,
+} from "../hooks/useTutorConversation";
 import type { RecordingState } from "../hooks/usePushToTalk";
 import { TranscriptionError } from "../native/transcription";
 
 type ConversationStageProps = {
   state: RecordingState;
   exchanges?: ConversationExchange[];
+  loopState?: ConversationLoopState;
+  speaking?: boolean;
   thinking?: boolean;
 };
 
@@ -100,7 +105,27 @@ function RecordingPlayback({
   );
 }
 
-function StageContent({ state }: ConversationStageProps) {
+function StageContent({ loopState, state }: ConversationStageProps) {
+  if (loopState === "speaking") {
+    return (
+      <div className="recording-status recording-status--processing" role="status">
+        <span className="recording-status__mark" aria-hidden="true" />
+        <p>Speaking</p>
+        <span className="recording-status__time">Tutor reply only</span>
+      </div>
+    );
+  }
+
+  if (loopState === "thinking") {
+    return (
+      <div className="recording-status recording-status--processing" role="status">
+        <span className="recording-status__mark" aria-hidden="true" />
+        <p>Thinking</p>
+        <span className="recording-status__time">Your transcript stays on this Mac</span>
+      </div>
+    );
+  }
+
   if (state.status === "requesting") {
     return (
       <div className="recording-status" role="status">
@@ -174,9 +199,10 @@ function StageContent({ state }: ConversationStageProps) {
   }
 
   return (
-    <p className="conversation-stage__empty">
-      Your conversation will appear here
-    </p>
+    <div className="recording-status" role={loopState === "idle" ? "status" : undefined}>
+      <span className="recording-status__mark" aria-hidden="true" />
+      <p>{loopState === "idle" ? "Ready" : "Your conversation will appear here"}</p>
+    </div>
   );
 }
 
@@ -189,9 +215,12 @@ function TutorFailure({ exchange }: { exchange: ConversationExchange }) {
     return null;
   }
 
+  const title =
+    exchange.errorSource === "speech" ? "Speech unavailable" : "Tutor unavailable";
+
   return (
     <div className="tutor-turn-error" role="alert">
-      <p className="tutor-turn-error__title">Tutor unavailable</p>
+      <p className="tutor-turn-error__title">{title}</p>
       <p>{exchange.error.message}</p>
       {exchange.error.technicalMessage !== exchange.error.message && (
         <details>
@@ -205,10 +234,12 @@ function TutorFailure({ exchange }: { exchange: ConversationExchange }) {
 
 function ConversationLog({
   exchanges,
+  loopState,
+  speaking,
   thinking,
   state,
 }: Required<Pick<ConversationStageProps, "exchanges" | "thinking">> &
-  Pick<ConversationStageProps, "state">) {
+  Pick<ConversationStageProps, "loopState" | "speaking" | "state">) {
   const endRef = useRef<HTMLDivElement | null>(null);
   const showTransientState =
     state.status === "requesting" ||
@@ -218,7 +249,7 @@ function ConversationLog({
 
   useEffect(() => {
     endRef.current?.scrollIntoView?.({ block: "nearest" });
-  }, [exchanges, thinking, state.status]);
+  }, [exchanges, speaking, thinking, state.status]);
 
   return (
     <div className="conversation-log" role="log" aria-live="polite">
@@ -273,8 +304,16 @@ function ConversationLog({
             {isLatest && thinking && !exchange.tutorTurn && !exchange.error && (
               <div className="recording-status recording-status--processing tutor-thinking" role="status">
                 <span className="recording-status__mark" aria-hidden="true" />
-                <p>Tutor is thinking locally</p>
+                <p>Thinking</p>
                 <span className="recording-status__time">Your transcript stays on this Mac</span>
+              </div>
+            )}
+
+            {isLatest && speaking && exchange.tutorTurn && !exchange.error && (
+              <div className="recording-status recording-status--processing tutor-thinking" role="status">
+                <span className="recording-status__mark" aria-hidden="true" />
+                <p>Speaking</p>
+                <span className="recording-status__time">Tutor reply only</span>
               </div>
             )}
 
@@ -285,7 +324,7 @@ function ConversationLog({
 
       {showTransientState && (
         <div className="conversation-log__transient">
-          <StageContent state={state} />
+          <StageContent loopState={loopState} state={state} />
         </div>
       )}
       <div ref={endRef} />
@@ -294,6 +333,8 @@ function ConversationLog({
 }
 
 function ConversationStageContent({
+  loopState,
+  speaking = false,
   state,
   exchanges = [],
   thinking = false,
@@ -310,9 +351,15 @@ function ConversationStageContent({
       <span className="frame-mark frame-mark--bottom-center" aria-hidden="true" />
       <span className="frame-mark frame-mark--bottom-right" aria-hidden="true" />
       {exchanges.length > 0 ? (
-        <ConversationLog exchanges={exchanges} thinking={thinking} state={state} />
+        <ConversationLog
+          exchanges={exchanges}
+          loopState={loopState}
+          speaking={speaking}
+          thinking={thinking}
+          state={state}
+        />
       ) : (
-        <StageContent state={state} />
+        <StageContent loopState={loopState} state={state} />
       )}
     </section>
   );

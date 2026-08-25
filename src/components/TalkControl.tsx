@@ -3,6 +3,7 @@ import type { PressOwner, RecordingState } from "../hooks/usePushToTalk";
 type TalkControlProps = {
   disabled: boolean;
   disabledHint?: string;
+  speaking?: boolean;
   thinking?: boolean;
   onEnd: (owner: PressOwner) => void;
   onStart: (owner: PressOwner) => void;
@@ -19,15 +20,19 @@ function formatElapsedTime(durationMs: number): string {
 export function TalkControl({
   disabled,
   disabledHint,
+  speaking = false,
   thinking = false,
   onEnd,
   onStart,
   state,
 }: TalkControlProps) {
   const isHeld = state.status === "requesting" || state.status === "recording";
-  const isDisabled = disabled || state.status === "transcribing" || thinking;
+  const isDisabled =
+    disabled || state.status === "transcribing" || thinking || speaking;
   const label =
-    thinking
+    speaking
+      ? "Speaking…"
+      : thinking
       ? "Thinking…"
       : state.status === "recording"
       ? "Release to finish"
@@ -36,7 +41,9 @@ export function TalkControl({
         : "Hold to talk";
   let hint = "Hold the button or Space to speak";
 
-  if (thinking) {
+  if (speaking) {
+    hint = "The tutor reply is playing through macOS speech";
+  } else if (thinking) {
     hint = "The local tutor is preparing a reply";
   } else if (state.status === "transcribing") {
     hint = "Processing your recording locally";
@@ -71,7 +78,9 @@ export function TalkControl({
         aria-describedby="talk-control-hint"
         aria-label={label}
         aria-pressed={isHeld}
-        className={`talk-control talk-control--${thinking ? "thinking" : state.status}`}
+        className={`talk-control talk-control--${
+          speaking ? "speaking" : thinking ? "thinking" : state.status
+        }`}
         disabled={isDisabled}
         onClick={(event) => {
           event.preventDefault();

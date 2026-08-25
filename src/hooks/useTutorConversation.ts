@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { AudioRecorder, RecordedAudio } from "../audio/recorder";
 import {
+  speakTutorReply,
+  toSpeechError,
+  type SpeechError,
+} from "../native/speech";
+import {
   requestTutorTurn,
   toTutorError,
   type TutorError,
@@ -11,12 +16,21 @@ import { usePushToTalk } from "./usePushToTalk";
 
 const MAX_EXCHANGES = 12;
 
+export type ConversationLoopState =
+  | "idle"
+  | "recording"
+  | "transcribing"
+  | "thinking"
+  | "speaking"
+  | "error";
+
 export type ConversationExchange = {
   id: number;
   transcript: string;
   tutorTurn?: TutorTurn;
   responseTimeMs?: number;
-  error?: TutorError;
+  error?: TutorError | SpeechError;
+  errorSource?: "tutor" | "speech";
 };
 
 type UseTutorConversationOptions = {
@@ -24,6 +38,7 @@ type UseTutorConversationOptions = {
   recorder?: AudioRecorder;
   transcribe?: (recording: RecordedAudio) => Promise<TranscriptionResult>;
   respond?: (request: TutorTurnRequest) => Promise<TutorTurn>;
+  speak?: (reply: string) => Promise<void>;
   now?: () => number;
 };
 
@@ -47,27 +62,47 @@ export function useTutorConversation({
   recorder,
   transcribe,
   respond = requestTutorTurn,
+  speak = speakTutorReply,
   now = monotonicNow,
 }: UseTutorConversationOptions) {
   const [exchanges, setExchanges] = useState<ConversationExchange[]>([]);
   const [thinking, setThinking] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
   const exchangesRef = useRef(exchanges);
   const mountedRef = useRef(true);
   const nextExchangeIdRef = useRef(1);
   const processedRecordingRef = useRef<RecordedAudio | null>(null);
   const requestIdRef = useRef(0);
   const respondRef = useRef(respond);
+  const speakRef = useRef(speak);
   const nowRef = useRef(now);
 
   exchangesRef.current = exchanges;
   respondRef.current = respond;
+  speakRef.current = speak;
   nowRef.current = now;
 
   const recording = usePushToTalk({
-    enabled: enabled && !thinking,
+    enabled: enabled && !thinking && !speaking,
     recorder,
     transcribe,
   });
+  const latestExchange = exchanges[exchanges.length - 1];
+
+  const loopState: ConversationLoopState = speaking
+    ? "speaking"
+    : thinking
+      ? "thinking"
+      : recording.state.status === "requesting" ||
+          recording.state.status === "recording"
+        ? "recording"
+        : recording.state.status === "transcribing"
+          ? "transcribing"
+          : recording.state.status === "error"
+            ? "error"
+            : latestExchange?.error
+              ? "error"
+              : "idle";
 
   useEffect(() => {
     if (
@@ -95,7 +130,7 @@ export function useTutorConversation({
 
     void respondRef
       .current({ transcript, history })
-      .then((tutorTurn) => {
+      .then(async (tutorTurn) => {
         if (!mountedRef.current || requestIdRef.current !== requestId) {
           return;
         }
@@ -112,6 +147,36 @@ export function useTutorConversation({
             .slice(-MAX_EXCHANGES),
         );
         setThinking(false);
+        setSpeaking(true);
+
+        try {
+          await speakRef.current(tutorTurn.reply);
+
+          if (!mountedRef.current || requestIdRef.current !== requestId) {
+            return;
+          }
+
+          setSpeaking(false);
+        } catch (error: unknown) {
+          if (!mountedRef.current || requestIdRef.current !== requestId) {
+            return;
+          }
+
+          setExchanges((current) =>
+            current
+              .map((exchange) =>
+                exchange.id === exchangeId
+                  ? {
+                      ...exchange,
+                      error: toSpeechError(error),
+                      errorSource: "speech" as const,
+                    }
+                  : exchange,
+              )
+              .slice(-MAX_EXCHANGES),
+          );
+          setSpeaking(false);
+        }
       })
       .catch((error: unknown) => {
         if (!mountedRef.current || requestIdRef.current !== requestId) {
@@ -122,7 +187,11 @@ export function useTutorConversation({
           current
             .map((exchange) =>
               exchange.id === exchangeId
-                ? { ...exchange, error: toTutorError(error) }
+                ? {
+                    ...exchange,
+                    error: toTutorError(error),
+                    errorSource: "tutor" as const,
+                  }
                 : exchange,
             )
             .slice(-MAX_EXCHANGES),
@@ -144,5 +213,7 @@ export function useTutorConversation({
     ...recording,
     exchanges,
     thinking,
+    speaking,
+    loopState,
   };
 }

@@ -1,3 +1,4 @@
 pub(crate) mod health;
+pub(crate) mod speech;
 pub(crate) mod transcription;
 pub(crate) mod tutor;

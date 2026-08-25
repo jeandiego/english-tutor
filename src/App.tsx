@@ -44,7 +44,8 @@ function App() {
     conversation.state.status === "requesting" ||
     conversation.state.status === "recording" ||
     conversation.state.status === "transcribing" ||
-    conversation.thinking;
+    conversation.thinking ||
+    conversation.speaking;
   const settingsNeedsAttention =
     transcriptionState.status === "error" ||
     (transcriptionState.status === "loaded" &&
@@ -139,6 +140,8 @@ function App() {
         <>
           <ConversationStage
             exchanges={conversation.exchanges}
+            loopState={conversation.loopState}
+            speaking={conversation.speaking}
             state={conversation.state}
             thinking={conversation.thinking}
           />
@@ -148,11 +151,13 @@ function App() {
               !transcriptionReady ||
               !tutorReady ||
               conversation.state.status === "transcribing" ||
-              conversation.thinking
+              conversation.thinking ||
+              conversation.speaking
             }
             disabledHint={voiceDisabledHint}
             onEnd={(owner) => void conversation.end(owner)}
             onStart={(owner) => void conversation.begin(owner)}
+            speaking={conversation.speaking}
             state={conversation.state}
             thinking={conversation.thinking}
           />

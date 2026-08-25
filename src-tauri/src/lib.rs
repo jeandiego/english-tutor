@@ -5,6 +5,7 @@ pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
             commands::health::health_check,
+            commands::speech::speak_tutor_reply,
             commands::transcription::load_transcription_setup,
             commands::transcription::save_transcription_settings,
             commands::transcription::transcribe_audio,

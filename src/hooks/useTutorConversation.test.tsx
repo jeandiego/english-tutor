@@ -47,17 +47,20 @@ function ConversationHarness({
   now,
   recorder,
   respond,
+  speak = async () => undefined,
   transcribe,
 }: {
   now?: () => number;
   recorder: AudioRecorder;
   respond: (request: TutorTurnRequest) => Promise<TutorTurn>;
+  speak?: (reply: string) => Promise<void>;
   transcribe: () => Promise<{ text: string }>;
 }) {
   const conversation = useTutorConversation({
     enabled: true,
     recorder,
     respond,
+    speak,
     transcribe,
     now,
   });
@@ -66,13 +69,16 @@ function ConversationHarness({
     <>
       <ConversationStage
         exchanges={conversation.exchanges}
+        loopState={conversation.loopState}
+        speaking={conversation.speaking}
         state={conversation.state}
         thinking={conversation.thinking}
       />
       <TalkControl
-        disabled={conversation.thinking}
+        disabled={conversation.thinking || conversation.speaking}
         onEnd={(owner) => void conversation.end(owner)}
         onStart={(owner) => void conversation.begin(owner)}
+        speaking={conversation.speaking}
         state={conversation.state}
         thinking={conversation.thinking}
       />
@@ -84,6 +90,17 @@ async function recordOneTurn() {
   fireEvent.keyDown(window, { code: "Space" });
   await screen.findByText("Listening");
   fireEvent.keyUp(window, { code: "Space" });
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((promiseResolve, promiseReject) => {
+    resolve = promiseResolve;
+    reject = promiseReject;
+  });
+
+  return { promise, reject, resolve };
 }
 
 afterEach(() => {
@@ -154,7 +171,7 @@ describe("useTutorConversation", () => {
 
     await recordOneTurn();
 
-    expect(await screen.findByText("Tutor is thinking locally")).toBeInTheDocument();
+    expect(await screen.findByText("Thinking")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Thinking…" })).toBeDisabled();
     expect(respond).toHaveBeenCalledWith({
       transcript: "I have used React since many years.",
@@ -214,6 +231,76 @@ describe("useTutorConversation", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Can we discuss APIs?")).toBeInTheDocument();
     expect(screen.getByText("connection refused")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
+  });
+
+  it("speaks only the tutor reply, keeps corrections silent, and blocks recording until speech ends", async () => {
+    const recorder = createRecorder();
+    const speech = deferred<void>();
+    const speak = vi.fn(() => speech.promise);
+    const respond = vi.fn().mockResolvedValue(
+      turn("That opening is clear. What kinds of international roles interest you?"),
+    );
+
+    render(
+      <ConversationHarness
+        recorder={recorder}
+        respond={respond}
+        speak={speak}
+        transcribe={async () => ({
+          text: "I am a software engineer from Brazil since many years.",
+        })}
+      />,
+    );
+
+    await recordOneTurn();
+
+    expect(await screen.findByText("Speaking")).toBeInTheDocument();
+    expect(speak).toHaveBeenCalledWith(
+      "That opening is clear. What kinds of international roles interest you?",
+    );
+    expect(speak).not.toHaveBeenCalledWith(expect.stringContaining("for many years"));
+    expect(screen.queryByText("for many years")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Speaking…" })).toBeDisabled();
+
+    fireEvent.keyDown(window, { code: "Space" });
+    expect(recorder.start).toHaveBeenCalledOnce();
+
+    await act(async () => {
+      speech.resolve();
+      await speech.promise;
+    });
+
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
+  });
+
+  it("keeps the tutor reply visible, exposes speech errors, and becomes recoverable", async () => {
+    const recorder = createRecorder();
+    const speak = vi.fn().mockRejectedValue({
+      code: "speech-failed",
+      message: "macOS speech could not play the tutor reply.",
+      technicalMessage: "exit status: 1",
+    });
+
+    render(
+      <ConversationHarness
+        recorder={recorder}
+        respond={async () => turn("APIs are a strong topic for interviews.")}
+        speak={speak}
+        transcribe={async () => ({ text: "Can we discuss APIs?" })}
+      />,
+    );
+
+    await recordOneTurn();
+
+    expect(
+      await screen.findByText("APIs are a strong topic for interviews."),
+    ).toBeInTheDocument();
+    expect(
+      await screen.findByText("macOS speech could not play the tutor reply."),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Speech unavailable")).toBeInTheDocument();
+    expect(screen.getByText("exit status: 1")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
   });
 });
