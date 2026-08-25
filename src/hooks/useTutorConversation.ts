@@ -31,6 +31,13 @@ export type ConversationExchange = {
   responseTimeMs?: number;
   error?: TutorError | SpeechError;
   errorSource?: "tutor" | "speech";
+  storageWarning?: string;
+};
+
+export type ReplayState = {
+  exchangeId: number;
+  status: "playing" | "error";
+  error?: SpeechError;
 };
 
 type UseTutorConversationOptions = {
@@ -40,6 +47,8 @@ type UseTutorConversationOptions = {
   respond?: (request: TutorTurnRequest) => Promise<TutorTurn>;
   speak?: (reply: string) => Promise<void>;
   now?: () => number;
+  sessionId?: number;
+  learnerContext?: string;
 };
 
 const monotonicNow = () => performance.now();
@@ -64,23 +73,31 @@ export function useTutorConversation({
   respond = requestTutorTurn,
   speak = speakTutorReply,
   now = monotonicNow,
+  sessionId,
+  learnerContext,
 }: UseTutorConversationOptions) {
   const [exchanges, setExchanges] = useState<ConversationExchange[]>([]);
   const [thinking, setThinking] = useState(false);
   const [speaking, setSpeaking] = useState(false);
+  const [replayState, setReplayState] = useState<ReplayState | null>(null);
   const exchangesRef = useRef(exchanges);
   const mountedRef = useRef(true);
   const nextExchangeIdRef = useRef(1);
   const processedRecordingRef = useRef<RecordedAudio | null>(null);
   const requestIdRef = useRef(0);
+  const replayRequestIdRef = useRef(0);
   const respondRef = useRef(respond);
   const speakRef = useRef(speak);
   const nowRef = useRef(now);
+  const sessionIdRef = useRef(sessionId);
+  const learnerContextRef = useRef(learnerContext);
 
   exchangesRef.current = exchanges;
   respondRef.current = respond;
   speakRef.current = speak;
   nowRef.current = now;
+  sessionIdRef.current = sessionId;
+  learnerContextRef.current = learnerContext;
 
   const recording = usePushToTalk({
     enabled: enabled && !thinking && !speaking,
@@ -129,7 +146,12 @@ export function useTutorConversation({
     setThinking(true);
 
     void respondRef
-      .current({ transcript, history })
+      .current({
+        transcript,
+        history,
+        sessionId: sessionIdRef.current,
+        learnerContext: learnerContextRef.current,
+      })
       .then(async (tutorTurn) => {
         if (!mountedRef.current || requestIdRef.current !== requestId) {
           return;
@@ -141,7 +163,12 @@ export function useTutorConversation({
           current
             .map((exchange) =>
               exchange.id === exchangeId
-                ? { ...exchange, tutorTurn, responseTimeMs }
+                ? {
+                    ...exchange,
+                    tutorTurn,
+                    responseTimeMs,
+                    storageWarning: tutorTurn.storageWarning,
+                  }
                 : exchange,
             )
             .slice(-MAX_EXCHANGES),
@@ -209,11 +236,40 @@ export function useTutorConversation({
     };
   }, []);
 
+  const replay = (exchangeId: number) => {
+    const target = exchangesRef.current.find((exchange) => exchange.id === exchangeId);
+
+    if (!target?.tutorTurn || thinking || speaking || replayState !== null) {
+      return;
+    }
+
+    const replayId = ++replayRequestIdRef.current;
+    setReplayState({ exchangeId, status: "playing" });
+
+    void speakRef.current(target.tutorTurn.reply)
+      .then(() => {
+        if (!mountedRef.current || replayRequestIdRef.current !== replayId) {
+          return;
+        }
+
+        setReplayState(null);
+      })
+      .catch((error: unknown) => {
+        if (!mountedRef.current || replayRequestIdRef.current !== replayId) {
+          return;
+        }
+
+        setReplayState({ exchangeId, status: "error", error: toSpeechError(error) });
+      });
+  };
+
   return {
     ...recording,
     exchanges,
     thinking,
     speaking,
     loopState,
+    replay,
+    replayState,
   };
 }

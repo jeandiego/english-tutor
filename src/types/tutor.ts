@@ -35,6 +35,8 @@ export type TutorMessage = {
 export type TutorTurnRequest = {
   transcript: string;
   history: TutorMessage[];
+  sessionId?: number;
+  learnerContext?: string;
 };
 
 export type TutorCorrection = {
@@ -61,6 +63,7 @@ export type TutorTurn = {
   corrections: TutorCorrection[];
   betterExpressions: BetterExpression[];
   performance?: TutorPerformance;
+  storageWarning?: string;
 };
 
 export type TutorSetupState =

@@ -1,14 +1,15 @@
 import { useState } from "react";
 import { AppHeader, type AppPage } from "./components/AppHeader";
 import { ConversationStage } from "./components/ConversationStage";
+import { HistoryPage } from "./components/HistoryPage";
 import { SettingsPage } from "./components/SettingsPage";
-import { SystemDiagnostics } from "./components/SystemDiagnostics";
 import type {
   TranscriptionDiagnostic,
   TutorDiagnostic,
 } from "./components/SystemDiagnostics";
 import { TalkControl } from "./components/TalkControl";
 import { useRuntimeSetup } from "./hooks/useRuntimeSetup";
+import { useSessionHistory } from "./hooks/useSessionHistory";
 import { useTutorConversation } from "./hooks/useTutorConversation";
 import "./App.css";
 
@@ -33,12 +34,15 @@ function App() {
     tutorSettingsDraft,
     tutorState,
   } = useRuntimeSetup();
+  const sessionHistory = useSessionHistory();
   const conversation = useTutorConversation({
     enabled:
       activePage === "conversation" &&
       healthState.status === "ready" &&
       transcriptionReady &&
       tutorReady,
+    sessionId: sessionHistory.sessionId,
+    learnerContext: sessionHistory.learnerContext,
   });
   const voiceBusy =
     conversation.state.status === "requesting" ||
@@ -131,16 +135,23 @@ function App() {
     >
       <AppHeader
         activePage={activePage}
+        healthState={healthState}
+        navigationDisabled={voiceBusy}
         onNavigate={setActivePage}
-        settingsNavigationDisabled={voiceBusy}
+        onOpenSettings={() => setActivePage("settings")}
         settingsNeedsAttention={settingsNeedsAttention}
+        transcription={transcriptionDiagnostic}
+        tutor={tutorDiagnostic}
       />
 
       {activePage === "conversation" ? (
         <>
           <ConversationStage
             exchanges={conversation.exchanges}
+            historyWarning={sessionHistory.startError?.message}
             loopState={conversation.loopState}
+            onReplay={conversation.replay}
+            replayState={conversation.replayState}
             speaking={conversation.speaking}
             state={conversation.state}
             thinking={conversation.thinking}
@@ -161,13 +172,9 @@ function App() {
             state={conversation.state}
             thinking={conversation.thinking}
           />
-          <SystemDiagnostics
-            healthState={healthState}
-            onOpenSettings={() => setActivePage("settings")}
-            transcription={transcriptionDiagnostic}
-            tutor={tutorDiagnostic}
-          />
         </>
+      ) : activePage === "history" ? (
+        <HistoryPage />
       ) : (
         <SettingsPage
           onTranscriptionDraftChange={setSettingsDraft}

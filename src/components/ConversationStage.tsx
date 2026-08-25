@@ -1,8 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { RecordedAudio } from "../audio/recorder";
 import type {
   ConversationExchange,
   ConversationLoopState,
+  ReplayState,
 } from "../hooks/useTutorConversation";
 import type { RecordingState } from "../hooks/usePushToTalk";
 import { TranscriptionError } from "../native/transcription";
@@ -14,7 +15,76 @@ type ConversationStageProps = {
   loopState?: ConversationLoopState;
   speaking?: boolean;
   thinking?: boolean;
+  historyWarning?: string;
+  onReplay?: (exchangeId: number) => void;
+  replayState?: ReplayState | null;
 };
+
+function ReplayIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      viewBox="0 0 20 20"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M15.5 6.5A6 6 0 1 0 16.9 11"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+      <path
+        d="M15.5 3v3.9h-3.9"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.6"
+      />
+    </svg>
+  );
+}
+
+function SparkleIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      viewBox="0 0 20 20"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M10 2.5l1.4 3.9 3.9 1.4-3.9 1.4L10 13.1l-1.4-3.9-3.9-1.4 3.9-1.4L10 2.5z"
+        stroke="currentColor"
+        strokeLinejoin="round"
+        strokeWidth="1.3"
+      />
+    </svg>
+  );
+}
+
+function ChevronIcon({ className }: { className?: string }) {
+  return (
+    <svg
+      aria-hidden="true"
+      className={className}
+      fill="none"
+      viewBox="0 0 12 12"
+      xmlns="http://www.w3.org/2000/svg"
+    >
+      <path
+        d="M2.5 4.5L6 8L9.5 4.5"
+        stroke="currentColor"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+}
 
 function formatDuration(durationMs: number): string {
   if (durationMs < 1000) {
@@ -164,9 +234,9 @@ function StageContent({ loopState, state }: ConversationStageProps) {
 
   if (state.status === "transcribed") {
     return (
-      <article className="user-turn" aria-label="Your latest conversation turn">
-        <p className="user-turn__speaker">You</p>
-        <p className="user-turn__text" role="status">
+      <article className="conversation-turn conversation-turn--user user-turn" aria-label="Your latest conversation turn">
+        <p className="conversation-turn__speaker">You</p>
+        <p className="conversation-turn__text" role="status">
           {state.text}
         </p>
         <RecordingPlayback
@@ -224,6 +294,9 @@ function Corrections({ corrections }: { corrections: TutorCorrection[] }) {
     <ul className="corrections" aria-label="Corrections for this turn">
       {corrections.map((correction, index) => (
         <li className="correction" key={index}>
+          <span className="tip-chip">
+            {capitalize(correction.category)} · {capitalize(correction.severity)}
+          </span>
           <p className="correction__row">
             <span className="correction__row-label">You said</span>
             <span className="correction__quote">“{correction.original}”</span>
@@ -235,9 +308,6 @@ function Corrections({ corrections }: { corrections: TutorCorrection[] }) {
             </span>
           </p>
           <p className="correction__explanation">{correction.explanation}</p>
-          <p className="correction__meta">
-            {capitalize(correction.category)} · {capitalize(correction.severity)}
-          </p>
         </li>
       ))}
     </ul>
@@ -275,14 +345,115 @@ function BetterExpressions({ expressions }: { expressions: BetterExpression[] })
 }
 
 function TutorCoaching({ tutorTurn }: { tutorTurn: TutorTurn }) {
-  if (tutorTurn.corrections.length === 0 && tutorTurn.betterExpressions.length === 0) {
+  const count = tutorTurn.corrections.length + tutorTurn.betterExpressions.length;
+  const [expanded, setExpanded] = useState(true);
+
+  if (count === 0) {
     return null;
   }
 
   return (
     <div className="tutor-coaching">
-      <Corrections corrections={tutorTurn.corrections} />
-      <BetterExpressions expressions={tutorTurn.betterExpressions} />
+      <button
+        aria-expanded={expanded}
+        className="tutor-coaching__toggle"
+        onClick={() => setExpanded((value) => !value)}
+        type="button"
+      >
+        <span className="tutor-coaching__toggle-label">
+          <SparkleIcon className="tutor-coaching__toggle-icon" />
+          {expanded ? "Hide" : "Show"} {count} tip{count > 1 ? "s" : ""}
+        </span>
+        <ChevronIcon
+          className={
+            expanded ? "tutor-coaching__chevron is-open" : "tutor-coaching__chevron"
+          }
+        />
+      </button>
+      {expanded && (
+        <div className="tutor-coaching__body">
+          <Corrections corrections={tutorTurn.corrections} />
+          <BetterExpressions expressions={tutorTurn.betterExpressions} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ReplayButton({
+  disabled,
+  exchangeId,
+  onReplay,
+  replayState,
+}: {
+  disabled: boolean;
+  exchangeId: number;
+  onReplay: (exchangeId: number) => void;
+  replayState?: ReplayState | null;
+}) {
+  const isThisReplaying =
+    replayState?.exchangeId === exchangeId && replayState.status === "playing";
+  const hasError =
+    replayState?.exchangeId === exchangeId && replayState.status === "error";
+  const otherReplaying =
+    !!replayState &&
+    replayState.exchangeId !== exchangeId &&
+    replayState.status === "playing";
+  const isDisabled = disabled || isThisReplaying || otherReplaying;
+
+  return (
+    <span className="replay">
+      <button
+        aria-label={isThisReplaying ? "Replaying tutor reply" : "Replay tutor reply"}
+        className={
+          isThisReplaying ? "replay-button replay-button--active" : "replay-button"
+        }
+        disabled={isDisabled}
+        onClick={() => onReplay(exchangeId)}
+        type="button"
+      >
+        <ReplayIcon className="replay-button__icon" />
+        <span>{isThisReplaying ? "Replaying…" : "Replay"}</span>
+      </button>
+      {hasError && replayState?.error && (
+        <span className="replay__error" role="alert">
+          {replayState.error.message}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function StorageWarning({ message }: { message?: string }) {
+  if (!message) {
+    return null;
+  }
+
+  return (
+    <p className="storage-warning" role="status">
+      {message}
+    </p>
+  );
+}
+
+function HistoryWarningBanner({ message }: { message?: string }) {
+  const [dismissed, setDismissed] = useState(false);
+
+  if (!message || dismissed) {
+    return null;
+  }
+
+  return (
+    <div className="history-warning" role="status">
+      <p>{message}</p>
+      <button
+        aria-label="Dismiss"
+        className="history-warning__dismiss"
+        onClick={() => setDismissed(true)}
+        type="button"
+      >
+        Dismiss
+      </button>
     </div>
   );
 }
@@ -312,11 +483,16 @@ function TutorFailure({ exchange }: { exchange: ConversationExchange }) {
 function ConversationLog({
   exchanges,
   loopState,
-  speaking,
+  onReplay,
+  replayState,
+  speaking = false,
   thinking,
   state,
 }: Required<Pick<ConversationStageProps, "exchanges" | "thinking">> &
-  Pick<ConversationStageProps, "loopState" | "speaking" | "state">) {
+  Pick<
+    ConversationStageProps,
+    "loopState" | "onReplay" | "replayState" | "speaking" | "state"
+  >) {
   const endRef = useRef<HTMLDivElement | null>(null);
   const showTransientState =
     state.status === "requesting" ||
@@ -352,33 +528,47 @@ function ConversationLog({
                   <p className="conversation-turn__text">
                     {exchange.tutorTurn.reply}
                   </p>
-                  {exchange.responseTimeMs !== undefined && (
-                    <p className="conversation-turn__meta">
-                      Responded in{" "}
-                      <time dateTime={`PT${exchange.responseTimeMs / 1000}S`}>
-                        {formatTutorResponseTime(exchange.responseTimeMs)}
-                      </time>
-                      {exchange.tutorTurn.performance && (
-                        <>
-                          <span aria-hidden="true"> · </span>
-                          <span
-                            aria-label={`${formatTutorThroughput(exchange.tutorTurn.performance.tokensPerSecond)} output tokens per second`}
-                            title={`${exchange.tutorTurn.performance.outputTokens} output tokens generated by Ollama`}
-                          >
-                            {formatTutorThroughput(
-                              exchange.tutorTurn.performance.tokensPerSecond,
-                            )}{" "}
-                            tok/s
-                          </span>
-                        </>
+                  {(exchange.responseTimeMs !== undefined || onReplay) && (
+                    <div className="conversation-turn__actions">
+                      {exchange.responseTimeMs !== undefined && (
+                        <p className="conversation-turn__meta">
+                          Responded in{" "}
+                          <time dateTime={`PT${exchange.responseTimeMs / 1000}S`}>
+                            {formatTutorResponseTime(exchange.responseTimeMs)}
+                          </time>
+                          {exchange.tutorTurn.performance && (
+                            <>
+                              <span aria-hidden="true"> · </span>
+                              <span
+                                aria-label={`${formatTutorThroughput(exchange.tutorTurn.performance.tokensPerSecond)} output tokens per second`}
+                                title={`${exchange.tutorTurn.performance.outputTokens} output tokens generated by Ollama`}
+                              >
+                                {formatTutorThroughput(
+                                  exchange.tutorTurn.performance.tokensPerSecond,
+                                )}{" "}
+                                tok/s
+                              </span>
+                            </>
+                          )}
+                        </p>
                       )}
-                    </p>
+                      {onReplay && (
+                        <ReplayButton
+                          disabled={thinking || speaking}
+                          exchangeId={exchange.id}
+                          onReplay={onReplay}
+                          replayState={replayState}
+                        />
+                      )}
+                    </div>
                   )}
                 </div>
               </div>
             )}
 
             {exchange.tutorTurn && <TutorCoaching tutorTurn={exchange.tutorTurn} />}
+
+            <StorageWarning message={exchange.storageWarning} />
 
             {isLatest && thinking && !exchange.tutorTurn && !exchange.error && (
               <div className="recording-status recording-status--processing tutor-thinking" role="status">
@@ -413,26 +603,26 @@ function ConversationLog({
 
 function ConversationStageContent({
   loopState,
+  onReplay,
+  replayState,
   speaking = false,
   state,
   exchanges = [],
   thinking = false,
+  historyWarning,
 }: ConversationStageProps) {
   return (
     <section className="conversation-stage" aria-labelledby="conversation-title">
       <h2 id="conversation-title" className="visually-hidden">
         Conversation
       </h2>
-      <span className="frame-mark frame-mark--top-left" aria-hidden="true" />
-      <span className="frame-mark frame-mark--top-center" aria-hidden="true" />
-      <span className="frame-mark frame-mark--top-right" aria-hidden="true" />
-      <span className="frame-mark frame-mark--bottom-left" aria-hidden="true" />
-      <span className="frame-mark frame-mark--bottom-center" aria-hidden="true" />
-      <span className="frame-mark frame-mark--bottom-right" aria-hidden="true" />
+      <HistoryWarningBanner message={historyWarning} />
       {exchanges.length > 0 ? (
         <ConversationLog
           exchanges={exchanges}
           loopState={loopState}
+          onReplay={onReplay}
+          replayState={replayState}
           speaking={speaking}
           thinking={thinking}
           state={state}

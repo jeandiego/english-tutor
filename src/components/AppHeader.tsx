@@ -1,17 +1,32 @@
-export type AppPage = "conversation" | "settings";
+import {
+  SystemDiagnostics,
+  type TranscriptionDiagnostic,
+  type TutorDiagnostic,
+} from "./SystemDiagnostics";
+import type { HealthState } from "../types/runtime";
+
+export type AppPage = "conversation" | "history" | "settings";
 
 type AppHeaderProps = {
   activePage: AppPage;
   settingsNeedsAttention: boolean;
-  settingsNavigationDisabled: boolean;
+  navigationDisabled: boolean;
   onNavigate: (page: AppPage) => void;
+  healthState: HealthState;
+  transcription: TranscriptionDiagnostic;
+  tutor: TutorDiagnostic;
+  onOpenSettings: () => void;
 };
 
 export function AppHeader({
   activePage,
   settingsNeedsAttention,
-  settingsNavigationDisabled,
+  navigationDisabled,
   onNavigate,
+  healthState,
+  transcription,
+  tutor,
+  onOpenSettings,
 }: AppHeaderProps) {
   return (
     <header className="app-header">
@@ -25,12 +40,21 @@ export function AppHeader({
           Conversation
         </button>
         <button
+          aria-current={activePage === "history" ? "page" : undefined}
+          className="app-navigation__item"
+          disabled={navigationDisabled}
+          onClick={() => onNavigate("history")}
+          type="button"
+        >
+          History
+        </button>
+        <button
           aria-label={
             settingsNeedsAttention ? "Settings, needs attention" : "Settings"
           }
           aria-current={activePage === "settings" ? "page" : undefined}
           className="app-navigation__item"
-          disabled={settingsNavigationDisabled}
+          disabled={navigationDisabled}
           onClick={() => onNavigate("settings")}
           type="button"
         >
@@ -46,10 +70,12 @@ export function AppHeader({
 
       <h1>English Coach</h1>
 
-      <div className="local-status" aria-label="Runs locally">
-        <span className="local-status__dot" aria-hidden="true" />
-        <span>Local</span>
-      </div>
+      <SystemDiagnostics
+        healthState={healthState}
+        onOpenSettings={onOpenSettings}
+        transcription={transcription}
+        tutor={tutor}
+      />
     </header>
   );
 }

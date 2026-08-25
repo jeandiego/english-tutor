@@ -133,6 +133,10 @@ struct OllamaRequestMessage {
 pub struct TutorTurnRequest {
     transcript: String,
     history: Vec<TutorMessage>,
+    #[serde(default)]
+    session_id: Option<i64>,
+    #[serde(default)]
+    learner_context: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -154,21 +158,21 @@ pub enum CorrectionSeverity {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TutorCorrection {
-    original: String,
-    correction: String,
-    explanation: String,
-    category: CorrectionCategory,
-    severity: CorrectionSeverity,
+    pub(crate) original: String,
+    pub(crate) correction: String,
+    pub(crate) explanation: String,
+    pub(crate) category: CorrectionCategory,
+    pub(crate) severity: CorrectionSeverity,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct BetterExpression {
     #[serde(skip_serializing_if = "Option::is_none")]
-    original: Option<String>,
-    suggestion: String,
+    pub(crate) original: Option<String>,
+    pub(crate) suggestion: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    explanation: Option<String>,
+    pub(crate) explanation: Option<String>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -226,6 +230,8 @@ pub struct TutorTurn {
     better_expressions: Vec<BetterExpression>,
     #[serde(skip_serializing_if = "Option::is_none")]
     performance: Option<TutorPerformance>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    storage_warning: Option<String>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -738,11 +744,21 @@ fn request_messages(
 ) -> Result<Vec<OllamaRequestMessage>, TutorCommandError> {
     let transcript = required_text(request.transcript, "transcript")?;
     let history_start = request.history.len().saturating_sub(MAX_HISTORY_MESSAGES);
-    let mut messages = Vec::with_capacity(request.history.len() - history_start + 2);
+    let mut messages = Vec::with_capacity(request.history.len() - history_start + 3);
     messages.push(OllamaRequestMessage {
         role: "system",
         content: TUTOR_SYSTEM_INSTRUCTION.to_string(),
     });
+
+    if let Some(learner_context) = request.learner_context {
+        let learner_context = learner_context.trim().to_string();
+        if !learner_context.is_empty() {
+            messages.push(OllamaRequestMessage {
+                role: "system",
+                content: learner_context,
+            });
+        }
+    }
 
     for mut message in request.history.into_iter().skip(history_start) {
         message.content = message.content.trim().to_string();
@@ -841,6 +857,7 @@ async fn generate(
         corrections: turn.corrections,
         better_expressions: turn.better_expressions,
         performance,
+        storage_warning: None,
     })
 }
 
@@ -896,7 +913,26 @@ pub async fn generate_tutor_turn(
     request: TutorTurnRequest,
 ) -> Result<TutorTurn, TutorCommandError> {
     let settings = load_settings(config_path(&app_handle)?).await?;
-    generate(&settings, request).await
+    let session_id = request.session_id;
+    let transcript = request.transcript.clone();
+    let mut turn = generate(&settings, request).await?;
+
+    if let Some(session_id) = session_id {
+        if let Err(error) = super::history::persist_turn(
+            &app_handle,
+            session_id,
+            transcript,
+            turn.reply.clone(),
+            turn.corrections.clone(),
+            turn.better_expressions.clone(),
+        )
+        .await
+        {
+            turn.storage_warning = Some(error.message().to_string());
+        }
+    }
+
+    Ok(turn)
 }
 
 #[cfg(test)]
@@ -1142,6 +1178,8 @@ mod tests {
                 TutorTurnRequest {
                     transcript: "I am learning more backend.".into(),
                     history,
+                    session_id: None,
+                    learner_context: None,
                 },
             )
             .await
@@ -1176,6 +1214,44 @@ mod tests {
                 "I am learning more backend."
             );
         });
+    }
+
+    #[test]
+    fn request_messages_includes_learner_context_only_when_present() {
+        let without_context = request_messages(TutorTurnRequest {
+            transcript: "Hello".into(),
+            history: Vec::new(),
+            session_id: None,
+            learner_context: None,
+        })
+        .expect("messages must build");
+        assert_eq!(without_context.len(), 2);
+        assert_eq!(without_context[0].role, "system");
+        assert_eq!(without_context[0].content, TUTOR_SYSTEM_INSTRUCTION);
+        assert_eq!(without_context[1].role, "user");
+
+        let with_blank_context = request_messages(TutorTurnRequest {
+            transcript: "Hello".into(),
+            history: Vec::new(),
+            session_id: None,
+            learner_context: Some("   ".into()),
+        })
+        .expect("messages must build");
+        assert_eq!(with_blank_context.len(), 2);
+
+        let with_context = request_messages(TutorTurnRequest {
+            transcript: "Hello".into(),
+            history: Vec::new(),
+            session_id: Some(1),
+            learner_context: Some(
+                "The learner has recently repeated mistakes involving grammar.".into(),
+            ),
+        })
+        .expect("messages must build");
+        assert_eq!(with_context.len(), 3);
+        assert_eq!(with_context[1].role, "system");
+        assert!(with_context[1].content.contains("grammar"));
+        assert_eq!(with_context[2].role, "user");
     }
 
     #[test]
@@ -1237,6 +1313,8 @@ mod tests {
                 TutorTurnRequest {
                     transcript: "Hello".into(),
                     history: Vec::new(),
+                    session_id: None,
+                    learner_context: None,
                 },
             )
             .await

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import type { ConversationExchange } from "../hooks/useTutorConversation";
 import type { RecordingState } from "../hooks/usePushToTalk";
@@ -135,5 +135,45 @@ describe("ConversationStage corrections", () => {
 
     expect(firstExchange?.querySelector(".tutor-coaching")).not.toBeNull();
     expect(secondExchange?.querySelector(".tutor-coaching")).toBeNull();
+  });
+});
+
+describe("ConversationStage storage warnings", () => {
+  it("shows a non-blocking storage warning on the affected turn without blocking the flow", () => {
+    render(
+      <ConversationStage
+        exchanges={[
+          {
+            ...exchange(1, "I work as a software engineer.", naturalTurn()),
+            storageWarning: "This turn could not be saved to local history.",
+          },
+        ]}
+        state={idleState}
+      />,
+    );
+
+    expect(
+      screen.getByText("This turn could not be saved to local history."),
+    ).toBeInTheDocument();
+  });
+
+  it("shows a dismissible banner when the session history failed to start", () => {
+    render(
+      <ConversationStage
+        exchanges={[]}
+        historyWarning="The learning history could not be saved."
+        state={idleState}
+      />,
+    );
+
+    expect(
+      screen.getByText("The learning history could not be saved."),
+    ).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+
+    expect(
+      screen.queryByText("The learning history could not be saved."),
+    ).not.toBeInTheDocument();
   });
 });

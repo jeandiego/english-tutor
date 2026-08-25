@@ -1,7 +1,20 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { getRuntimeHealth } from "./native/health";
+import {
+  listCorrectionCategoryCounts,
+  listRecentExpressions,
+  listRecentSessions,
+  startSession,
+} from "./native/history";
 import {
   loadTranscriptionSetup,
   saveTranscriptionSettings,
@@ -16,6 +29,17 @@ import type { TutorSetup } from "./types/tutor";
 vi.mock("./native/health", () => ({
   getRuntimeHealth: vi.fn(),
 }));
+
+vi.mock("./native/history", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./native/history")>();
+  return {
+    ...actual,
+    startSession: vi.fn(),
+    listRecentSessions: vi.fn(),
+    listCorrectionCategoryCounts: vi.fn(),
+    listRecentExpressions: vi.fn(),
+  };
+});
 
 vi.mock("./native/transcription", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./native/transcription")>();
@@ -42,6 +66,10 @@ const loadTranscriptionSetupMock = vi.mocked(loadTranscriptionSetup);
 const saveTranscriptionSettingsMock = vi.mocked(saveTranscriptionSettings);
 const loadTutorSetupMock = vi.mocked(loadTutorSetup);
 const saveTutorSettingsMock = vi.mocked(saveTutorSettings);
+const startSessionMock = vi.mocked(startSession);
+const listRecentSessionsMock = vi.mocked(listRecentSessions);
+const listCorrectionCategoryCountsMock = vi.mocked(listCorrectionCategoryCounts);
+const listRecentExpressionsMock = vi.mocked(listRecentExpressions);
 
 const readySetup: TranscriptionSetup = {
   settings: {
@@ -135,6 +163,10 @@ function readyHealth() {
 
 beforeEach(() => {
   loadTutorSetupMock.mockResolvedValue(readyTutorSetup);
+  startSessionMock.mockResolvedValue({ sessionId: 1 });
+  listRecentSessionsMock.mockResolvedValue([]);
+  listCorrectionCategoryCountsMock.mockResolvedValue([]);
+  listRecentExpressionsMock.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -265,7 +297,8 @@ describe("English Coach shell", () => {
         ffmpegExecutablePath: "ffmpeg",
       }),
     );
-    expect(await screen.findByText("Ready")).toBeInTheDocument();
+    const settingsPage = document.querySelector(".settings-page") as HTMLElement;
+    expect(await within(settingsPage).findByText("Ready")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Conversation" }));
     expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
   });
@@ -335,6 +368,43 @@ describe("English Coach shell", () => {
         modelName: "qwen3.5:9b",
       }),
     );
-    expect(await screen.findByText("Ready")).toBeInTheDocument();
+    const tutorSettingsPage = document.querySelector(".settings-page") as HTMLElement;
+    expect(await within(tutorSettingsPage).findByText("Ready")).toBeInTheDocument();
+  });
+
+  it("opens the History tab and lists recent sessions", async () => {
+    getRuntimeHealthMock.mockResolvedValue(readyHealth());
+    loadTranscriptionSetupMock.mockResolvedValue(readySetup);
+    listRecentSessionsMock.mockResolvedValue([
+      { id: 1, startedAt: 1_700_000_000_000, endedAt: 1_700_000_600_000, turnCount: 3 },
+    ]);
+    listCorrectionCategoryCountsMock.mockResolvedValue([
+      { category: "grammar", count: 4 },
+    ]);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "History" }));
+
+    expect(await screen.findByText("3 turns")).toBeInTheDocument();
+    expect(screen.getByText("Grammar")).toBeInTheDocument();
+    expect(screen.getByText("4")).toBeInTheDocument();
+  });
+
+  it("shows a non-blocking warning when the session history fails to start", async () => {
+    getRuntimeHealthMock.mockResolvedValue(readyHealth());
+    loadTranscriptionSetupMock.mockResolvedValue(readySetup);
+    startSessionMock.mockRejectedValue({
+      code: "history-storage-failed",
+      message: "The learning history could not be saved.",
+      technicalMessage: "disk full",
+    });
+
+    render(<App />);
+
+    expect(
+      await screen.findByText("The learning history could not be saved."),
+    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
   });
 });
