@@ -10,11 +10,17 @@ import {
   saveTutorSettings as persistTutorSettings,
   toTutorError,
 } from "../native/tutor";
+import {
+  loadTtsSetup,
+  saveTtsSettings as persistTtsSettings,
+  toTtsError,
+} from "../native/tts";
 import type { HealthState } from "../types/runtime";
 import type {
   TranscriptionSettings,
   TranscriptionSetupState,
 } from "../types/transcription";
+import type { TtsSettings, TtsSetupState } from "../types/tts";
 import type {
   TutorSettings,
   TutorSetupState,
@@ -29,6 +35,11 @@ const DEFAULT_SETTINGS: TranscriptionSettings = {
 const DEFAULT_TUTOR_SETTINGS: TutorSettings = {
   baseUrl: "http://127.0.0.1:11434",
   modelName: "",
+};
+
+const DEFAULT_TTS_SETTINGS: TtsSettings = {
+  provider: "macos_say",
+  voiceId: "",
 };
 
 function settingsEqual(
@@ -46,6 +57,15 @@ function tutorSettingsEqual(left: TutorSettings, right: TutorSettings) {
   return left.baseUrl === right.baseUrl && left.modelName === right.modelName;
 }
 
+function ttsSettingsEqual(left: TtsSettings, right: TtsSettings) {
+  return (
+    left.provider === right.provider &&
+    left.voiceId === right.voiceId &&
+    left.rate === right.rate &&
+    left.volume === right.volume
+  );
+}
+
 export function useRuntimeSetup() {
   const [healthState, setHealthState] = useState<HealthState>({
     status: "checking",
@@ -55,10 +75,16 @@ export function useRuntimeSetup() {
   const [tutorState, setTutorState] = useState<TutorSetupState>({
     status: "checking",
   });
+  const [ttsState, setTtsState] = useState<TtsSetupState>({
+    status: "checking",
+  });
   const [settingsDraft, setSettingsDraft] =
     useState<TranscriptionSettings>(DEFAULT_SETTINGS);
   const [tutorSettingsDraft, setTutorSettingsDraft] = useState<TutorSettings>(
     DEFAULT_TUTOR_SETTINGS,
+  );
+  const [ttsSettingsDraft, setTtsSettingsDraft] = useState<TtsSettings>(
+    DEFAULT_TTS_SETTINGS,
   );
 
   useEffect(() => {
@@ -121,6 +147,45 @@ export function useRuntimeSetup() {
     }
 
     void checkTutorRuntime();
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
+
+  const reloadTtsSetup = useCallback(async () => {
+    setTtsState({ status: "checking" });
+
+    try {
+      const setup = await loadTtsSetup();
+      setTtsSettingsDraft(setup.settings);
+      setTtsState({ status: "loaded", setup, saving: false });
+    } catch (error) {
+      const ttsError = toTtsError(error);
+      setTtsState({ status: "error", message: ttsError.message });
+    }
+  }, []);
+
+  useEffect(() => {
+    let ignore = false;
+
+    async function checkTtsRuntime() {
+      try {
+        const setup = await loadTtsSetup();
+
+        if (!ignore) {
+          setTtsSettingsDraft(setup.settings);
+          setTtsState({ status: "loaded", setup, saving: false });
+        }
+      } catch (error) {
+        if (!ignore) {
+          const ttsError = toTtsError(error);
+          setTtsState({ status: "error", message: ttsError.message });
+        }
+      }
+    }
+
+    void checkTtsRuntime();
 
     return () => {
       ignore = true;
@@ -222,6 +287,29 @@ export function useRuntimeSetup() {
     }
   };
 
+  const saveTtsSettingsAction = async () => {
+    if (ttsState.status !== "loaded") {
+      return;
+    }
+
+    const previousSetup = ttsState.setup;
+    setTtsState({ status: "loaded", setup: previousSetup, saving: true });
+
+    try {
+      const setup = await persistTtsSettings(ttsSettingsDraft);
+      setTtsSettingsDraft(setup.settings);
+      setTtsState({ status: "loaded", setup, saving: false });
+    } catch (error) {
+      const ttsError = toTtsError(error);
+      setTtsState({
+        status: "loaded",
+        setup: previousSetup,
+        saving: false,
+        saveError: ttsError.message,
+      });
+    }
+  };
+
   const transcriptionReady =
     transcriptionState.status === "loaded" &&
     !transcriptionState.saving &&
@@ -236,6 +324,9 @@ export function useRuntimeSetup() {
   const tutorSettingsDirty =
     tutorState.status === "loaded" &&
     !tutorSettingsEqual(tutorSettingsDraft, tutorState.setup.settings);
+  const ttsSettingsDirty =
+    ttsState.status === "loaded" &&
+    !ttsSettingsEqual(ttsSettingsDraft, ttsState.setup.settings);
 
   const resetSettingsDraft = () => {
     if (transcriptionState.status === "loaded") {
@@ -249,20 +340,33 @@ export function useRuntimeSetup() {
     }
   };
 
+  const resetTtsSettingsDraft = () => {
+    if (ttsState.status === "loaded") {
+      setTtsSettingsDraft(ttsState.setup.settings);
+    }
+  };
+
   return {
     healthState,
     reloadTranscriptionSetup,
+    reloadTtsSetup,
     reloadTutorSetup,
     resetSettingsDraft,
+    resetTtsSettingsDraft,
     resetTutorSettingsDraft,
     saveSettings,
+    saveTtsSettings: saveTtsSettingsAction,
     saveTutorSettings,
     settingsDirty,
     settingsDraft,
     setSettingsDraft,
+    setTtsSettingsDraft,
     setTutorSettingsDraft,
     transcriptionReady,
     transcriptionState,
+    ttsSettingsDirty,
+    ttsSettingsDraft,
+    ttsState,
     tutorReady,
     tutorSettingsDirty,
     tutorSettingsDraft,

@@ -3,6 +3,7 @@ import type {
   TranscriptionSettings,
   TranscriptionSetupState,
 } from "../types/transcription";
+import type { TtsProviderId, TtsSettings, TtsSetupState } from "../types/tts";
 import type { TutorSettings, TutorSetupState } from "../types/tutor";
 
 type SettingsPageProps = {
@@ -20,6 +21,19 @@ type SettingsPageProps = {
   onTutorReset: () => void;
   onTutorRetry: () => Promise<void>;
   onTutorSave: () => Promise<void>;
+  ttsState: TtsSetupState;
+  ttsDraft: TtsSettings;
+  ttsDirty: boolean;
+  onTtsDraftChange: (settings: TtsSettings) => void;
+  onTtsReset: () => void;
+  onTtsRetry: () => Promise<void>;
+  onTtsSave: () => Promise<void>;
+};
+
+const TTS_PROVIDER_LABELS: Record<TtsProviderId, string> = {
+  macos_say: "macOS Speech",
+  kokoro_local: "Kokoro (local)",
+  elevenlabs: "ElevenLabs",
 };
 
 const DEPENDENCY_NAMES: Record<DependencyCheck["dependency"], string> = {
@@ -79,6 +93,13 @@ export function SettingsPage({
   onTutorReset,
   onTutorRetry,
   onTutorSave,
+  ttsState,
+  ttsDraft,
+  ttsDirty,
+  onTtsDraftChange,
+  onTtsReset,
+  onTtsRetry,
+  onTtsSave,
 }: SettingsPageProps) {
   const transcriptionSetup =
     transcriptionState.status === "loaded"
@@ -94,6 +115,12 @@ export function SettingsPage({
   const tutorSaving = tutorState.status === "loaded" && tutorState.saving;
   const tutorSaveError =
     tutorState.status === "loaded" ? tutorState.saveError : undefined;
+  const ttsSetup = ttsState.status === "loaded" ? ttsState.setup : undefined;
+  const ttsSaving = ttsState.status === "loaded" && ttsState.saving;
+  const ttsSaveError = ttsState.status === "loaded" ? ttsState.saveError : undefined;
+  const selectedProvider = ttsSetup?.providers.find(
+    (provider) => provider.id === ttsDraft.provider,
+  );
   const status = overallStatus(transcriptionState, tutorState);
 
   return (
@@ -432,6 +459,222 @@ export function SettingsPage({
                   type="submit"
                 >
                   {tutorSaving ? "Saving and verifying…" : "Save and verify tutor"}
+                </button>
+              </div>
+            </div>
+          </form>
+        </section>
+      )}
+
+      <section className="settings-section" aria-labelledby="voice-checks-title">
+        <div className="settings-section__heading">
+          <h3 id="voice-checks-title">Voice</h3>
+          <p>macOS speech works out of the box. Kokoro and ElevenLabs are optional.</p>
+        </div>
+
+        <div className="dependency-list">
+          {ttsState.status === "checking" && (
+            <p className="settings-empty-state">Checking voice providers…</p>
+          )}
+
+          {ttsState.status === "error" && (
+            <div className="settings-page__error" role="alert">
+              <p>Voice settings could not be loaded.</p>
+              <span>{ttsState.message}</span>
+              <button
+                className="settings-button settings-button--secondary"
+                onClick={() => void onTtsRetry()}
+                type="button"
+              >
+                Try again
+              </button>
+            </div>
+          )}
+
+          {ttsSetup?.providers.map((provider) => (
+            <div className="dependency-row" key={provider.id}>
+              <span
+                className={`dependency-row__mark dependency-row__mark--${
+                  provider.availability.available ? "available" : "unavailable"
+                }`}
+                aria-hidden="true"
+              />
+              <div className="dependency-row__name">{provider.label}</div>
+              <div className="dependency-row__message">
+                <span>{provider.availability.message}</span>
+                {provider.availability.technicalMessage && (
+                  <details>
+                    <summary>Technical details</summary>
+                    <code>{provider.availability.technicalMessage}</code>
+                  </details>
+                )}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {ttsSetup && (
+        <section className="settings-section" aria-labelledby="voice-settings-title">
+          <div className="settings-section__heading">
+            <h3 id="voice-settings-title">Voice configuration</h3>
+            <p>Unavailable providers automatically fall back to macOS speech.</p>
+          </div>
+
+          <form
+            className="settings-form"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void onTtsSave();
+            }}
+          >
+            <div className="settings-field">
+              <label className="settings-field__label" htmlFor="tts-provider">
+                Provider
+              </label>
+              <span className="settings-field__control">
+                <select
+                  disabled={ttsSaving}
+                  id="tts-provider"
+                  onChange={(event) =>
+                    onTtsDraftChange({
+                      ...ttsDraft,
+                      provider: event.target.value as TtsProviderId,
+                      voiceId: "",
+                    })
+                  }
+                  value={ttsDraft.provider}
+                >
+                  {ttsSetup.providers.map((provider) => (
+                    <option key={provider.id} value={provider.id}>
+                      {TTS_PROVIDER_LABELS[provider.id]}
+                      {provider.availability.available ? "" : " (unavailable)"}
+                    </option>
+                  ))}
+                </select>
+                <small>Unavailable providers fall back to macOS speech automatically.</small>
+              </span>
+            </div>
+
+            <div className="settings-field">
+              <label className="settings-field__label" htmlFor="tts-voice">
+                Voice
+              </label>
+              <span className="settings-field__control">
+                <input
+                  autoComplete="off"
+                  disabled={ttsSaving || !selectedProvider?.voices.length}
+                  id="tts-voice"
+                  list="tts-voices"
+                  onChange={(event) =>
+                    onTtsDraftChange({ ...ttsDraft, voiceId: event.target.value })
+                  }
+                  placeholder={
+                    selectedProvider?.voices.length
+                      ? "Choose a voice"
+                      : "No voices available"
+                  }
+                  spellCheck={false}
+                  value={ttsDraft.voiceId}
+                />
+                <datalist id="tts-voices">
+                  {selectedProvider?.voices.map((voice) => (
+                    <option key={voice.id} value={voice.id}>
+                      {voice.locale ? `${voice.label} — ${voice.locale}` : voice.label}
+                    </option>
+                  ))}
+                </datalist>
+                <small>
+                  {selectedProvider?.voices.length
+                    ? `${selectedProvider.voices.length} voice${
+                        selectedProvider.voices.length === 1 ? "" : "s"
+                      } available. The locale shown is the voice's accent/region.`
+                    : "This provider has no voices available yet."}
+                </small>
+              </span>
+            </div>
+
+            {selectedProvider?.supportsRate && (
+              <div className="settings-field">
+                <label className="settings-field__label" htmlFor="tts-rate">
+                  Speed
+                </label>
+                <span className="settings-field__control">
+                  <span className="settings-field__range">
+                    <input
+                      disabled={ttsSaving}
+                      id="tts-rate"
+                      max={360}
+                      min={90}
+                      onChange={(event) =>
+                        onTtsDraftChange({
+                          ...ttsDraft,
+                          rate: Number(event.target.value),
+                        })
+                      }
+                      type="range"
+                      value={ttsDraft.rate ?? 175}
+                    />
+                    <output htmlFor="tts-rate">{ttsDraft.rate ?? 175} wpm</output>
+                  </span>
+                  <small>Words per minute.</small>
+                </span>
+              </div>
+            )}
+
+            {selectedProvider?.supportsVolume && (
+              <div className="settings-field">
+                <label className="settings-field__label" htmlFor="tts-volume">
+                  Volume
+                </label>
+                <span className="settings-field__control">
+                  <span className="settings-field__range">
+                    <input
+                      disabled={ttsSaving}
+                      id="tts-volume"
+                      max={1}
+                      min={0}
+                      onChange={(event) =>
+                        onTtsDraftChange({
+                          ...ttsDraft,
+                          volume: Number(event.target.value),
+                        })
+                      }
+                      step={0.05}
+                      type="range"
+                      value={ttsDraft.volume ?? 1}
+                    />
+                    <output htmlFor="tts-volume">
+                      {Math.round((ttsDraft.volume ?? 1) * 100)}%
+                    </output>
+                  </span>
+                </span>
+              </div>
+            )}
+
+            {ttsSaveError && (
+              <p className="settings-form__error" role="alert">
+                {ttsSaveError}
+              </p>
+            )}
+
+            <div className="settings-form__footer">
+              <p>Providers without a configured key or model fall back to macOS speech.</p>
+              <div className="settings-form__actions">
+                <button
+                  className="settings-button settings-button--secondary"
+                  disabled={!ttsDirty || ttsSaving}
+                  onClick={onTtsReset}
+                  type="button"
+                >
+                  Reset changes
+                </button>
+                <button
+                  className="settings-button settings-button--primary"
+                  disabled={!ttsDirty || ttsSaving}
+                  type="submit"
+                >
+                  {ttsSaving ? "Saving…" : "Save voice settings"}
                 </button>
               </div>
             </div>

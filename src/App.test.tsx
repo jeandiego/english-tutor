@@ -25,6 +25,8 @@ import {
   saveTutorSettings,
 } from "./native/tutor";
 import type { TutorSetup } from "./types/tutor";
+import { loadTtsSetup } from "./native/tts";
+import type { TtsSetup } from "./types/tts";
 
 vi.mock("./native/health", () => ({
   getRuntimeHealth: vi.fn(),
@@ -61,11 +63,21 @@ vi.mock("./native/tutor", async (importOriginal) => {
   };
 });
 
+vi.mock("./native/tts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./native/tts")>();
+  return {
+    ...actual,
+    loadTtsSetup: vi.fn(),
+    saveTtsSettings: vi.fn(),
+  };
+});
+
 const getRuntimeHealthMock = vi.mocked(getRuntimeHealth);
 const loadTranscriptionSetupMock = vi.mocked(loadTranscriptionSetup);
 const saveTranscriptionSettingsMock = vi.mocked(saveTranscriptionSettings);
 const loadTutorSetupMock = vi.mocked(loadTutorSetup);
 const saveTutorSettingsMock = vi.mocked(saveTutorSettings);
+const loadTtsSetupMock = vi.mocked(loadTtsSetup);
 const startSessionMock = vi.mocked(startSession);
 const listRecentSessionsMock = vi.mocked(listRecentSessions);
 const listCorrectionCategoryCountsMock = vi.mocked(listCorrectionCategoryCounts);
@@ -153,6 +165,45 @@ const unavailableTutorSetup: TutorSetup = {
   },
 };
 
+const readyTtsSetup: TtsSetup = {
+  settings: {
+    provider: "macos_say",
+    voiceId: "",
+  },
+  providers: [
+    {
+      id: "macos_say",
+      label: "macOS Speech",
+      availability: { available: true, message: "macOS speech is ready." },
+      voices: [{ id: "Alex", label: "Alex", locale: "en_US" }],
+      supportsRate: true,
+      supportsVolume: true,
+    },
+    {
+      id: "kokoro_local",
+      label: "Kokoro (local)",
+      availability: {
+        available: false,
+        message: "Set ENGLISHER_KOKORO_BINARY to a local Kokoro binary to enable it.",
+      },
+      voices: [],
+      supportsRate: false,
+      supportsVolume: true,
+    },
+    {
+      id: "elevenlabs",
+      label: "ElevenLabs",
+      availability: {
+        available: false,
+        message: "Set ENGLISHER_ELEVENLABS_API_KEY to enable ElevenLabs.",
+      },
+      voices: [],
+      supportsRate: false,
+      supportsVolume: true,
+    },
+  ],
+};
+
 function readyHealth() {
   return {
     appStatus: "ready" as const,
@@ -163,6 +214,7 @@ function readyHealth() {
 
 beforeEach(() => {
   loadTutorSetupMock.mockResolvedValue(readyTutorSetup);
+  loadTtsSetupMock.mockResolvedValue(readyTtsSetup);
   startSessionMock.mockResolvedValue({ sessionId: 1 });
   listRecentSessionsMock.mockResolvedValue([]);
   listCorrectionCategoryCountsMock.mockResolvedValue([]);

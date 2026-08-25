@@ -1087,6 +1087,17 @@ code {
   background: currentColor;
 }
 
+.dependency-row__mark--available {
+  color: var(--mint);
+  background: currentColor;
+}
+
+.dependency-row__mark--unavailable {
+  border-radius: 2px;
+  color: var(--muted);
+  background: currentColor;
+}
+
 .dependency-row__name {
   color: var(--ink);
   font-size: 0.84rem;
@@ -1323,7 +1334,49 @@ code {
   cursor: progress;
 }
 
+.settings-field select {
+  width: 100%;
+  min-width: 0;
+  height: 2.6rem;
+  padding: 0.55rem 0.75rem;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  color: var(--ink);
+  background: #ffffff;
+  font-family: inherit;
+  font-size: 0.82rem;
+}
+
+.settings-field select:disabled {
+  color: var(--muted);
+  background: var(--mist);
+  cursor: progress;
+}
+
+.settings-field__range {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.settings-field__range input[type="range"] {
+  flex: 1 1 auto;
+  height: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+
+.settings-field__range output {
+  min-width: 3.4rem;
+  color: var(--muted);
+  font-family: monospace;
+  font-size: 0.78rem;
+  text-align: right;
+}
+
 .settings-field input:focus-visible,
+.settings-field select:focus-visible,
 .settings-button:focus-visible {
   outline: 2px solid var(--mint);
   outline-offset: 2px;

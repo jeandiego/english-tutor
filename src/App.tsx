@@ -18,17 +18,24 @@ function App() {
   const {
     healthState,
     reloadTranscriptionSetup,
+    reloadTtsSetup,
     reloadTutorSetup,
     resetSettingsDraft,
+    resetTtsSettingsDraft,
     resetTutorSettingsDraft,
     saveSettings,
+    saveTtsSettings,
     saveTutorSettings,
     settingsDirty,
     settingsDraft,
     setSettingsDraft,
+    setTtsSettingsDraft,
     setTutorSettingsDraft,
     transcriptionReady,
     transcriptionState,
+    ttsSettingsDirty,
+    ttsSettingsDraft,
+    ttsState,
     tutorReady,
     tutorSettingsDirty,
     tutorSettingsDraft,
@@ -181,6 +188,10 @@ function App() {
           onTranscriptionReset={resetSettingsDraft}
           onTranscriptionRetry={reloadTranscriptionSetup}
           onTranscriptionSave={saveSettings}
+          onTtsDraftChange={setTtsSettingsDraft}
+          onTtsReset={resetTtsSettingsDraft}
+          onTtsRetry={reloadTtsSetup}
+          onTtsSave={saveTtsSettings}
           onTutorDraftChange={setTutorSettingsDraft}
           onTutorReset={resetTutorSettingsDraft}
           onTutorRetry={reloadTutorSetup}
@@ -188,6 +199,9 @@ function App() {
           transcriptionDirty={settingsDirty}
           transcriptionDraft={settingsDraft}
           transcriptionState={transcriptionState}
+          ttsDirty={ttsSettingsDirty}
+          ttsDraft={ttsSettingsDraft}
+          ttsState={ttsState}
           tutorDirty={tutorSettingsDirty}
           tutorDraft={tutorSettingsDraft}
           tutorState={tutorState}
