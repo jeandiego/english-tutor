@@ -29,7 +29,20 @@ afterEach(() => {
 describe("HistoryPage", () => {
   it("renders recent sessions, recurring categories, and useful expressions", async () => {
     listRecentSessionsMock.mockResolvedValue([
-      { id: 1, startedAt: 1_700_000_000_000, endedAt: 1_700_000_600_000, turnCount: 4 },
+      {
+        id: 1,
+        startedAt: 1_700_000_000_000,
+        endedAt: 1_700_000_600_000,
+        turnCount: 4,
+        status: "completed",
+        mode: "restaurant",
+        summary: {
+          whatWentWell: ["Ordered confidently."],
+          priorityIssues: ["past tense accuracy"],
+          alternativePhrases: [],
+          reviewItems: ["past tense forms"],
+        },
+      },
     ]);
     listCorrectionCategoryCountsMock.mockResolvedValue([
       { category: "grammar", count: 3 },
@@ -41,9 +54,32 @@ describe("HistoryPage", () => {
     render(<HistoryPage />);
 
     expect(await screen.findByText("4 turns")).toBeInTheDocument();
+    expect(screen.getByText("Restaurant")).toBeInTheDocument();
+    expect(screen.getByText("completed")).toBeInTheDocument();
     expect(screen.getByText("Grammar")).toBeInTheDocument();
     expect(screen.getByText("3")).toBeInTheDocument();
     expect(screen.getByText("“I agree”")).toBeInTheDocument();
+
+    screen.getByText("Show summary").click();
+    expect(await screen.findByText("past tense accuracy")).toBeInTheDocument();
+  });
+
+  it("labels a session with no scenario as free conversation", async () => {
+    listRecentSessionsMock.mockResolvedValue([
+      {
+        id: 2,
+        startedAt: 1_700_000_000_000,
+        endedAt: 1_700_000_600_000,
+        turnCount: 2,
+        status: "active",
+      },
+    ]);
+    listCorrectionCategoryCountsMock.mockResolvedValue([]);
+    listRecentExpressionsMock.mockResolvedValue([]);
+
+    render(<HistoryPage />);
+
+    expect(await screen.findByText("Free conversation")).toBeInTheDocument();
   });
 
   it("shows empty-state copy when there is no history yet", async () => {

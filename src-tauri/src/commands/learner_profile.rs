@@ -197,6 +197,14 @@ pub struct ApplyAssessmentToLearnerProfileRequest {
     priorities: Vec<String>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ApplySessionToLearnerProfileRequest {
+    scenario_label: String,
+    #[serde(default)]
+    priorities: Vec<String>,
+}
+
 // ---------------------------------------------------------------------
 // JSON file persistence (same shape as tutor.rs's config file handling)
 // ---------------------------------------------------------------------
@@ -464,6 +472,29 @@ fn apply_assessment(
     profile
 }
 
+fn apply_session(
+    mut profile: LearnerProfileData,
+    scenario_label: &str,
+    priorities: &[String],
+    now_ms: i64,
+) -> LearnerProfileData {
+    let mut text = format!("Completed {scenario_label} session.");
+    if !priorities.is_empty() {
+        text.push_str(&format!(" Priorities: {}.", priorities.join("; ")));
+    }
+
+    push_progress_note(
+        &mut profile,
+        ProgressNote {
+            text,
+            origin: ProgressNoteOrigin::Session,
+            created_at: now_ms,
+        },
+    );
+
+    profile
+}
+
 // ---------------------------------------------------------------------
 // Tauri commands
 // ---------------------------------------------------------------------
@@ -559,6 +590,36 @@ pub async fn apply_assessment_to_learner_profile(
             profile,
             request.overall_level,
             request.dimension_levels,
+            &request.priorities,
+            now_ms(),
+        );
+        write_profile(&write_path, &updated)
+    })
+    .await
+    .map_err(|error| {
+        LearnerProfileCommandError::new(
+            "learner-profile-task-failed",
+            "The learner profile could not be updated.",
+            error.to_string(),
+        )
+    })??;
+
+    compose_profile_response(&app_handle).await
+}
+
+#[tauri::command]
+pub async fn apply_session_to_learner_profile(
+    app_handle: AppHandle,
+    request: ApplySessionToLearnerProfileRequest,
+) -> Result<LearnerProfileResponse, LearnerProfileCommandError> {
+    let profile_path = config_path(&app_handle)?;
+    let write_path = profile_path.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let profile = read_profile(&write_path)?;
+        let updated = apply_session(
+            profile,
+            &request.scenario_label,
             &request.priorities,
             now_ms(),
         );
@@ -672,6 +733,42 @@ mod tests {
     }
 
     #[test]
+    fn apply_session_pushes_a_session_origin_note_without_touching_levels() {
+        let mut profile = LearnerProfileData::default();
+        profile.current_level = Some(CefrLevel::B1);
+        profile
+            .dimension_levels
+            .insert(AssessmentCompetency::Fluency, CefrLevel::B1);
+
+        let updated = apply_session(
+            profile,
+            "Daily standup",
+            &["past tense accuracy".to_string()],
+            3_000,
+        );
+
+        // A session update never touches CEFR levels — that's assessment-owned.
+        assert_eq!(updated.current_level, Some(CefrLevel::B1));
+        assert_eq!(
+            updated.dimension_levels.get(&AssessmentCompetency::Fluency),
+            Some(&CefrLevel::B1)
+        );
+        assert_eq!(updated.progress_notes.len(), 1);
+        assert_eq!(updated.progress_notes[0].origin, ProgressNoteOrigin::Session);
+        assert!(updated.progress_notes[0].text.contains("Daily standup"));
+        assert!(updated.progress_notes[0].text.contains("past tense accuracy"));
+    }
+
+    #[test]
+    fn apply_session_omits_priorities_sentence_when_none_given() {
+        let profile = LearnerProfileData::default();
+        let updated = apply_session(profile, "Restaurant", &[], 4_000);
+
+        assert!(updated.progress_notes[0].text.contains("Restaurant"));
+        assert!(!updated.progress_notes[0].text.contains("Priorities"));
+    }
+
+    #[test]
     fn progress_notes_are_capped_and_drop_the_oldest() {
         let mut profile = LearnerProfileData::default();
         for index in 0..MAX_PROGRESS_NOTES {
@@ -751,7 +848,7 @@ mod tests {
         let directory = scratch_dir();
         let path = seeded_db_path(&directory);
         let mut conn = history_open_connection(&path).expect("connection must open");
-        let session_id = history_create_session(&conn, 1_000).expect("session must create");
+        let session_id = history_create_session(&conn, 1_000, None, None, None, None).expect("session must create");
 
         history_record_turn_pair(
             &mut conn,

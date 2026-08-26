@@ -455,7 +455,13 @@ describe("English Coach shell", () => {
     getRuntimeHealthMock.mockResolvedValue(readyHealth());
     loadTranscriptionSetupMock.mockResolvedValue(readySetup);
     listRecentSessionsMock.mockResolvedValue([
-      { id: 1, startedAt: 1_700_000_000_000, endedAt: 1_700_000_600_000, turnCount: 3 },
+      {
+        id: 1,
+        startedAt: 1_700_000_000_000,
+        endedAt: 1_700_000_600_000,
+        turnCount: 3,
+        status: "active",
+      },
     ]);
     listCorrectionCategoryCountsMock.mockResolvedValue([
       { category: "grammar", count: 4 },

@@ -5,6 +5,7 @@ import {
   listRecentSessions,
   toHistoryError,
 } from "../native/history";
+import { findSessionTemplate } from "../sessions/catalog";
 import type {
   CategoryCount,
   ExpressionSummary,
@@ -36,6 +37,66 @@ function formatSessionDate(startedAt: number): string {
   });
 }
 
+function scenarioLabel(session: SessionSummary): string {
+  return findSessionTemplate(session.mode)?.label ?? "Free conversation";
+}
+
+function SessionSummaryDetail({ session }: { session: SessionSummary }) {
+  const [expanded, setExpanded] = useState(false);
+  const summary = session.summary;
+
+  if (!summary) {
+    return null;
+  }
+
+  return (
+    <div className="history-session__summary">
+      <button
+        aria-expanded={expanded}
+        className="history-session__summary-toggle"
+        onClick={() => setExpanded((value) => !value)}
+        type="button"
+      >
+        {expanded ? "Hide summary" : "Show summary"}
+      </button>
+      {expanded && (
+        <div className="history-session__summary-body">
+          {summary.whatWentWell.length > 0 && (
+            <div className="history-session__summary-section">
+              <h4>What went well</h4>
+              <ul>
+                {summary.whatWentWell.map((item, index) => (
+                  <li key={index}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {summary.priorityIssues.length > 0 && (
+            <div className="history-session__summary-section">
+              <h4>Priorities</h4>
+              <ul>
+                {summary.priorityIssues.map((item, index) => (
+                  <li key={index}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {summary.reviewItems.length > 0 && (
+            <div className="history-session__summary-section">
+              <h4>Review later</h4>
+              <ul>
+                {summary.reviewItems.map((item, index) => (
+                  <li key={index}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SessionList({ sessions }: { sessions: SessionSummary[] }) {
   if (sessions.length === 0) {
     return <p className="history-empty">No sessions yet.</p>;
@@ -45,12 +106,23 @@ function SessionList({ sessions }: { sessions: SessionSummary[] }) {
     <ul className="history-sessions">
       {sessions.map((session) => (
         <li className="history-session" key={session.id}>
-          <span className="history-session__date">
-            {formatSessionDate(session.startedAt)}
-          </span>
-          <span className="history-session__turns">
-            {session.turnCount} {session.turnCount === 1 ? "turn" : "turns"}
-          </span>
+          <div className="history-session__row">
+            <span className="history-session__scenario">{scenarioLabel(session)}</span>
+            <span className="history-session__date">
+              {formatSessionDate(session.startedAt)}
+            </span>
+            <span className="history-session__turns">
+              {session.turnCount} {session.turnCount === 1 ? "turn" : "turns"}
+            </span>
+            {session.status !== "active" && (
+              <span
+                className={`history-session__status history-session__status--${session.status}`}
+              >
+                {session.status}
+              </span>
+            )}
+          </div>
+          <SessionSummaryDetail session={session} />
         </li>
       ))}
     </ul>

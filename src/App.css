@@ -1213,14 +1213,80 @@ code {
 
 .history-session,
 .history-category {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
   padding: 0.7rem 0.9rem;
   border: 1px solid var(--rule);
   border-radius: 16px;
   background: #ffffff;
   font-size: 0.86rem;
+}
+
+.history-category {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.history-session__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+.history-session__scenario {
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.history-session__date,
+.history-session__turns {
+  color: var(--muted, rgba(8, 9, 10, 0.5));
+}
+
+.history-session__status {
+  margin-left: auto;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(8, 9, 10, 0.06);
+  color: var(--muted, rgba(8, 9, 10, 0.5));
+  font-size: 0.76rem;
+  text-transform: capitalize;
+}
+
+.history-session__status--completed {
+  background: rgba(23, 105, 224, 0.1);
+  color: #1769e0;
+}
+
+.history-session__summary {
+  margin-top: 0.5rem;
+}
+
+.history-session__summary-toggle {
+  padding: 0;
+  border: none;
+  background: none;
+  color: #1769e0;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.history-session__summary-body {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.5rem;
+}
+
+.history-session__summary-section h4 {
+  margin: 0 0 0.3rem;
+  font-size: 0.82rem;
+  font-weight: 650;
+}
+
+.history-session__summary-section ul {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.82rem;
 }
 
 .history-category__count {
@@ -1944,4 +2010,141 @@ code {
   color: var(--ink);
   font-size: 0.98rem;
   font-weight: 650;
+}
+
+.sessions-page {
+  min-height: 0;
+  padding: clamp(2rem, 5vh, 3.5rem) clamp(2rem, 7vw, 5rem) 4rem;
+  overflow: auto;
+  background: #ffffff;
+}
+
+.sessions-page h2 {
+  width: min(100%, 62rem);
+  margin: 0 auto 1.5rem;
+  color: var(--ink);
+  font-size: clamp(1.12rem, 2.5vw, 1.48rem);
+  font-weight: 650;
+  letter-spacing: -0.028em;
+}
+
+.sessions-catalog,
+.sessions-active,
+.sessions-complete {
+  width: min(100%, 62rem);
+  margin: 0 auto 2rem;
+}
+
+.sessions-catalog__intro {
+  margin: 0 0 1rem;
+  color: var(--muted, rgba(8, 9, 10, 0.5));
+  font-size: 0.9rem;
+}
+
+.sessions-catalog__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0.75rem;
+  margin: 0 0 1.25rem;
+  padding: 0;
+  list-style: none;
+}
+
+.sessions-catalog__card {
+  display: grid;
+  gap: 0.35rem;
+  width: 100%;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+  background: #ffffff;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sessions-catalog__card--selected {
+  border-color: #1769e0;
+  background: rgba(23, 105, 224, 0.06);
+}
+
+.sessions-catalog__card-label {
+  font-size: 0.94rem;
+  font-weight: 650;
+  color: var(--ink);
+}
+
+.sessions-catalog__card-description {
+  font-size: 0.82rem;
+  color: var(--muted, rgba(8, 9, 10, 0.5));
+}
+
+.sessions-catalog__options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: 0.9rem;
+  padding: 1rem;
+  border: 1px solid var(--rule);
+  border-radius: 16px;
+}
+
+.sessions-catalog__field {
+  display: grid;
+  gap: 0.3rem;
+  font-size: 0.82rem;
+  color: var(--muted, rgba(8, 9, 10, 0.5));
+}
+
+.sessions-catalog__field--wide {
+  flex: 1 1 14rem;
+}
+
+.sessions-catalog__field select,
+.sessions-catalog__field input {
+  padding: 0.45rem 0.6rem;
+  border: 1px solid var(--rule);
+  border-radius: 10px;
+  font-size: 0.86rem;
+  color: var(--ink);
+}
+
+.sessions-active__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.sessions-active__progress {
+  color: var(--muted, rgba(8, 9, 10, 0.5));
+  font-size: 0.82rem;
+}
+
+.sessions-active__actions {
+  display: flex;
+  gap: 0.5rem;
+  margin-left: auto;
+}
+
+.sessions-active__abandon {
+  padding: 0.6rem 1.1rem;
+  border: 1px solid var(--rule);
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--muted, rgba(8, 9, 10, 0.5));
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sessions-complete h3 {
+  margin: 0 0 1rem;
+  color: var(--ink);
+  font-size: 0.98rem;
+  font-weight: 650;
+}
+
+.sessions-complete .assessment-start-button {
+  margin-top: 1.25rem;
 }

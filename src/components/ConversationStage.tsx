@@ -18,6 +18,7 @@ type ConversationStageProps = {
   historyWarning?: string;
   onReplay?: (exchangeId: number) => void;
   replayState?: ReplayState | null;
+  showCoaching?: boolean;
 };
 
 function ReplayIcon({ className }: { className?: string }) {
@@ -485,13 +486,14 @@ function ConversationLog({
   loopState,
   onReplay,
   replayState,
+  showCoaching = true,
   speaking = false,
   thinking,
   state,
 }: Required<Pick<ConversationStageProps, "exchanges" | "thinking">> &
   Pick<
     ConversationStageProps,
-    "loopState" | "onReplay" | "replayState" | "speaking" | "state"
+    "loopState" | "onReplay" | "replayState" | "showCoaching" | "speaking" | "state"
   >) {
   const endRef = useRef<HTMLDivElement | null>(null);
   const showTransientState =
@@ -513,13 +515,15 @@ function ConversationLog({
 
         return (
           <article className="conversation-exchange" key={exchange.id}>
-            <div className="conversation-turn conversation-turn--user">
-              <p className="conversation-turn__speaker">You</p>
-              <p className="conversation-turn__text">{exchange.transcript}</p>
-              {latestRecording && (
-                <RecordingPlayback recording={latestRecording} title="Recorded audio" />
-              )}
-            </div>
+            {exchange.transcript && (
+              <div className="conversation-turn conversation-turn--user">
+                <p className="conversation-turn__speaker">You</p>
+                <p className="conversation-turn__text">{exchange.transcript}</p>
+                {latestRecording && (
+                  <RecordingPlayback recording={latestRecording} title="Recorded audio" />
+                )}
+              </div>
+            )}
 
             {exchange.tutorTurn && (
               <div className="conversation-turn conversation-turn--tutor">
@@ -566,7 +570,9 @@ function ConversationLog({
               </div>
             )}
 
-            {exchange.tutorTurn && <TutorCoaching tutorTurn={exchange.tutorTurn} />}
+            {showCoaching && exchange.tutorTurn && (
+              <TutorCoaching tutorTurn={exchange.tutorTurn} />
+            )}
 
             <StorageWarning message={exchange.storageWarning} />
 
@@ -605,6 +611,7 @@ function ConversationStageContent({
   loopState,
   onReplay,
   replayState,
+  showCoaching = true,
   speaking = false,
   state,
   exchanges = [],
@@ -623,6 +630,7 @@ function ConversationStageContent({
           loopState={loopState}
           onReplay={onReplay}
           replayState={replayState}
+          showCoaching={showCoaching}
           speaking={speaking}
           thinking={thinking}
           state={state}

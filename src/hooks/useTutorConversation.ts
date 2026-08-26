@@ -49,6 +49,7 @@ type UseTutorConversationOptions = {
   now?: () => number;
   sessionId?: number;
   learnerContext?: string;
+  openingReply?: string;
 };
 
 const monotonicNow = () => performance.now();
@@ -59,7 +60,9 @@ function conversationHistory(
   return exchanges.flatMap((exchange) =>
     exchange.tutorTurn
       ? [
-          { role: "user" as const, content: exchange.transcript },
+          ...(exchange.transcript
+            ? [{ role: "user" as const, content: exchange.transcript }]
+            : []),
           { role: "assistant" as const, content: exchange.tutorTurn.reply },
         ]
       : [],
@@ -75,6 +78,7 @@ export function useTutorConversation({
   now = monotonicNow,
   sessionId,
   learnerContext,
+  openingReply,
 }: UseTutorConversationOptions) {
   const [exchanges, setExchanges] = useState<ConversationExchange[]>([]);
   const [thinking, setThinking] = useState(false);
@@ -83,6 +87,7 @@ export function useTutorConversation({
   const exchangesRef = useRef(exchanges);
   const mountedRef = useRef(true);
   const nextExchangeIdRef = useRef(1);
+  const openingSeededRef = useRef(false);
   const processedRecordingRef = useRef<RecordedAudio | null>(null);
   const requestIdRef = useRef(0);
   const replayRequestIdRef = useRef(0);
@@ -120,6 +125,25 @@ export function useTutorConversation({
             : latestExchange?.error
               ? "error"
               : "idle";
+
+  useEffect(() => {
+    if (!openingReply || openingSeededRef.current) {
+      return;
+    }
+    openingSeededRef.current = true;
+    const exchangeId = nextExchangeIdRef.current++;
+    setExchanges((current) =>
+      current.length === 0
+        ? [
+            {
+              id: exchangeId,
+              transcript: "",
+              tutorTurn: { reply: openingReply, corrections: [], betterExpressions: [] },
+            },
+          ]
+        : current,
+    );
+  }, [openingReply]);
 
   useEffect(() => {
     if (

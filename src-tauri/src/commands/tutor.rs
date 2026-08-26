@@ -130,8 +130,8 @@ pub enum TutorMessageRole {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TutorMessage {
-    role: TutorMessageRole,
-    content: String,
+    pub(crate) role: TutorMessageRole,
+    pub(crate) content: String,
 }
 
 #[derive(Debug, Serialize)]

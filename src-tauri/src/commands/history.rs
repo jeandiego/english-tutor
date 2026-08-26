@@ -5,14 +5,14 @@ use std::{
 };
 
 use rusqlite::{params, Connection, OptionalExtension};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 use super::assessment::{cefr_level_str, competency_label, AssessmentCompetency, CefrLevel};
 use super::tutor::{BetterExpression, CorrectionCategory, CorrectionSeverity, TutorCorrection};
 
 const DB_FILE_NAME: &str = "history.sqlite3";
-const SCHEMA_VERSION: i32 = 2;
+const SCHEMA_VERSION: i32 = 3;
 const ALL_TIME_CATEGORY_LIMIT: i64 = 100_000;
 const DEFAULT_LIST_LIMIT: i64 = 10;
 const MAX_LIST_LIMIT: i64 = 100;
@@ -57,6 +57,56 @@ impl From<rusqlite::Error> for HistoryCommandError {
     }
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum SessionRunStatus {
+    Active,
+    Completed,
+    Abandoned,
+}
+
+pub(crate) fn session_run_status_str(status: SessionRunStatus) -> &'static str {
+    match status {
+        SessionRunStatus::Active => "active",
+        SessionRunStatus::Completed => "completed",
+        SessionRunStatus::Abandoned => "abandoned",
+    }
+}
+
+fn parse_session_run_status(value: &str) -> Result<SessionRunStatus, std::io::Error> {
+    match value {
+        "active" => Ok(SessionRunStatus::Active),
+        "completed" => Ok(SessionRunStatus::Completed),
+        "abandoned" => Ok(SessionRunStatus::Abandoned),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown session status: {other}"),
+        )),
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct StartSessionRequest {
+    #[serde(default)]
+    scenario_id: Option<String>,
+    #[serde(default)]
+    difficulty: Option<CefrLevel>,
+    #[serde(default)]
+    focus: Option<String>,
+    #[serde(default)]
+    target_turns: Option<i64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct CompleteSessionRequest {
+    session_id: i64,
+    status: SessionRunStatus,
+    #[serde(default)]
+    summary: Option<super::session::SessionSummaryPayload>,
+}
+
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionStart {
@@ -76,6 +126,11 @@ pub struct SessionSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
     topic: Option<String>,
     turn_count: i64,
+    status: SessionRunStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    difficulty: Option<CefrLevel>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<super::session::SessionSummaryPayload>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -233,6 +288,17 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    if current_version < 3 {
+        conn.execute_batch(
+            "ALTER TABLE session ADD COLUMN status TEXT NOT NULL DEFAULT 'active'
+                CHECK (status IN ('active', 'completed', 'abandoned'));
+            ALTER TABLE session ADD COLUMN difficulty TEXT
+                CHECK (difficulty IN ('A1', 'A2', 'B1', 'B2', 'C1', 'C2'));
+            ALTER TABLE session ADD COLUMN target_turns INTEGER;
+            ALTER TABLE session ADD COLUMN summary_json TEXT;",
+        )?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
 }
@@ -267,12 +333,46 @@ pub(crate) fn open_connection(path: &Path) -> Result<Connection, HistoryCommandE
     Ok(conn)
 }
 
-pub(crate) fn create_session(conn: &Connection, started_at_ms: i64) -> rusqlite::Result<i64> {
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn create_session(
+    conn: &Connection,
+    started_at_ms: i64,
+    scenario_id: Option<&str>,
+    focus: Option<&str>,
+    difficulty: Option<CefrLevel>,
+    target_turns: Option<i64>,
+) -> rusqlite::Result<i64> {
     conn.execute(
-        "INSERT INTO session (started_at, ended_at) VALUES (?1, ?1)",
-        params![started_at_ms],
+        "INSERT INTO session (started_at, ended_at, mode, topic, difficulty, target_turns, status)
+         VALUES (?1, ?1, ?2, ?3, ?4, ?5, 'active')",
+        params![
+            started_at_ms,
+            scenario_id,
+            focus,
+            difficulty.map(cefr_level_str),
+            target_turns,
+        ],
     )?;
     Ok(conn.last_insert_rowid())
+}
+
+pub(crate) fn complete_session_run(
+    conn: &Connection,
+    session_id: i64,
+    status: SessionRunStatus,
+    summary_json: Option<&str>,
+    ended_at_ms: i64,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE session SET ended_at = ?1, status = ?2, summary_json = ?3 WHERE id = ?4",
+        params![
+            ended_at_ms,
+            session_run_status_str(status),
+            summary_json,
+            session_id
+        ],
+    )?;
+    Ok(())
 }
 
 pub(crate) fn record_turn_pair(
@@ -334,24 +434,42 @@ pub(crate) fn record_turn_pair(
     tx.commit()
 }
 
+fn session_summary_from_row(row: &rusqlite::Row) -> rusqlite::Result<SessionSummary> {
+    let status: String = row.get(6)?;
+    let difficulty: Option<String> = row.get(7)?;
+    let summary_json: Option<String> = row.get(8)?;
+    Ok(SessionSummary {
+        id: row.get(0)?,
+        started_at: row.get(1)?,
+        ended_at: row.get(2)?,
+        mode: row.get(3)?,
+        topic: row.get(4)?,
+        turn_count: row.get(5)?,
+        status: parse_session_run_status(&status)
+            .map_err(|error| column_conversion_error(6, error))?,
+        difficulty: difficulty
+            .map(|value| parse_cefr_level(&value))
+            .transpose()
+            .map_err(|error| column_conversion_error(7, error))?,
+        summary: summary_json
+            .map(|value| serde_json::from_str(&value))
+            .transpose()
+            .map_err(|error| {
+                column_conversion_error(8, std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+            })?,
+    })
+}
+
 fn recent_sessions(conn: &Connection, limit: i64) -> rusqlite::Result<Vec<SessionSummary>> {
     let mut statement = conn.prepare(
         "SELECT s.id, s.started_at, s.ended_at, s.mode, s.topic,
-                (SELECT COUNT(*) FROM turn t WHERE t.session_id = s.id AND t.role = 'user') AS turn_count
+                (SELECT COUNT(*) FROM turn t WHERE t.session_id = s.id AND t.role = 'user') AS turn_count,
+                s.status, s.difficulty, s.summary_json
          FROM session s
          ORDER BY s.started_at DESC
          LIMIT ?1",
     )?;
-    let rows = statement.query_map(params![limit], |row| {
-        Ok(SessionSummary {
-            id: row.get(0)?,
-            started_at: row.get(1)?,
-            ended_at: row.get(2)?,
-            mode: row.get(3)?,
-            topic: row.get(4)?,
-            turn_count: row.get(5)?,
-        })
-    })?;
+    let rows = statement.query_map(params![limit], session_summary_from_row)?;
     rows.collect()
 }
 
@@ -449,11 +567,27 @@ pub(crate) async fn persist_turn(
 }
 
 #[tauri::command]
-pub async fn start_session(app_handle: AppHandle) -> Result<SessionStart, HistoryCommandError> {
+pub async fn start_session(
+    app_handle: AppHandle,
+    request: StartSessionRequest,
+) -> Result<SessionStart, HistoryCommandError> {
     let path = db_path(&app_handle)?;
+    let StartSessionRequest {
+        scenario_id,
+        difficulty,
+        focus,
+        target_turns,
+    } = request;
     let session_id = run_blocking(move || {
         let conn = open_connection(&path)?;
-        Ok(create_session(&conn, now_ms())?)
+        Ok(create_session(
+            &conn,
+            now_ms(),
+            scenario_id.as_deref(),
+            focus.as_deref(),
+            difficulty,
+            target_turns,
+        )?)
     })
     .await?;
     let learner_context =
@@ -462,6 +596,40 @@ pub async fn start_session(app_handle: AppHandle) -> Result<SessionStart, Histor
         session_id,
         learner_context,
     })
+}
+
+#[tauri::command]
+pub async fn complete_session(
+    app_handle: AppHandle,
+    request: CompleteSessionRequest,
+) -> Result<(), HistoryCommandError> {
+    let path = db_path(&app_handle)?;
+    let CompleteSessionRequest {
+        session_id,
+        status,
+        summary,
+    } = request;
+    let summary_json = summary
+        .map(|summary| serde_json::to_string(&summary))
+        .transpose()
+        .map_err(|error| {
+            HistoryCommandError::new(
+                "history-storage-failed",
+                "The session summary could not be saved.",
+                error.to_string(),
+            )
+        })?;
+    run_blocking(move || {
+        let conn = open_connection(&path)?;
+        Ok(complete_session_run(
+            &conn,
+            session_id,
+            status,
+            summary_json.as_deref(),
+            now_ms(),
+        )?)
+    })
+    .await
 }
 
 #[tauri::command]
@@ -1100,10 +1268,109 @@ mod tests {
     }
 
     #[test]
+    fn migration_from_version_2_adds_session_run_columns_without_touching_existing_data() {
+        let (_directory, path) = scratch_db();
+
+        {
+            let conn = Connection::open(&path).expect("connection must open");
+            conn.execute_batch(
+                "CREATE TABLE session (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at INTEGER NOT NULL,
+                    ended_at INTEGER NOT NULL,
+                    mode TEXT,
+                    topic TEXT
+                );
+                INSERT INTO session (started_at, ended_at) VALUES (1000, 2000);",
+            )
+            .expect("v2 session table must create");
+            conn.pragma_update(None, "user_version", 2)
+                .expect("version must set");
+        }
+
+        let conn = open_connection(&path).expect("connection must upgrade");
+        let version: i32 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version must read");
+        assert_eq!(version, SCHEMA_VERSION);
+
+        let (status, difficulty, target_turns, summary_json): (
+            String,
+            Option<String>,
+            Option<i64>,
+            Option<String>,
+        ) = conn
+            .query_row(
+                "SELECT status, difficulty, target_turns, summary_json FROM session WHERE id = 1",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+            )
+            .expect("pre-existing session row must survive migration");
+        assert_eq!(status, "active");
+        assert_eq!(difficulty, None);
+        assert_eq!(target_turns, None);
+        assert_eq!(summary_json, None);
+    }
+
+    #[test]
+    fn create_session_persists_scenario_metadata() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+        let session_id = create_session(
+            &conn,
+            1_000,
+            Some("daily_standup"),
+            Some("focus on past tense"),
+            Some(CefrLevel::B1),
+            Some(5),
+        )
+        .expect("session must create");
+
+        let sessions = recent_sessions(&conn, 10).expect("sessions must list");
+        let session = sessions.iter().find(|s| s.id == session_id).expect("session must exist");
+        assert_eq!(session.mode.as_deref(), Some("daily_standup"));
+        assert_eq!(session.topic.as_deref(), Some("focus on past tense"));
+        assert_eq!(session.difficulty, Some(CefrLevel::B1));
+        assert_eq!(session.status, SessionRunStatus::Active);
+    }
+
+    #[test]
+    fn complete_session_run_persists_status_and_summary() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+        let session_id = create_session(&conn, 1_000, Some("restaurant"), None, None, Some(4))
+            .expect("session must create");
+
+        let summary = super::super::session::SessionSummaryPayload {
+            what_went_well: vec!["Ordered confidently.".to_string()],
+            priority_issues: vec!["past tense accuracy".to_string()],
+            alternative_phrases: vec![],
+            review_items: vec!["past tense forms".to_string()],
+        };
+        let summary_json = serde_json::to_string(&summary).expect("summary must serialize");
+
+        complete_session_run(
+            &conn,
+            session_id,
+            SessionRunStatus::Completed,
+            Some(&summary_json),
+            5_000,
+        )
+        .expect("session must complete");
+
+        let sessions = recent_sessions(&conn, 10).expect("sessions must list");
+        let session = sessions.iter().find(|s| s.id == session_id).expect("session must exist");
+        assert_eq!(session.status, SessionRunStatus::Completed);
+        assert_eq!(session.ended_at, 5_000);
+        let persisted_summary = session.summary.as_ref().expect("summary must persist");
+        assert_eq!(persisted_summary.priority_issues, vec!["past tense accuracy".to_string()]);
+    }
+
+    #[test]
     fn record_turn_pair_links_corrections_to_user_turn_and_expressions_to_assistant_turn() {
         let (_directory, path) = scratch_db();
         let mut conn = open_connection(&path).expect("connection must open");
-        let session_id = create_session(&conn, 1_000).expect("session must create");
+        let session_id = create_session(&conn, 1_000, None, None, None, None).expect("session must create");
 
         record_turn_pair(
             &mut conn,
@@ -1162,7 +1429,7 @@ mod tests {
     fn category_counts_apply_minimum_threshold_ordering() {
         let (_directory, path) = scratch_db();
         let mut conn = open_connection(&path).expect("connection must open");
-        let session_id = create_session(&conn, 1_000).expect("session must create");
+        let session_id = create_session(&conn, 1_000, None, None, None, None).expect("session must create");
 
         record_turn_pair(
             &mut conn,
@@ -1188,7 +1455,7 @@ mod tests {
     fn recent_sessions_reports_user_turn_count_and_touched_ended_at() {
         let (_directory, path) = scratch_db();
         let mut conn = open_connection(&path).expect("connection must open");
-        let session_id = create_session(&conn, 1_000).expect("session must create");
+        let session_id = create_session(&conn, 1_000, None, None, None, None).expect("session must create");
         record_turn_pair(&mut conn, session_id, "a", "b", &[], &[], 2_000)
             .expect("first turn must record");
         record_turn_pair(&mut conn, session_id, "c", "d", &[], &[], 3_000)

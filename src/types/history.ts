@@ -1,3 +1,13 @@
+import type { CefrLevel } from "./assessment";
+import type { SessionRunStatus, SessionSummaryPayload } from "./session";
+
+export type StartSessionRequest = {
+  scenarioId?: string;
+  difficulty?: CefrLevel;
+  focus?: string;
+  targetTurns?: number;
+};
+
 export type SessionStart = {
   sessionId: number;
   learnerContext?: string;
@@ -10,6 +20,15 @@ export type SessionSummary = {
   mode?: string;
   topic?: string;
   turnCount: number;
+  status: SessionRunStatus;
+  difficulty?: CefrLevel;
+  summary?: SessionSummaryPayload;
+};
+
+export type CompleteSessionRequest = {
+  sessionId: number;
+  status: SessionRunStatus;
+  summary?: SessionSummaryPayload;
 };
 
 export type CategoryCount = {

@@ -4,6 +4,7 @@ import { AssessmentPage } from "./components/AssessmentPage";
 import { ConversationStage } from "./components/ConversationStage";
 import { HistoryPage } from "./components/HistoryPage";
 import { ProgressPage } from "./components/ProgressPage";
+import { SessionsPage } from "./components/SessionsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import type {
   TranscriptionDiagnostic,
@@ -195,6 +196,13 @@ function App() {
             thinking={conversation.thinking}
           />
         </>
+      ) : activePage === "sessions" ? (
+        <SessionsPage
+          disabled={
+            healthState.status !== "ready" || !transcriptionReady || !tutorReady
+          }
+          disabledHint={voiceDisabledHint}
+        />
       ) : activePage === "assessment" ? (
         <AssessmentPage
           disabled={

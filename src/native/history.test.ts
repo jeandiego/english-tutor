@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   HistoryError,
+  completeSession,
   listCorrectionCategoryCounts,
   listRecentExpressions,
   listRecentSessions,
@@ -17,12 +18,34 @@ beforeEach(() => {
 });
 
 describe("native history service", () => {
-  it("starts a session through the typed command", async () => {
+  it("starts a free-form session with an empty request by default", async () => {
     const session = { sessionId: 1, learnerContext: "Focus on articles." };
     invokeMock.mockResolvedValue(session);
 
     await expect(startSession()).resolves.toBe(session);
-    expect(invokeMock).toHaveBeenCalledWith("start_session");
+    expect(invokeMock).toHaveBeenCalledWith("start_session", { request: {} });
+  });
+
+  it("starts a guided session with scenario metadata", async () => {
+    const session = { sessionId: 2 };
+    invokeMock.mockResolvedValue(session);
+
+    const request = {
+      scenarioId: "daily_standup",
+      difficulty: "B1" as const,
+      focus: "past tense",
+      targetTurns: 5,
+    };
+    await expect(startSession(request)).resolves.toBe(session);
+    expect(invokeMock).toHaveBeenCalledWith("start_session", { request });
+  });
+
+  it("completes a session through the typed command", async () => {
+    invokeMock.mockResolvedValue(undefined);
+
+    const request = { sessionId: 1, status: "completed" as const };
+    await completeSession(request);
+    expect(invokeMock).toHaveBeenCalledWith("complete_session", { request });
   });
 
   it("lists recent sessions, category counts, and expressions with a limit", async () => {

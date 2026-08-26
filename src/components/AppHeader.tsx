@@ -7,6 +7,7 @@ import type { HealthState } from "../types/runtime";
 
 export type AppPage =
   | "conversation"
+  | "sessions"
   | "assessment"
   | "history"
   | "progress"
@@ -45,6 +46,15 @@ export function AppHeader({
           type="button"
         >
           Conversation
+        </button>
+        <button
+          aria-current={activePage === "sessions" ? "page" : undefined}
+          className="app-navigation__item"
+          disabled={navigationDisabled}
+          onClick={() => onNavigate("sessions")}
+          type="button"
+        >
+          Sessions
         </button>
         <button
           aria-current={activePage === "assessment" ? "page" : undefined}

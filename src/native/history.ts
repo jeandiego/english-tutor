@@ -1,9 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   CategoryCount,
+  CompleteSessionRequest,
   ExpressionSummary,
   SessionStart,
   SessionSummary,
+  StartSessionRequest,
 } from "../types/history";
 
 export class HistoryError extends Error {
@@ -48,9 +50,21 @@ export function toHistoryError(error: unknown): HistoryError {
   );
 }
 
-export async function startSession(): Promise<SessionStart> {
+export async function startSession(
+  request: StartSessionRequest = {},
+): Promise<SessionStart> {
   try {
-    return await invoke<SessionStart>("start_session");
+    return await invoke<SessionStart>("start_session", { request });
+  } catch (error) {
+    throw toHistoryError(error);
+  }
+}
+
+export async function completeSession(
+  request: CompleteSessionRequest,
+): Promise<void> {
+  try {
+    await invoke("complete_session", { request });
   } catch (error) {
     throw toHistoryError(error);
   }

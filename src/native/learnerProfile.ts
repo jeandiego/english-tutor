@@ -4,6 +4,7 @@ import type {
   LearnerProfile,
   SaveLearnerProfilePreferencesRequest,
 } from "../types/learnerProfile";
+import type { ApplySessionToLearnerProfileRequest } from "../types/session";
 
 export class LearnerProfileError extends Error {
   readonly code: string;
@@ -72,6 +73,18 @@ export async function applyAssessmentToLearnerProfile(
 ): Promise<LearnerProfile> {
   try {
     return await invoke<LearnerProfile>("apply_assessment_to_learner_profile", {
+      request,
+    });
+  } catch (error) {
+    throw toLearnerProfileError(error);
+  }
+}
+
+export async function applySessionToLearnerProfile(
+  request: ApplySessionToLearnerProfileRequest,
+): Promise<LearnerProfile> {
+  try {
+    return await invoke<LearnerProfile>("apply_session_to_learner_profile", {
       request,
     });
   } catch (error) {
