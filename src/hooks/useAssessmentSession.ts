@@ -27,11 +27,13 @@ import {
   toAssessmentError,
   type AssessmentError,
 } from "../native/assessment";
+import { applyAssessmentToLearnerProfile } from "../native/learnerProfile";
 import { speakTutorReply, toSpeechError } from "../native/speech";
 import type {
   AggregatedResult,
   AssessmentCompetency,
   AssessmentSummaryText,
+  CefrLevel,
   CompetencyEvidenceResult,
   EvaluationResult,
   FollowUpIntent,
@@ -358,6 +360,30 @@ export function useAssessmentSession({
         handleError(requestError);
       }
       return;
+    }
+    if (engineRef.current !== engine || !mountedRef.current) {
+      return;
+    }
+
+    try {
+      const dimensionLevels: Partial<Record<AssessmentCompetency, CefrLevel>> = {};
+      for (const profile of aggregated.competencyProfiles) {
+        if (profile.level !== "insufficient_evidence") {
+          dimensionLevels[profile.competency] = profile.level;
+        }
+      }
+      await applyAssessmentToLearnerProfile({
+        overallLevel:
+          aggregated.overallLevel === "insufficient_evidence"
+            ? undefined
+            : aggregated.overallLevel,
+        dimensionLevels,
+        priorities: summaryText?.priorities ?? [],
+      });
+    } catch {
+      // The learner profile is supplementary context for the tutor — a
+      // failed update must not discard an otherwise-valid, evidence-backed
+      // assessment result.
     }
     if (engineRef.current !== engine || !mountedRef.current) {
       return;

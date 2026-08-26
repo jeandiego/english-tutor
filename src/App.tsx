@@ -3,6 +3,7 @@ import { AppHeader, type AppPage } from "./components/AppHeader";
 import { AssessmentPage } from "./components/AssessmentPage";
 import { ConversationStage } from "./components/ConversationStage";
 import { HistoryPage } from "./components/HistoryPage";
+import { ProgressPage } from "./components/ProgressPage";
 import { SettingsPage } from "./components/SettingsPage";
 import type {
   TranscriptionDiagnostic,
@@ -204,6 +205,8 @@ function App() {
         />
       ) : activePage === "history" ? (
         <HistoryPage />
+      ) : activePage === "progress" ? (
+        <ProgressPage />
       ) : (
         <SettingsPage
           onTranscriptionDraftChange={setSettingsDraft}

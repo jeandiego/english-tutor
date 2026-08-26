@@ -13,9 +13,6 @@ use super::tutor::{BetterExpression, CorrectionCategory, CorrectionSeverity, Tut
 
 const DB_FILE_NAME: &str = "history.sqlite3";
 const SCHEMA_VERSION: i32 = 2;
-const LEARNER_CONTEXT_RECENT_CORRECTIONS: i64 = 50;
-const LEARNER_CONTEXT_MIN_COUNT: i64 = 2;
-const LEARNER_CONTEXT_MAX_CATEGORIES: usize = 2;
 const ALL_TIME_CATEGORY_LIMIT: i64 = 100_000;
 const DEFAULT_LIST_LIMIT: i64 = 10;
 const MAX_LIST_LIMIT: i64 = 100;
@@ -29,7 +26,7 @@ pub struct HistoryCommandError {
 }
 
 impl HistoryCommandError {
-    fn new(
+    pub(crate) fn new(
         code: &'static str,
         message: impl Into<String>,
         technical_message: impl Into<String>,
@@ -84,19 +81,19 @@ pub struct SessionSummary {
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
 pub struct CategoryCount {
-    category: String,
-    count: i64,
+    pub(crate) category: String,
+    pub(crate) count: i64,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct ExpressionSummary {
     #[serde(skip_serializing_if = "Option::is_none")]
-    original: Option<String>,
-    suggestion: String,
+    pub(crate) original: Option<String>,
+    pub(crate) suggestion: String,
     #[serde(skip_serializing_if = "Option::is_none")]
-    explanation: Option<String>,
-    timestamp: i64,
+    pub(crate) explanation: Option<String>,
+    pub(crate) timestamp: i64,
 }
 
 fn now_ms() -> i64 {
@@ -122,17 +119,7 @@ fn severity_str(severity: CorrectionSeverity) -> &'static str {
     }
 }
 
-fn category_label(category: &str) -> &str {
-    match category {
-        "grammar" => "grammar",
-        "vocabulary" => "vocabulary choices",
-        "naturalness" => "natural phrasing",
-        "clarity" => "clarity",
-        other => other,
-    }
-}
-
-fn db_path(app_handle: &AppHandle) -> Result<PathBuf, HistoryCommandError> {
+pub(crate) fn db_path(app_handle: &AppHandle) -> Result<PathBuf, HistoryCommandError> {
     app_handle
         .path()
         .app_data_dir()
@@ -250,7 +237,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     Ok(())
 }
 
-fn open_connection(path: &Path) -> Result<Connection, HistoryCommandError> {
+pub(crate) fn open_connection(path: &Path) -> Result<Connection, HistoryCommandError> {
     if let Some(directory) = path.parent() {
         fs::create_dir_all(directory).map_err(|error| {
             HistoryCommandError::new(
@@ -280,7 +267,7 @@ fn open_connection(path: &Path) -> Result<Connection, HistoryCommandError> {
     Ok(conn)
 }
 
-fn create_session(conn: &Connection, started_at_ms: i64) -> rusqlite::Result<i64> {
+pub(crate) fn create_session(conn: &Connection, started_at_ms: i64) -> rusqlite::Result<i64> {
     conn.execute(
         "INSERT INTO session (started_at, ended_at) VALUES (?1, ?1)",
         params![started_at_ms],
@@ -288,7 +275,7 @@ fn create_session(conn: &Connection, started_at_ms: i64) -> rusqlite::Result<i64
     Ok(conn.last_insert_rowid())
 }
 
-fn record_turn_pair(
+pub(crate) fn record_turn_pair(
     conn: &mut Connection,
     session_id: i64,
     transcript: &str,
@@ -368,7 +355,10 @@ fn recent_sessions(conn: &Connection, limit: i64) -> rusqlite::Result<Vec<Sessio
     rows.collect()
 }
 
-fn category_counts(conn: &Connection, recent_limit: i64) -> rusqlite::Result<Vec<CategoryCount>> {
+pub(crate) fn category_counts(
+    conn: &Connection,
+    recent_limit: i64,
+) -> rusqlite::Result<Vec<CategoryCount>> {
     let mut statement = conn.prepare(
         "SELECT category, COUNT(*) as count FROM (
             SELECT c.category FROM correction c
@@ -388,7 +378,10 @@ fn category_counts(conn: &Connection, recent_limit: i64) -> rusqlite::Result<Vec
     rows.collect()
 }
 
-fn recent_expressions(conn: &Connection, limit: i64) -> rusqlite::Result<Vec<ExpressionSummary>> {
+pub(crate) fn recent_expressions(
+    conn: &Connection,
+    limit: i64,
+) -> rusqlite::Result<Vec<ExpressionSummary>> {
     let mut statement = conn.prepare(
         "SELECT e.original, e.suggestion, e.explanation, t.timestamp
          FROM expression e
@@ -405,27 +398,6 @@ fn recent_expressions(conn: &Connection, limit: i64) -> rusqlite::Result<Vec<Exp
         })
     })?;
     rows.collect()
-}
-
-fn learner_context_summary(conn: &Connection) -> rusqlite::Result<Option<String>> {
-    let counts = category_counts(conn, LEARNER_CONTEXT_RECENT_CORRECTIONS)?;
-    let labels: Vec<&str> = counts
-        .iter()
-        .filter(|entry| entry.count >= LEARNER_CONTEXT_MIN_COUNT)
-        .take(LEARNER_CONTEXT_MAX_CATEGORIES)
-        .map(|entry| category_label(&entry.category))
-        .collect();
-
-    if labels.is_empty() {
-        return Ok(None);
-    }
-
-    let joined = labels.join(" and ");
-    Ok(Some(format!(
-        "The learner has recently repeated mistakes involving {joined}. \
-         Do not drill these explicitly. When natural, create conversation opportunities \
-         where these structures may come up."
-    )))
 }
 
 fn clamp_limit(limit: Option<u32>) -> i64 {
@@ -479,16 +451,17 @@ pub(crate) async fn persist_turn(
 #[tauri::command]
 pub async fn start_session(app_handle: AppHandle) -> Result<SessionStart, HistoryCommandError> {
     let path = db_path(&app_handle)?;
-    run_blocking(move || {
+    let session_id = run_blocking(move || {
         let conn = open_connection(&path)?;
-        let session_id = create_session(&conn, now_ms())?;
-        let learner_context = learner_context_summary(&conn)?;
-        Ok(SessionStart {
-            session_id,
-            learner_context,
-        })
+        Ok(create_session(&conn, now_ms())?)
     })
-    .await
+    .await?;
+    let learner_context =
+        super::learner_profile::build_tutor_summary_for_session(&app_handle).await?;
+    Ok(SessionStart {
+        session_id,
+        learner_context,
+    })
 }
 
 #[tauri::command]
@@ -1186,7 +1159,7 @@ mod tests {
     }
 
     #[test]
-    fn category_counts_and_learner_context_apply_minimum_threshold() {
+    fn category_counts_apply_minimum_threshold_ordering() {
         let (_directory, path) = scratch_db();
         let mut conn = open_connection(&path).expect("connection must open");
         let session_id = create_session(&conn, 1_000).expect("session must create");
@@ -1206,42 +1179,9 @@ mod tests {
         )
         .expect("turn pair must record");
 
-        let counts = category_counts(&conn, LEARNER_CONTEXT_RECENT_CORRECTIONS)
-            .expect("counts must compute");
+        let counts = category_counts(&conn, 50).expect("counts must compute");
         assert_eq!(counts[0].category, "grammar");
         assert_eq!(counts[0].count, 2);
-
-        let summary = learner_context_summary(&conn)
-            .expect("summary must compute")
-            .expect("summary must be present when a category repeats");
-        assert!(summary.contains("grammar"));
-        assert!(!summary.contains("clarity"));
-    }
-
-    #[test]
-    fn learner_context_is_none_when_no_category_repeats() {
-        let (_directory, path) = scratch_db();
-        let mut conn = open_connection(&path).expect("connection must open");
-        let session_id = create_session(&conn, 1_000).expect("session must create");
-
-        record_turn_pair(
-            &mut conn,
-            session_id,
-            "text",
-            "reply",
-            &[correction(
-                CorrectionCategory::Grammar,
-                CorrectionSeverity::Important,
-            )],
-            &[],
-            2_000,
-        )
-        .expect("turn pair must record");
-
-        assert_eq!(
-            learner_context_summary(&conn).expect("summary must compute"),
-            None
-        );
     }
 
     #[test]

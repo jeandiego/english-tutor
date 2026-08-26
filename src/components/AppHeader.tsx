@@ -5,7 +5,12 @@ import {
 } from "./SystemDiagnostics";
 import type { HealthState } from "../types/runtime";
 
-export type AppPage = "conversation" | "assessment" | "history" | "settings";
+export type AppPage =
+  | "conversation"
+  | "assessment"
+  | "history"
+  | "progress"
+  | "settings";
 
 type AppHeaderProps = {
   activePage: AppPage;
@@ -58,6 +63,15 @@ export function AppHeader({
           type="button"
         >
           History
+        </button>
+        <button
+          aria-current={activePage === "progress" ? "page" : undefined}
+          className="app-navigation__item"
+          disabled={navigationDisabled}
+          onClick={() => onNavigate("progress")}
+          type="button"
+        >
+          My Progress
         </button>
         <button
           aria-label={

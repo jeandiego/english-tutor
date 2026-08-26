@@ -4,6 +4,7 @@ import type { AssessmentTask } from "../assessment/types";
 import type { AudioRecorder, RecordedAudio } from "../audio/recorder";
 import { TalkControl } from "../components/TalkControl";
 import * as assessmentNative from "../native/assessment";
+import * as learnerProfileNative from "../native/learnerProfile";
 import * as speechNative from "../native/speech";
 import { useAssessmentSession } from "./useAssessmentSession";
 
@@ -19,6 +20,14 @@ vi.mock("../native/assessment", async (importOriginal) => {
     generateFollowUp: vi.fn(),
     evaluateResponse: vi.fn(),
     synthesizeAssessmentSummary: vi.fn(),
+  };
+});
+
+vi.mock("../native/learnerProfile", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../native/learnerProfile")>();
+  return {
+    ...actual,
+    applyAssessmentToLearnerProfile: vi.fn(),
   };
 });
 
@@ -111,6 +120,17 @@ beforeEach(() => {
     recommendedSessions: ["storytelling"],
     notesForTutor: "Coverage was thin.",
   });
+  vi.mocked(learnerProfileNative.applyAssessmentToLearnerProfile).mockResolvedValue({
+    dimensionLevels: {},
+    goals: [],
+    preferredScenarios: [],
+    targetAccents: [],
+    recurringIssues: [],
+    activeVocabulary: [],
+    activeGrammarTargets: [],
+    activePronunciationTargets: [],
+    progressNotes: [],
+  });
   vi.mocked(speechNative.speakTutorReply).mockResolvedValue(undefined);
 });
 
@@ -200,6 +220,48 @@ describe("useAssessmentSession", () => {
     expect(assessmentNative.completeAssessment).toHaveBeenCalledWith(
       expect.objectContaining({ assessmentId: 1, estimatedLevel: "B2" }),
     );
+    expect(learnerProfileNative.applyAssessmentToLearnerProfile).toHaveBeenCalledWith({
+      overallLevel: "B2",
+      dimensionLevels: { fluency: "B2" },
+      priorities: ["Practice linking ideas."],
+    });
+  });
+
+  it("still completes the assessment when the learner profile update fails", async () => {
+    vi.mocked(assessmentNative.evaluateResponse).mockResolvedValue({
+      competencyEvidence: [
+        {
+          competency: "fluency",
+          levelEvidence: "B2",
+          confidence: 0.9,
+          evidence: ["Maintained an extended response."],
+          insufficientEvidence: false,
+        },
+      ],
+    });
+    vi.mocked(learnerProfileNative.applyAssessmentToLearnerProfile).mockRejectedValue({
+      code: "learner-profile-storage-failed",
+      message: "The learner profile could not be updated.",
+      technicalMessage: "disk full",
+    });
+
+    const recorder = createRecorder();
+    render(
+      <AssessmentHarness
+        recorder={recorder}
+        transcribe={async () => ({ text: "It was a normal day." })}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Start" }));
+    await waitFor(() =>
+      expect(screen.getByTestId("question")).toHaveTextContent("Tell me about your day."),
+    );
+
+    await recordOneTurn();
+
+    await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("complete"));
+    expect(screen.getByTestId("result")).toHaveTextContent("B2");
   });
 
   it("surfaces a recoverable error when evaluation fails, without crashing the loop", async () => {

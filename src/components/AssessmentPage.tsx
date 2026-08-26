@@ -1,12 +1,11 @@
 import { useEffect, useState } from "react";
+import { COMPETENCY_LABELS, levelLabel } from "../assessment/labels";
 import { useAssessmentSession } from "../hooks/useAssessmentSession";
 import { listAssessments, toAssessmentError } from "../native/assessment";
 import type {
   AggregatedResult,
-  AssessmentCompetency,
   AssessmentSummary,
   AssessmentSummaryText,
-  CefrLevel,
 } from "../types/assessment";
 import { TalkControl } from "./TalkControl";
 
@@ -21,26 +20,11 @@ type PastResultsLoadState =
   | { status: "loaded"; results: AssessmentSummary[] }
   | { status: "error"; message: string };
 
-const COMPETENCY_LABELS: Record<AssessmentCompetency, string> = {
-  fluency: "Fluency",
-  grammaticalRange: "Grammar range",
-  grammaticalAccuracy: "Grammar accuracy",
-  lexicalResource: "Vocabulary",
-  discourseManagement: "Organizing ideas",
-  interactiveCommunication: "Interaction",
-  pronunciation: "Pronunciation",
-  listening: "Listening",
-};
-
 function formatDate(timestampMs: number): string {
   return new Date(timestampMs).toLocaleString(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
   });
-}
-
-function levelLabel(level: CefrLevel | undefined): string {
-  return level ?? "Not yet estimated";
 }
 
 function confidenceLabel(confidence: number): string {
