@@ -4,5 +4,7 @@
   <dict>
     <key>NSMicrophoneUsageDescription</key>
     <string>English Coach needs microphone access to record your local speaking practice.</string>
+    <key>NSLocalNetworkUsageDescription</key>
+    <string>English Coach needs local network access to reach an Ollama server running on another device on your network.</string>
   </dict>
 </plist>

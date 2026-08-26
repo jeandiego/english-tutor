@@ -366,7 +366,7 @@ export function SettingsPage({
         <section className="settings-section" aria-labelledby="tutor-settings-title">
           <div className="settings-section__heading">
             <h3 id="tutor-settings-title">Ollama configuration</h3>
-            <p>Only loopback URLs are accepted, so transcripts stay on this Mac.</p>
+            <p>Only local or private-network URLs are accepted, so transcripts stay on your network.</p>
           </div>
 
           <form
@@ -395,7 +395,10 @@ export function SettingsPage({
                   spellCheck={false}
                   value={tutorDraft.baseUrl}
                 />
-                <small>Use localhost, 127.0.0.1, or ::1 with any local port.</small>
+                <small>
+                  Use localhost, 127.0.0.1, ::1, or a private network address
+                  (e.g. 192.168.x.x) with any local port.
+                </small>
               </span>
             </div>
 
@@ -404,34 +407,70 @@ export function SettingsPage({
                 Tutor model
               </label>
               <span className="settings-field__control">
-                <input
-                  autoComplete="off"
-                  disabled={tutorSaving}
+                <select
+                  disabled={tutorSaving || tutorSetup.preflight.availableModels.length === 0}
                   id="ollama-model-name"
-                  list="ollama-models"
                   onChange={(event) =>
                     onTutorDraftChange({
                       ...tutorDraft,
                       modelName: event.target.value,
                     })
                   }
-                  placeholder="Choose an installed local model"
-                  spellCheck={false}
                   value={tutorDraft.modelName}
-                />
-                <datalist id="ollama-models">
+                >
+                  <option disabled value="">
+                    {tutorSetup.preflight.availableModels.length > 0
+                      ? "Choose an installed model"
+                      : "No models found at this URL"}
+                  </option>
+                  {tutorDraft.modelName &&
+                    !tutorSetup.preflight.availableModels.some(
+                      (model) => model.name === tutorDraft.modelName,
+                    ) && (
+                      <option value={tutorDraft.modelName}>
+                        {tutorDraft.modelName} (not found at this URL)
+                      </option>
+                    )}
                   {tutorSetup.preflight.availableModels.map((model) => (
                     <option key={model.name} value={model.name}>
-                      {model.parameterSize ?? "Local model"}
+                      {model.name}
+                      {model.parameterSize ? ` — ${model.parameterSize}` : ""}
                     </option>
                   ))}
-                </datalist>
+                </select>
                 <small>
                   {tutorSetup.preflight.availableModels.length > 0
                     ? `${tutorSetup.preflight.availableModels.length} local model${
                         tutorSetup.preflight.availableModels.length === 1 ? "" : "s"
-                      } available.`
-                    : "Start Ollama to discover models already installed locally."}
+                      } available at this URL.`
+                    : "Save the Ollama URL above to discover models installed there."}
+                </small>
+              </span>
+            </div>
+
+            <div className="settings-field">
+              <label className="settings-field__label" htmlFor="ollama-thinking-enabled">
+                Thinking mode
+              </label>
+              <span className="settings-field__control">
+                <span className="settings-field__checkbox">
+                  <input
+                    checked={tutorDraft.thinkingEnabled}
+                    disabled={tutorSaving}
+                    id="ollama-thinking-enabled"
+                    onChange={(event) =>
+                      onTutorDraftChange({
+                        ...tutorDraft,
+                        thinkingEnabled: event.target.checked,
+                      })
+                    }
+                    type="checkbox"
+                  />
+                  <span>Let the model reason before replying</span>
+                </span>
+                <small>
+                  Only affects models that support extended thinking. Turning
+                  it off usually replies faster and raises tokens/sec.
                 </small>
               </span>
             </div>

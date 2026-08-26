@@ -35,6 +35,7 @@ const DEFAULT_SETTINGS: TranscriptionSettings = {
 const DEFAULT_TUTOR_SETTINGS: TutorSettings = {
   baseUrl: "http://127.0.0.1:11434",
   modelName: "",
+  thinkingEnabled: false,
 };
 
 const DEFAULT_TTS_SETTINGS: TtsSettings = {
@@ -54,7 +55,11 @@ function settingsEqual(
 }
 
 function tutorSettingsEqual(left: TutorSettings, right: TutorSettings) {
-  return left.baseUrl === right.baseUrl && left.modelName === right.modelName;
+  return (
+    left.baseUrl === right.baseUrl &&
+    left.modelName === right.modelName &&
+    left.thinkingEnabled === right.thinkingEnabled
+  );
 }
 
 function ttsSettingsEqual(left: TtsSettings, right: TtsSettings) {

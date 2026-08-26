@@ -353,7 +353,10 @@ async fn build_setup(settings: TtsSettings) -> TtsSetup {
         kokoro_local::provider_info().await,
         elevenlabs::provider_info().await,
     ];
-    TtsSetup { settings, providers }
+    TtsSetup {
+        settings,
+        providers,
+    }
 }
 
 #[tauri::command]

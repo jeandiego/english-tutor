@@ -1,6 +1,7 @@
 export type TutorSettings = {
   baseUrl: string;
   modelName: string;
+  thinkingEnabled: boolean;
 };
 
 export type TutorPreflightStatus =

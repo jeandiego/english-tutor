@@ -21,13 +21,16 @@ fn api_key() -> Option<String> {
 }
 
 fn build_client() -> Result<Client, TtsCommandError> {
-    Client::builder().timeout(REQUEST_TIMEOUT).build().map_err(|error| {
-        TtsCommandError::new(
-            "elevenlabs-unavailable",
-            "The ElevenLabs client could not be initialized.",
-            error.to_string(),
-        )
-    })
+    Client::builder()
+        .timeout(REQUEST_TIMEOUT)
+        .build()
+        .map_err(|error| {
+            TtsCommandError::new(
+                "elevenlabs-unavailable",
+                "The ElevenLabs client could not be initialized.",
+                error.to_string(),
+            )
+        })
 }
 
 #[derive(Debug, Deserialize)]

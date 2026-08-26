@@ -268,16 +268,18 @@ mod tests {
 
     #[test]
     fn parse_voice_line_extracts_name_and_locale() {
-        let voice = parse_voice_line("Alex                en_US    # Most people recognize me by my voice.")
-            .expect("line must parse");
+        let voice = parse_voice_line(
+            "Alex                en_US    # Most people recognize me by my voice.",
+        )
+        .expect("line must parse");
         assert_eq!(voice.label, "Alex");
         assert_eq!(voice.locale.as_deref(), Some("en_US"));
     }
 
     #[test]
     fn parse_voice_line_joins_multi_word_names() {
-        let voice = parse_voice_line("Bad News            en_US    # ...")
-            .expect("line must parse");
+        let voice =
+            parse_voice_line("Bad News            en_US    # ...").expect("line must parse");
         assert_eq!(voice.label, "Bad News");
         assert_eq!(voice.locale.as_deref(), Some("en_US"));
     }
@@ -292,8 +294,8 @@ mod tests {
 
     #[test]
     fn parse_voice_line_accepts_un_m49_numeric_regions() {
-        let voice = parse_voice_line("Majed               ar_001   # ...")
-            .expect("line must parse");
+        let voice =
+            parse_voice_line("Majed               ar_001   # ...").expect("line must parse");
         assert_eq!(voice.label, "Majed");
         assert_eq!(voice.locale.as_deref(), Some("ar_001"));
     }

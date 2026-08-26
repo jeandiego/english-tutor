@@ -16,6 +16,7 @@ const setup: TutorSetup = {
   settings: {
     baseUrl: "http://127.0.0.1:11434",
     modelName: "qwen3.5:9b",
+    thinkingEnabled: false,
   },
   preflight: {
     status: "ready",
