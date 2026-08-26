@@ -8,6 +8,7 @@ import {
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import { getLatestAssessment, listAssessments } from "./native/assessment";
 import { getRuntimeHealth } from "./native/health";
 import {
   listCorrectionCategoryCounts,
@@ -31,6 +32,24 @@ import type { TtsSetup } from "./types/tts";
 vi.mock("./native/health", () => ({
   getRuntimeHealth: vi.fn(),
 }));
+
+vi.mock("./native/assessment", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./native/assessment")>();
+  return {
+    ...actual,
+    getLatestAssessment: vi.fn(),
+    listAssessments: vi.fn(),
+    startAssessment: vi.fn(),
+    startAssessmentTaskRun: vi.fn(),
+    recordAssessmentTurnCycle: vi.fn(),
+    completeAssessmentTaskRun: vi.fn(),
+    completeAssessment: vi.fn(),
+    generateFollowUp: vi.fn(),
+    evaluateResponse: vi.fn(),
+    synthesizeAssessmentSummary: vi.fn(),
+    getAssessmentDetail: vi.fn(),
+  };
+});
 
 vi.mock("./native/history", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./native/history")>();
@@ -73,6 +92,8 @@ vi.mock("./native/tts", async (importOriginal) => {
 });
 
 const getRuntimeHealthMock = vi.mocked(getRuntimeHealth);
+const getLatestAssessmentMock = vi.mocked(getLatestAssessment);
+const listAssessmentsMock = vi.mocked(listAssessments);
 const loadTranscriptionSetupMock = vi.mocked(loadTranscriptionSetup);
 const saveTranscriptionSettingsMock = vi.mocked(saveTranscriptionSettings);
 const loadTutorSetupMock = vi.mocked(loadTutorSetup);
@@ -143,6 +164,7 @@ const readyTutorSetup: TutorSetup = {
   settings: {
     baseUrl: "http://127.0.0.1:11434",
     modelName: "qwen3.5:9b",
+    thinkingEnabled: false,
   },
   preflight: {
     status: "ready",
@@ -152,16 +174,16 @@ const readyTutorSetup: TutorSetup = {
   },
 };
 
-const unavailableTutorSetup: TutorSetup = {
+const noModelConfiguredTutorSetup: TutorSetup = {
   settings: {
     baseUrl: "http://127.0.0.1:11434",
     modelName: "",
+    thinkingEnabled: false,
   },
   preflight: {
-    status: "ollamaUnavailable",
-    message: "Ollama is unavailable at http://127.0.0.1:11434.",
-    technicalMessage: "connection refused",
-    availableModels: [],
+    status: "noModelConfigured",
+    message: "Choose a locally installed Ollama model.",
+    availableModels: [{ name: "qwen3.5:9b", parameterSize: "9B" }],
   },
 };
 
@@ -219,6 +241,8 @@ beforeEach(() => {
   listRecentSessionsMock.mockResolvedValue([]);
   listCorrectionCategoryCountsMock.mockResolvedValue([]);
   listRecentExpressionsMock.mockResolvedValue([]);
+  getLatestAssessmentMock.mockResolvedValue(null);
+  listAssessmentsMock.mockResolvedValue([]);
 });
 
 afterEach(() => {
@@ -395,12 +419,14 @@ describe("English Coach shell", () => {
   it("shows actionable Ollama setup and saves a selected local model", async () => {
     getRuntimeHealthMock.mockResolvedValue(readyHealth());
     loadTranscriptionSetupMock.mockResolvedValue(readySetup);
-    loadTutorSetupMock.mockResolvedValue(unavailableTutorSetup);
+    loadTutorSetupMock.mockResolvedValue(noModelConfiguredTutorSetup);
     saveTutorSettingsMock.mockResolvedValue(readyTutorSetup);
 
     render(<App />);
 
-    expect(await screen.findByText("Ollama unavailable")).toBeInTheDocument();
+    expect(
+      await screen.findByText("Tutor model not configured"),
+    ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /hold to talk/i })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Open tutor settings" }));
 
@@ -418,6 +444,7 @@ describe("English Coach shell", () => {
       expect(saveTutorSettingsMock).toHaveBeenCalledWith({
         baseUrl: "http://127.0.0.1:11434",
         modelName: "qwen3.5:9b",
+        thinkingEnabled: false,
       }),
     );
     const tutorSettingsPage = document.querySelector(".settings-page") as HTMLElement;
@@ -441,6 +468,40 @@ describe("English Coach shell", () => {
     expect(await screen.findByText("3 turns")).toBeInTheDocument();
     expect(screen.getByText("Grammar")).toBeInTheDocument();
     expect(screen.getByText("4")).toBeInTheDocument();
+  });
+
+  it("opens the Assessment tab, shows the intro, and respects navigationDisabled like other tabs", async () => {
+    getRuntimeHealthMock.mockResolvedValue(readyHealth());
+    loadTranscriptionSetupMock.mockResolvedValue(readySetup);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Assessment" }));
+
+    expect(await screen.findByRole("heading", { name: "Assessment" })).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: "Start assessment" }),
+    ).toBeInTheDocument();
+    expect(listAssessmentsMock).toHaveBeenCalled();
+
+    const assessmentNav = screen.getByRole("button", { name: "Assessment" });
+    expect(assessmentNav).not.toBeDisabled();
+  });
+
+  it("shows the estimated level chip once a prior assessment exists", async () => {
+    getRuntimeHealthMock.mockResolvedValue(readyHealth());
+    loadTranscriptionSetupMock.mockResolvedValue(readySetup);
+    getLatestAssessmentMock.mockResolvedValue({
+      id: 1,
+      startedAt: 1_700_000_000_000,
+      completedAt: 1_700_000_600_000,
+      estimatedLevel: "B2",
+      confidence: 0.7,
+    });
+
+    render(<App />);
+
+    expect(await screen.findByText("B2 estimated")).toBeInTheDocument();
   });
 
   it("shows a non-blocking warning when the session history fails to start", async () => {

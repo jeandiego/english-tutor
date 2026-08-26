@@ -5,7 +5,7 @@ import {
 } from "./SystemDiagnostics";
 import type { HealthState } from "../types/runtime";
 
-export type AppPage = "conversation" | "history" | "settings";
+export type AppPage = "conversation" | "assessment" | "history" | "settings";
 
 type AppHeaderProps = {
   activePage: AppPage;
@@ -16,6 +16,7 @@ type AppHeaderProps = {
   transcription: TranscriptionDiagnostic;
   tutor: TutorDiagnostic;
   onOpenSettings: () => void;
+  estimatedLevel?: string;
 };
 
 export function AppHeader({
@@ -27,6 +28,7 @@ export function AppHeader({
   transcription,
   tutor,
   onOpenSettings,
+  estimatedLevel,
 }: AppHeaderProps) {
   return (
     <header className="app-header">
@@ -38,6 +40,15 @@ export function AppHeader({
           type="button"
         >
           Conversation
+        </button>
+        <button
+          aria-current={activePage === "assessment" ? "page" : undefined}
+          className="app-navigation__item"
+          disabled={navigationDisabled}
+          onClick={() => onNavigate("assessment")}
+          type="button"
+        >
+          Assessment
         </button>
         <button
           aria-current={activePage === "history" ? "page" : undefined}
@@ -70,12 +81,19 @@ export function AppHeader({
 
       <h1>English Coach</h1>
 
-      <SystemDiagnostics
-        healthState={healthState}
-        onOpenSettings={onOpenSettings}
-        transcription={transcription}
-        tutor={tutor}
-      />
+      <div className="app-header__trailing">
+        {estimatedLevel && (
+          <span className="local-status" aria-label={`Estimated level ${estimatedLevel}`}>
+            {estimatedLevel} estimated
+          </span>
+        )}
+        <SystemDiagnostics
+          healthState={healthState}
+          onOpenSettings={onOpenSettings}
+          transcription={transcription}
+          tutor={tutor}
+        />
+      </div>
     </header>
   );
 }

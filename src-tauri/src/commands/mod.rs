@@ -1,3 +1,4 @@
+pub(crate) mod assessment;
 pub(crate) mod health;
 pub(crate) mod history;
 pub(crate) mod transcription;

@@ -4,6 +4,17 @@ mod commands;
 pub fn run() {
     tauri::Builder::default()
         .invoke_handler(tauri::generate_handler![
+            commands::assessment::generate_follow_up,
+            commands::assessment::evaluate_response,
+            commands::assessment::synthesize_assessment_summary,
+            commands::assessment::start_assessment,
+            commands::assessment::start_assessment_task_run,
+            commands::assessment::record_assessment_turn_cycle,
+            commands::assessment::complete_assessment_task_run,
+            commands::assessment::complete_assessment,
+            commands::assessment::get_latest_assessment,
+            commands::assessment::list_assessments,
+            commands::assessment::get_assessment_detail,
             commands::health::health_check,
             commands::history::start_session,
             commands::history::list_recent_sessions,

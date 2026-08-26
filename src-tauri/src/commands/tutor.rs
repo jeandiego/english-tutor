@@ -53,6 +53,8 @@ Use empty arrays when there are no useful corrections or expressions. Never repl
 pub struct TutorSettings {
     base_url: String,
     model_name: String,
+    #[serde(default)]
+    thinking_enabled: bool,
 }
 
 impl Default for TutorSettings {
@@ -60,6 +62,7 @@ impl Default for TutorSettings {
         Self {
             base_url: DEFAULT_BASE_URL.to_string(),
             model_name: String::new(),
+            thinking_enabled: false,
         }
     }
 }
@@ -69,6 +72,15 @@ impl TutorSettings {
         self.base_url = self.base_url.trim().trim_end_matches('/').to_string();
         self.model_name = self.model_name.trim().to_string();
         self
+    }
+}
+
+#[cfg(test)]
+pub(crate) fn test_settings(base_url: String, model_name: &str) -> TutorSettings {
+    TutorSettings {
+        base_url,
+        model_name: model_name.to_string(),
+        thinking_enabled: false,
     }
 }
 
@@ -123,9 +135,9 @@ pub struct TutorMessage {
 }
 
 #[derive(Debug, Serialize)]
-struct OllamaRequestMessage {
-    role: &'static str,
-    content: String,
+pub(crate) struct OllamaRequestMessage {
+    pub(crate) role: &'static str,
+    pub(crate) content: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -254,6 +266,10 @@ impl TutorCommandError {
             technical_message: truncate(&technical_message.into()),
         }
     }
+
+    pub(crate) fn into_parts(self) -> (&'static str, String, String) {
+        (self.code, self.message, self.technical_message)
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -311,6 +327,18 @@ struct PreflightResult {
     canonical_model_name: Option<String>,
 }
 
+fn describe_request_error(error: &reqwest::Error) -> String {
+    use std::error::Error as _;
+
+    let mut message = error.to_string();
+    let mut cause = error.source();
+    while let Some(source) = cause {
+        message.push_str(&format!(": {source}"));
+        cause = source.source();
+    }
+    message
+}
+
 fn truncate(value: &str) -> String {
     if value.chars().count() <= TECHNICAL_OUTPUT_LIMIT {
         return value.to_string();
@@ -362,7 +390,7 @@ fn tutor_performance(
     })
 }
 
-fn config_path(app_handle: &AppHandle) -> Result<PathBuf, TutorCommandError> {
+pub(crate) fn config_path(app_handle: &AppHandle) -> Result<PathBuf, TutorCommandError> {
     app_handle
         .path()
         .app_config_dir()
@@ -449,6 +477,19 @@ fn write_settings(path: &Path, settings: &TutorSettings) -> Result<(), TutorComm
     Ok(())
 }
 
+fn is_local_network_address(address: &IpAddr) -> bool {
+    match address {
+        IpAddr::V4(address) => {
+            address.is_loopback() || address.is_private() || address.is_link_local()
+        }
+        IpAddr::V6(address) => {
+            address.is_loopback()
+                || (address.segments()[0] & 0xfe00) == 0xfc00 // unique local fc00::/7
+                || (address.segments()[0] & 0xffc0) == 0xfe80 // link-local fe80::/10
+        }
+    }
+}
+
 fn validate_base_url(value: &str) -> Result<Url, TutorCommandError> {
     let mut url = Url::parse(value).map_err(|error| {
         TutorCommandError::new(
@@ -488,7 +529,7 @@ fn validate_base_url(value: &str) -> Result<Url, TutorCommandError> {
             .trim_start_matches('[')
             .trim_end_matches(']')
             .parse::<IpAddr>()
-            .map(|address| address.is_loopback())
+            .map(|address| is_local_network_address(&address))
             .unwrap_or(false),
         None => false,
     };
@@ -496,7 +537,7 @@ fn validate_base_url(value: &str) -> Result<Url, TutorCommandError> {
     if !local_host {
         return Err(TutorCommandError::new(
             "non-local-base-url",
-            "The Ollama URL must point to this Mac.",
+            "The Ollama URL must be this Mac or a private network address.",
             value,
         ));
     }
@@ -574,7 +615,7 @@ async fn get_json<T: for<'de> Deserialize<'de>>(
             TutorCommandError::new(
                 "ollama-unavailable",
                 "The local Ollama service could not be reached.",
-                error.to_string(),
+                describe_request_error(&error),
             )
         })?;
     let body = response_text(response, "ollama-unavailable").await?;
@@ -796,10 +837,30 @@ fn command_error_for_preflight(preflight: &TutorPreflight) -> TutorCommandError 
     )
 }
 
-async fn generate(
+/// Parameters for one Ollama `/api/chat` request with a structured-output
+/// schema. `request_failed_code`/`timeout_message`/`failure_message` let
+/// each caller (the tutor's conversational turns, the assessment engine's
+/// follow-up/evaluator/summary calls) report a caller-appropriate error
+/// code and user-facing message while sharing the same preflight/HTTP path.
+pub(crate) struct StructuredChatRequest {
+    pub(crate) messages: Vec<OllamaRequestMessage>,
+    pub(crate) schema: Value,
+    pub(crate) temperature: f64,
+    pub(crate) think: bool,
+    pub(crate) request_failed_code: &'static str,
+    pub(crate) timeout_message: &'static str,
+    pub(crate) failure_message: &'static str,
+}
+
+/// Runs one Ollama `/api/chat` request with a structured-output schema and
+/// returns the model's raw JSON content string plus performance metrics.
+/// Each caller parses+validates the content against its own structured
+/// type; preflight, base-URL, and client setup are identical for all of
+/// them.
+pub(crate) async fn perform_structured_chat(
     settings: &TutorSettings,
-    request: TutorTurnRequest,
-) -> Result<TutorTurn, TutorCommandError> {
+    request: StructuredChatRequest,
+) -> Result<(String, Option<TutorPerformance>), TutorCommandError> {
     let readiness = preflight(settings).await;
     if readiness.preflight.status != TutorPreflightStatus::Ready {
         return Err(command_error_for_preflight(&readiness.preflight));
@@ -809,14 +870,13 @@ async fn generate(
         .expect("ready preflight must have a canonical model name");
     let base_url = validate_base_url(&settings.base_url)?;
     let client = build_client()?;
-    let messages = request_messages(request)?;
     let body = json!({
         "model": model_name,
-        "messages": messages,
+        "messages": request.messages,
         "stream": false,
-        "think": false,
-        "format": response_schema(),
-        "options": { "temperature": 0.3 }
+        "think": request.think,
+        "format": request.schema,
+        "options": { "temperature": request.temperature }
     });
 
     let response = client
@@ -827,13 +887,17 @@ async fn generate(
         .await
         .map_err(|error| {
             let message = if error.is_timeout() {
-                "The local tutor took too long to respond."
+                request.timeout_message
             } else {
-                "The local tutor request could not complete."
+                request.failure_message
             };
-            TutorCommandError::new("tutor-request-failed", message, error.to_string())
+            TutorCommandError::new(
+                request.request_failed_code,
+                message,
+                describe_request_error(&error),
+            )
         })?;
-    let response_body = response_text(response, "tutor-request-failed").await?;
+    let response_body = response_text(response, request.request_failed_code).await?;
     let response = serde_json::from_str::<OllamaChatResponse>(&response_body).map_err(|error| {
         TutorCommandError::new(
             "invalid-response",
@@ -842,7 +906,29 @@ async fn generate(
         )
     })?;
     let performance = tutor_performance(response.eval_count, response.eval_duration);
-    let turn = serde_json::from_str::<StructuredTutorTurn>(&response.message.content)
+    Ok((response.message.content, performance))
+}
+
+async fn generate(
+    settings: &TutorSettings,
+    request: TutorTurnRequest,
+) -> Result<TutorTurn, TutorCommandError> {
+    let messages = request_messages(request)?;
+    let think = settings.thinking_enabled;
+    let (content, performance) = perform_structured_chat(
+        settings,
+        StructuredChatRequest {
+            messages,
+            schema: response_schema(),
+            temperature: 0.3,
+            think,
+            request_failed_code: "tutor-request-failed",
+            timeout_message: "The local tutor took too long to respond.",
+            failure_message: "The local tutor request could not complete.",
+        },
+    )
+    .await?;
+    let turn = serde_json::from_str::<StructuredTutorTurn>(&content)
         .map_err(|error| {
             TutorCommandError::new(
                 "invalid-response",
@@ -861,7 +947,7 @@ async fn generate(
     })
 }
 
-async fn load_settings(path: PathBuf) -> Result<TutorSettings, TutorCommandError> {
+pub(crate) async fn load_settings(path: PathBuf) -> Result<TutorSettings, TutorCommandError> {
     tauri::async_runtime::spawn_blocking(move || read_settings(&path))
         .await
         .map_err(|error| {
@@ -1061,6 +1147,7 @@ mod tests {
         TutorSettings {
             base_url,
             model_name: model_name.to_string(),
+            thinking_enabled: false,
         }
     }
 
@@ -1076,6 +1163,7 @@ mod tests {
         let normalized = TutorSettings {
             base_url: "  http://localhost:11434/  ".into(),
             model_name: "  qwen3.5:9b  ".into(),
+            thinking_enabled: true,
         }
         .normalized();
         write_settings(&path, &normalized).expect("settings must write");
@@ -1087,9 +1175,12 @@ mod tests {
         assert!(validate_base_url("http://localhost:11434").is_ok());
         assert!(validate_base_url("http://127.0.0.1:11434").is_ok());
         assert!(validate_base_url("http://[::1]:11434").is_ok());
+        assert!(validate_base_url("http://192.168.1.4:11434").is_ok());
+        assert!(validate_base_url("http://10.0.0.5:11434").is_ok());
+        assert!(validate_base_url("http://172.16.0.5:11434").is_ok());
         assert_eq!(
-            validate_base_url("http://192.168.1.4:11434")
-                .expect_err("lan address must fail")
+            validate_base_url("http://8.8.8.8:11434")
+                .expect_err("public address must fail")
                 .code,
             "non-local-base-url"
         );
@@ -1213,6 +1304,54 @@ mod tests {
                 body["messages"][25]["content"],
                 "I am learning more backend."
             );
+        });
+    }
+
+    #[test]
+    fn generation_forwards_thinking_enabled_flag() {
+        tauri::async_runtime::block_on(async {
+            let structured_turn = json!({
+                "reply": "Sounds good.",
+                "corrections": [],
+                "betterExpressions": []
+            });
+            let chat_fixture = ResponseFixture {
+                path: "/api/chat",
+                status: 200,
+                body: json!({
+                    "message": {
+                        "role": "assistant",
+                        "content": structured_turn.to_string()
+                    }
+                })
+                .to_string(),
+            };
+            let (base_url, requests, server) =
+                mock_ollama(vec![version_fixture(), tags_fixture(), chat_fixture]);
+            let mut request_settings = settings(base_url, "qwen3.5:9b");
+            request_settings.thinking_enabled = true;
+            generate(
+                &request_settings,
+                TutorTurnRequest {
+                    transcript: "Hello".into(),
+                    history: Vec::new(),
+                    session_id: None,
+                    learner_context: None,
+                },
+            )
+            .await
+            .expect("generation must succeed");
+
+            let _version_request = requests.recv().expect("version request must exist");
+            let _tags_request = requests.recv().expect("tags request must exist");
+            let chat_request = requests.recv().expect("chat request must exist");
+            server.join().expect("server must finish");
+            let body = chat_request
+                .split_once("\r\n\r\n")
+                .expect("request body must exist")
+                .1;
+            let body: Value = serde_json::from_str(body).expect("body must be json");
+            assert_eq!(body["think"], true);
         });
     }
 

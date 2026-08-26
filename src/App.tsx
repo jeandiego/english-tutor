@@ -1,5 +1,6 @@
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { AppHeader, type AppPage } from "./components/AppHeader";
+import { AssessmentPage } from "./components/AssessmentPage";
 import { ConversationStage } from "./components/ConversationStage";
 import { HistoryPage } from "./components/HistoryPage";
 import { SettingsPage } from "./components/SettingsPage";
@@ -11,10 +12,22 @@ import { TalkControl } from "./components/TalkControl";
 import { useRuntimeSetup } from "./hooks/useRuntimeSetup";
 import { useSessionHistory } from "./hooks/useSessionHistory";
 import { useTutorConversation } from "./hooks/useTutorConversation";
+import { getLatestAssessment } from "./native/assessment";
 import "./App.css";
 
 function App() {
   const [activePage, setActivePage] = useState<AppPage>("conversation");
+  const [estimatedLevel, setEstimatedLevel] = useState<string | undefined>();
+
+  const refreshEstimatedLevel = useCallback(() => {
+    void getLatestAssessment()
+      .then((latest) => setEstimatedLevel(latest?.estimatedLevel))
+      .catch(() => setEstimatedLevel(undefined));
+  }, []);
+
+  useEffect(() => {
+    refreshEstimatedLevel();
+  }, [refreshEstimatedLevel]);
   const {
     healthState,
     reloadTranscriptionSetup,
@@ -142,6 +155,7 @@ function App() {
     >
       <AppHeader
         activePage={activePage}
+        estimatedLevel={estimatedLevel}
         healthState={healthState}
         navigationDisabled={voiceBusy}
         onNavigate={setActivePage}
@@ -180,6 +194,14 @@ function App() {
             thinking={conversation.thinking}
           />
         </>
+      ) : activePage === "assessment" ? (
+        <AssessmentPage
+          disabled={
+            healthState.status !== "ready" || !transcriptionReady || !tutorReady
+          }
+          disabledHint={voiceDisabledHint}
+          onAssessmentCompleted={refreshEstimatedLevel}
+        />
       ) : activePage === "history" ? (
         <HistoryPage />
       ) : (
