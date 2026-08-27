@@ -3,7 +3,6 @@ import {
   fireEvent,
   screen,
   waitFor,
-  within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
@@ -375,8 +374,7 @@ describe("English Coach shell", () => {
         ffmpegExecutablePath: "ffmpeg",
       }),
     );
-    const settingsPage = document.querySelector(".settings-page") as HTMLElement;
-    expect(await within(settingsPage).findByText("Ready")).toBeInTheDocument();
+    expect(await screen.findByText("Ready")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Conversation" }));
     expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
   });
@@ -437,9 +435,8 @@ describe("English Coach shell", () => {
     expect(await screen.findByLabelText("Ollama URL")).toHaveValue(
       "http://127.0.0.1:11434",
     );
-    fireEvent.change(screen.getByLabelText("Tutor model"), {
-      target: { value: "qwen3.5:9b" },
-    });
+    fireEvent.click(screen.getByLabelText("Tutor model"));
+    fireEvent.click(await screen.findByText("qwen3.5:9b — 9B"));
     fireEvent.click(
       screen.getByRole("button", { name: "Save and verify tutor" }),
     );
@@ -452,8 +449,7 @@ describe("English Coach shell", () => {
         repairIntensity: "balanced",
       }),
     );
-    const tutorSettingsPage = document.querySelector(".settings-page") as HTMLElement;
-    expect(await within(tutorSettingsPage).findByText("Ready")).toBeInTheDocument();
+    expect(await screen.findByText("Ready")).toBeInTheDocument();
   });
 
   it("opens the History tab and lists recent sessions", async () => {
