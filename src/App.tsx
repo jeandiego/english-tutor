@@ -18,7 +18,6 @@ import { useSessionHistory } from "./hooks/useSessionHistory";
 import { useTutorConversation } from "./hooks/useTutorConversation";
 import { getLatestAssessment } from "./native/assessment";
 import { assessmentKeys } from "./queryKeys/assessment";
-import "./App.css";
 
 function App() {
   const [activePage, setActivePage] = useState<AppPage>("conversation");
