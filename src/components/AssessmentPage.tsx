@@ -7,6 +7,10 @@ import type {
   AssessmentSummary,
   AssessmentSummaryText,
 } from "../types/assessment";
+import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card, CardContent, CardHeader } from "./ui/card";
 import { TalkControl } from "./TalkControl";
 
 type AssessmentPageProps = {
@@ -38,7 +42,16 @@ function confidenceLabel(confidence: number): string {
 }
 
 function LevelChip({ level }: { level: string }) {
-  return <span className="local-status assessment-level-chip">{level}</span>;
+  return <Badge variant="secondary">{level}</Badge>;
+}
+
+function ThinkingStatus({ label }: { label: string }) {
+  return (
+    <div className="flex items-center gap-2 py-2" role="status">
+      <span aria-hidden="true" className="size-2 animate-pulse rounded-full bg-muted-foreground" />
+      <p className="text-caption text-muted-foreground">{label}</p>
+    </div>
+  );
 }
 
 function AssessmentResultView({
@@ -54,76 +67,90 @@ function AssessmentResultView({
       : `${result.overallLevel}${result.overallLevelModifier ?? ""}`;
 
   return (
-    <div className="assessment-result">
-      <div className="assessment-result__overall">
-        <LevelChip level={overallLevel} />
-        <span className="assessment-result__confidence">
-          {confidenceLabel(result.overallConfidence)}
-        </span>
-      </div>
-
-      <ul className="assessment-result__competencies">
-        {result.competencyProfiles.map((profile) => (
-          <li className="assessment-result__competency" key={profile.competency}>
-            <span className="assessment-result__competency-label">
-              {COMPETENCY_LABELS[profile.competency]}
-            </span>
-            <LevelChip
-              level={
-                profile.level === "insufficient_evidence"
-                  ? "Insufficient evidence"
-                  : `${profile.level}${profile.levelModifier ?? ""}`
-              }
-            />
-            <span className="assessment-result__competency-confidence">
-              {confidenceLabel(profile.confidence)}
-            </span>
-          </li>
-        ))}
-      </ul>
-
-      {summary && (
-        <div className="assessment-result__summary">
-          {summary.priorities.length > 0 && (
-            <div className="assessment-result__summary-section">
-              <h4>Priorities</h4>
-              <ul>
-                {summary.priorities.map((priority, index) => (
-                  <li key={index}>{priority}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {summary.recommendedSessions.length > 0 && (
-            <div className="assessment-result__summary-section">
-              <h4>Recommended next sessions</h4>
-              <ul>
-                {summary.recommendedSessions.map((session, index) => (
-                  <li key={index}>{session}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          <details className="assessment-result__notes">
-            <summary>Details for the tutor</summary>
-            <p>{summary.notesForTutor}</p>
-          </details>
+    <Card>
+      <CardContent className="flex flex-col gap-4 pt-4">
+        <div className="flex items-center gap-2">
+          <LevelChip level={overallLevel} />
+          <span className="text-caption text-muted-foreground">
+            {confidenceLabel(result.overallConfidence)}
+          </span>
         </div>
-      )}
-    </div>
+
+        <ul className="flex flex-col divide-y divide-border">
+          {result.competencyProfiles.map((profile) => (
+            <li
+              className="flex items-center justify-between gap-2 py-2 first:pt-0 last:pb-0"
+              key={profile.competency}
+            >
+              <span className="text-body text-foreground">
+                {COMPETENCY_LABELS[profile.competency]}
+              </span>
+              <div className="flex items-center gap-2">
+                <LevelChip
+                  level={
+                    profile.level === "insufficient_evidence"
+                      ? "Insufficient evidence"
+                      : `${profile.level}${profile.levelModifier ?? ""}`
+                  }
+                />
+                <span className="text-caption text-muted-foreground">
+                  {confidenceLabel(profile.confidence)}
+                </span>
+              </div>
+            </li>
+          ))}
+        </ul>
+
+        {summary && (
+          <div className="flex flex-col gap-3 border-t border-border pt-3">
+            {summary.priorities.length > 0 && (
+              <div className="flex flex-col gap-1">
+                <h4 className="text-caption font-medium text-muted-foreground">Priorities</h4>
+                <ul className="flex flex-col gap-0.5 text-body text-foreground">
+                  {summary.priorities.map((priority, index) => (
+                    <li key={index}>{priority}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {summary.recommendedSessions.length > 0 && (
+              <div className="flex flex-col gap-1">
+                <h4 className="text-caption font-medium text-muted-foreground">
+                  Recommended next sessions
+                </h4>
+                <ul className="flex flex-col gap-0.5 text-body text-foreground">
+                  {summary.recommendedSessions.map((session, index) => (
+                    <li key={index}>{session}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            <details className="text-caption text-muted-foreground">
+              <summary className="cursor-pointer">Details for the tutor</summary>
+              <p className="mt-1">{summary.notesForTutor}</p>
+            </details>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
 function PastAssessmentsList({ results }: { results: AssessmentSummary[] }) {
   if (results.length === 0) {
-    return <p className="history-empty">No past assessments yet.</p>;
+    return <p className="text-body text-muted-foreground">No past assessments yet.</p>;
   }
 
   return (
-    <ul className="history-sessions">
+    <ul className="flex flex-col divide-y divide-border">
       {results.map((entry) => (
-        <li className="history-session" key={entry.id}>
-          <span className="history-session__date">{formatDate(entry.startedAt)}</span>
+        <li
+          className="flex items-center justify-between py-2 first:pt-0 last:pb-0"
+          key={entry.id}
+        >
+          <span className="text-caption text-muted-foreground">
+            {formatDate(entry.startedAt)}
+          </span>
           <LevelChip level={levelLabel(entry.estimatedLevel)} />
         </li>
       ))}
@@ -175,60 +202,61 @@ export function AssessmentPage({
     disabled || session.status !== "awaitingAnswer";
 
   return (
-    <section className="assessment-page" aria-labelledby="assessment-title">
-      <h2 id="assessment-title">Assessment</h2>
+    <section
+      aria-labelledby="assessment-title"
+      className="mx-auto flex w-full max-w-2xl flex-col gap-6 overflow-y-auto p-6"
+    >
+      <h2 className="text-subheading font-semibold text-foreground" id="assessment-title">
+        Assessment
+      </h2>
 
       {session.status === "idle" && (
-        <div className="assessment-intro">
-          <p>
-            A short adaptive speaking assessment. Answer naturally — the next
-            question adapts to what you say, and it usually takes about
-            10–15 minutes.
-          </p>
-          <button
-            className="assessment-start-button"
-            disabled={disabled}
-            onClick={() => session.start()}
-            type="button"
-          >
-            Start assessment
-          </button>
-          {disabled && disabledHint && (
-            <p className="assessment-disabled-hint">{disabledHint}</p>
-          )}
-        </div>
+        <Card>
+          <CardContent className="flex flex-col items-start gap-4 pt-4">
+            <p className="text-body text-muted-foreground">
+              A short adaptive speaking assessment. Answer naturally — the next
+              question adapts to what you say, and it usually takes about
+              10–15 minutes.
+            </p>
+            <Button disabled={disabled} onClick={() => session.start()} type="button">
+              Start assessment
+            </Button>
+            {disabled && disabledHint && (
+              <p className="text-caption text-muted-foreground">{disabledHint}</p>
+            )}
+          </CardContent>
+        </Card>
       )}
 
       {showConversation && (
-        <div className="assessment-conversation">
-          <div className="conversation-log">
-            {session.exchanges.map((exchange) => (
-              <article className="conversation-exchange" key={exchange.id}>
-                <div className="conversation-turn conversation-turn--tutor">
-                  <p className="conversation-turn__speaker">Tutor</p>
-                  <p className="conversation-turn__text">{exchange.question}</p>
+        <div className="flex flex-1 flex-col gap-4 overflow-hidden">
+          <Card className="flex-1 overflow-y-auto">
+            <CardContent className="flex flex-col gap-4 pt-4">
+              {session.exchanges.map((exchange) => (
+                <div className="flex flex-col gap-3" key={exchange.id}>
+                  <div>
+                    <p className="text-caption font-medium text-muted-foreground">Tutor</p>
+                    <p className="text-body text-foreground">{exchange.question}</p>
+                  </div>
+                  <div>
+                    <p className="text-caption font-medium text-muted-foreground">You</p>
+                    <p className="text-body text-foreground">{exchange.answer}</p>
+                  </div>
                 </div>
-                <div className="conversation-turn conversation-turn--user">
-                  <p className="conversation-turn__speaker">You</p>
-                  <p className="conversation-turn__text">{exchange.answer}</p>
+              ))}
+              {session.currentQuestion && (
+                <div>
+                  <p className="text-caption font-medium text-muted-foreground">Tutor</p>
+                  <p className="text-body text-foreground">{session.currentQuestion}</p>
                 </div>
-              </article>
-            ))}
-            {session.currentQuestion && (
-              <article className="conversation-exchange">
-                <div className="conversation-turn conversation-turn--tutor">
-                  <p className="conversation-turn__speaker">Tutor</p>
-                  <p className="conversation-turn__text">{session.currentQuestion}</p>
-                </div>
-              </article>
-            )}
-            {(session.status === "asking" || session.status === "evaluating") && (
-              <div className="recording-status recording-status--processing" role="status">
-                <span className="recording-status__mark" aria-hidden="true" />
-                <p>{session.status === "asking" ? "Thinking" : "Evaluating your answer"}</p>
-              </div>
-            )}
-          </div>
+              )}
+              {(session.status === "asking" || session.status === "evaluating") && (
+                <ThinkingStatus
+                  label={session.status === "asking" ? "Thinking" : "Evaluating your answer"}
+                />
+              )}
+            </CardContent>
+          </Card>
           <TalkControl
             disabled={talkControlDisabled}
             disabledHint={disabledHint}
@@ -239,58 +267,55 @@ export function AssessmentPage({
         </div>
       )}
 
-      {session.status === "finalizing" && (
-        <div className="recording-status recording-status--processing" role="status">
-          <span className="recording-status__mark" aria-hidden="true" />
-          <p>Evaluating your answers…</p>
-        </div>
-      )}
+      {session.status === "finalizing" && <ThinkingStatus label="Evaluating your answers…" />}
 
       {session.status === "error" && session.error && (
-        <div className="recording-error" role="alert">
-          <p className="recording-error__title">Assessment unavailable</p>
-          <p>{session.error.message}</p>
-          {session.error.technicalMessage !== session.error.message && (
-            <details>
-              <summary>Technical details</summary>
-              <code>{session.error.technicalMessage}</code>
-            </details>
-          )}
-          <button
-            className="assessment-start-button"
-            onClick={() => session.retake()}
-            type="button"
-          >
+        <Alert variant="destructive">
+          <AlertTitle>Assessment unavailable</AlertTitle>
+          <AlertDescription className="flex flex-col gap-2">
+            <p>{session.error.message}</p>
+            {session.error.technicalMessage !== session.error.message && (
+              <details>
+                <summary className="cursor-pointer">Technical details</summary>
+                <code className="block whitespace-pre-wrap">
+                  {session.error.technicalMessage}
+                </code>
+              </details>
+            )}
+          </AlertDescription>
+          <Button className="mt-2 w-fit" onClick={() => session.retake()} size="sm" variant="outline">
             Try again
-          </button>
-        </div>
+          </Button>
+        </Alert>
       )}
 
       {session.status === "complete" && session.result && (
-        <div className="assessment-complete">
+        <div className="flex flex-col gap-4">
           <AssessmentResultView result={session.result} summary={session.summary} />
-          <button
-            className="assessment-start-button"
-            onClick={() => session.retake()}
-            type="button"
-          >
+          <Button className="w-fit" onClick={() => session.retake()} type="button" variant="outline">
             Retake assessment
-          </button>
+          </Button>
         </div>
       )}
 
-      <div className="assessment-history">
-        <h3>Past assessments</h3>
-        {pastResults.status === "loading" && <p className="history-empty">Loading…</p>}
-        {pastResults.status === "error" && (
-          <p className="history-empty" role="alert">
-            {pastResults.message}
-          </p>
-        )}
-        {pastResults.status === "loaded" && (
-          <PastAssessmentsList results={pastResults.results} />
-        )}
-      </div>
+      <Card>
+        <CardHeader>
+          <h3 className="text-body-lg font-medium text-foreground">Past assessments</h3>
+        </CardHeader>
+        <CardContent>
+          {pastResults.status === "loading" && (
+            <p className="text-body text-muted-foreground">Loading…</p>
+          )}
+          {pastResults.status === "error" && (
+            <p className="text-body text-destructive" role="alert">
+              {pastResults.message}
+            </p>
+          )}
+          {pastResults.status === "loaded" && (
+            <PastAssessmentsList results={pastResults.results} />
+          )}
+        </CardContent>
+      </Card>
     </section>
   );
 }
