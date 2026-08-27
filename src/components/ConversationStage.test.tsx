@@ -101,7 +101,9 @@ describe("ConversationStage corrections", () => {
       />,
     );
 
-    expect(document.querySelector(".tutor-coaching")).not.toBeInTheDocument();
+    expect(
+      document.querySelector('[data-testid="tutor-coaching"]'),
+    ).not.toBeInTheDocument();
   });
 
   it("keeps a correction attached to its own turn after a later turn starts", () => {
@@ -123,7 +125,7 @@ describe("ConversationStage corrections", () => {
       />,
     );
 
-    const coachingBlocks = document.querySelectorAll(".tutor-coaching");
+    const coachingBlocks = document.querySelectorAll('[data-testid="tutor-coaching"]');
     expect(coachingBlocks).toHaveLength(1);
 
     const firstExchange = screen
@@ -133,8 +135,8 @@ describe("ConversationStage corrections", () => {
       .getByText("That sounds like solid experience. What stack do you use most?")
       .closest("article");
 
-    expect(firstExchange?.querySelector(".tutor-coaching")).not.toBeNull();
-    expect(secondExchange?.querySelector(".tutor-coaching")).toBeNull();
+    expect(firstExchange?.querySelector('[data-testid="tutor-coaching"]')).not.toBeNull();
+    expect(secondExchange?.querySelector('[data-testid="tutor-coaching"]')).toBeNull();
   });
 });
 

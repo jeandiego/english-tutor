@@ -1,4 +1,5 @@
 import type { PressOwner, RecordingState } from "../hooks/usePushToTalk";
+import { cn } from "../lib/utils";
 
 type TalkControlProps = {
   disabled: boolean;
@@ -72,15 +73,21 @@ export function TalkControl({
     onEnd("pointer");
   };
 
+  const isRecording = !speaking && !thinking && state.status === "recording";
+
   return (
-    <section className="talk-control-region" aria-label="Voice controls">
+    <section aria-label="Voice controls" className="flex shrink-0 justify-center border-t border-border bg-card p-6">
       <button
         aria-describedby="talk-control-hint"
         aria-label={label}
         aria-pressed={isHeld}
-        className={`talk-control talk-control--${
-          speaking ? "speaking" : thinking ? "thinking" : state.status
-        }`}
+        className={cn(
+          "flex w-full max-w-2xl flex-col items-center gap-1 rounded-[4px] border border-foreground bg-card px-6 py-4 text-center transition-colors",
+          "hover:enabled:bg-accent",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
+          "disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground",
+          isRecording && "border-foreground bg-foreground text-background hover:enabled:bg-foreground",
+        )}
         disabled={isDisabled}
         onClick={(event) => {
           event.preventDefault();
@@ -107,8 +114,11 @@ export function TalkControl({
         onPointerUp={finishPointerPress}
         type="button"
       >
-        <span className="talk-control__label">{label}</span>
-        <span className="talk-control__hint" id="talk-control-hint">
+        <span className="text-body-lg font-medium">{label}</span>
+        <span
+          className={cn("text-caption text-muted-foreground", isRecording && "text-background/80")}
+          id="talk-control-hint"
+        >
           {hint}
         </span>
       </button>

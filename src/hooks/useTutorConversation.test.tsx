@@ -433,7 +433,7 @@ describe("useTutorConversation", () => {
         await screen.findByText("Great, that's correct — what happened next?"),
       ).toBeInTheDocument();
       expect(updateRepairEventOutcome).toHaveBeenCalledWith({ eventId: 9, outcome: "improved" });
-      expect(screen.getByText("✓ Fixed")).toBeInTheDocument();
+      expect(screen.getByText("Fixed")).toBeInTheDocument();
       expect(screen.queryByRole("button", { name: "Skip" })).not.toBeInTheDocument();
     });
 

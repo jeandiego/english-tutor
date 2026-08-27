@@ -1,3 +1,10 @@
+import {
+  IconChevronDown,
+  IconCheck,
+  IconRefresh,
+  IconSparkles,
+  IconX,
+} from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import type { RecordedAudio } from "../audio/recorder";
 import type {
@@ -9,6 +16,11 @@ import type { RecordingState } from "../hooks/usePushToTalk";
 import { TranscriptionError } from "../native/transcription";
 import type { ConversationRepairMeta, RepairOutcome, RepairPriority } from "../types/repair";
 import type { BetterExpression, TutorCorrection, TutorTurn } from "../types/tutor";
+import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
+import { Card, CardContent } from "./ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { cn } from "../lib/utils";
 
 type ConversationStageProps = {
   state: RecordingState;
@@ -22,72 +34,6 @@ type ConversationStageProps = {
   showCoaching?: boolean;
   onSkipRepair?: () => void;
 };
-
-function ReplayIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      viewBox="0 0 20 20"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M15.5 6.5A6 6 0 1 0 16.9 11"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.6"
-      />
-      <path
-        d="M15.5 3v3.9h-3.9"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.6"
-      />
-    </svg>
-  );
-}
-
-function SparkleIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      viewBox="0 0 20 20"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M10 2.5l1.4 3.9 3.9 1.4-3.9 1.4L10 13.1l-1.4-3.9-3.9-1.4 3.9-1.4L10 2.5z"
-        stroke="currentColor"
-        strokeLinejoin="round"
-        strokeWidth="1.3"
-      />
-    </svg>
-  );
-}
-
-function ChevronIcon({ className }: { className?: string }) {
-  return (
-    <svg
-      aria-hidden="true"
-      className={className}
-      fill="none"
-      viewBox="0 0 12 12"
-      xmlns="http://www.w3.org/2000/svg"
-    >
-      <path
-        d="M2.5 4.5L6 8L9.5 4.5"
-        stroke="currentColor"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        strokeWidth="1.5"
-      />
-    </svg>
-  );
-}
 
 function formatDuration(durationMs: number): string {
   if (durationMs < 1000) {
@@ -142,6 +88,33 @@ function capitalize(value: string): string {
   return value.length === 0 ? value : value.charAt(0).toUpperCase() + value.slice(1);
 }
 
+function StatusRow({
+  label,
+  meta,
+  pulse = true,
+  role = "status",
+}: {
+  label: string;
+  meta?: string;
+  pulse?: boolean;
+  role?: "status" | undefined;
+}) {
+  return (
+    <div className="flex items-center gap-2 py-2" role={role}>
+      <span
+        aria-hidden="true"
+        className={cn("size-2 rounded-full bg-muted-foreground", pulse && "animate-pulse")}
+      />
+      <p className="text-body text-foreground">{label}</p>
+      {meta && (
+        <span aria-hidden="true" className="text-caption text-muted-foreground">
+          {meta}
+        </span>
+      )}
+    </div>
+  );
+}
+
 function RecordingPlayback({
   announce = false,
   recording,
@@ -157,26 +130,27 @@ function RecordingPlayback({
       : recording.mimeType;
 
   return (
-    <div className="recording-result" role={announce ? "status" : undefined}>
-      <p className="recording-result__title">{title}</p>
+    <div className="flex flex-col gap-2" role={announce ? "status" : undefined}>
+      <p className="text-caption font-medium text-muted-foreground">{title}</p>
       <audio
         aria-label={`Play ${title.toLowerCase()}`}
+        className="w-full"
         controls
         preload="metadata"
         src={recording.playbackUrl}
       />
-      <dl className="recording-metadata" aria-label="Recording details">
-        <div>
+      <dl aria-label="Recording details" className="flex gap-4 text-caption text-muted-foreground">
+        <div className="flex gap-1">
           <dt>Duration</dt>
-          <dd>{formatDuration(recording.durationMs)}</dd>
+          <dd className="text-foreground">{formatDuration(recording.durationMs)}</dd>
         </div>
-        <div>
+        <div className="flex gap-1">
           <dt>Format</dt>
-          <dd>{displayMimeType}</dd>
+          <dd className="text-foreground">{displayMimeType}</dd>
         </div>
-        <div>
+        <div className="flex gap-1">
           <dt>Size</dt>
-          <dd>{formatSize(recording.sizeBytes)}</dd>
+          <dd className="text-foreground">{formatSize(recording.sizeBytes)}</dd>
         </div>
       </dl>
     </div>
@@ -185,40 +159,23 @@ function RecordingPlayback({
 
 function StageContent({ loopState, state }: ConversationStageProps) {
   if (loopState === "speaking") {
-    return (
-      <div className="recording-status recording-status--processing" role="status">
-        <span className="recording-status__mark" aria-hidden="true" />
-        <p>Speaking</p>
-        <span className="recording-status__time">Tutor reply only</span>
-      </div>
-    );
+    return <StatusRow label="Speaking" meta="Tutor reply only" />;
   }
 
   if (loopState === "thinking") {
-    return (
-      <div className="recording-status recording-status--processing" role="status">
-        <span className="recording-status__mark" aria-hidden="true" />
-        <p>Thinking</p>
-        <span className="recording-status__time">Your transcript stays on this Mac</span>
-      </div>
-    );
+    return <StatusRow label="Thinking" meta="Your transcript stays on this Mac" />;
   }
 
   if (state.status === "requesting") {
-    return (
-      <div className="recording-status" role="status">
-        <span className="recording-status__mark" aria-hidden="true" />
-        <p>Waiting for microphone access</p>
-      </div>
-    );
+    return <StatusRow label="Waiting for microphone access" pulse={false} />;
   }
 
   if (state.status === "recording") {
     return (
-      <div className="recording-status recording-status--active" role="status">
-        <span className="recording-status__mark" aria-hidden="true" />
-        <p>Listening</p>
-        <span className="recording-status__time" aria-hidden="true">
+      <div className="flex items-center gap-2 py-2" role="status">
+        <span aria-hidden="true" className="size-2 rounded-full bg-destructive" />
+        <p className="text-body text-foreground">Listening</p>
+        <span aria-hidden="true" className="text-caption text-muted-foreground">
           {formatElapsedTime(state.elapsedMs)}
         </span>
       </div>
@@ -226,26 +183,17 @@ function StageContent({ loopState, state }: ConversationStageProps) {
   }
 
   if (state.status === "transcribing") {
-    return (
-      <div className="recording-status recording-status--processing" role="status">
-        <span className="recording-status__mark" aria-hidden="true" />
-        <p>Transcribing locally</p>
-        <span className="recording-status__time">Your audio stays on this Mac</span>
-      </div>
-    );
+    return <StatusRow label="Transcribing locally" meta="Your audio stays on this Mac" />;
   }
 
   if (state.status === "transcribed") {
     return (
-      <article className="conversation-turn conversation-turn--user user-turn" aria-label="Your latest conversation turn">
-        <p className="conversation-turn__speaker">You</p>
-        <p className="conversation-turn__text" role="status">
+      <article aria-label="Your latest conversation turn" className="flex flex-col gap-2">
+        <p className="text-caption font-medium text-muted-foreground">You</p>
+        <p className="text-body text-foreground" role="status">
           {state.text}
         </p>
-        <RecordingPlayback
-          recording={state.recording}
-          title="Recorded audio"
-        />
+        <RecordingPlayback recording={state.recording} title="Recorded audio" />
       </article>
     );
   }
@@ -253,17 +201,15 @@ function StageContent({ loopState, state }: ConversationStageProps) {
   if (state.status === "error") {
     const isTranscriptionError = state.error instanceof TranscriptionError;
     return (
-      <div className="recording-error" role="alert">
-        <p className="recording-error__title">
-          {isTranscriptionError
-            ? "Transcription unavailable"
-            : "Microphone unavailable"}
+      <div className="flex flex-col gap-2 rounded-lg bg-destructive/10 p-3" role="alert">
+        <p className="text-body font-medium text-destructive">
+          {isTranscriptionError ? "Transcription unavailable" : "Microphone unavailable"}
         </p>
-        <p>{state.error.message}</p>
+        <p className="text-body text-destructive">{state.error.message}</p>
         {state.error.technicalMessage !== state.error.message && (
-          <details>
-            <summary>Technical details</summary>
-            <code>{state.error.technicalMessage}</code>
+          <details className="text-caption text-destructive/80">
+            <summary className="cursor-pointer">Technical details</summary>
+            <code className="block whitespace-pre-wrap">{state.error.technicalMessage}</code>
           </details>
         )}
         {state.recording && (
@@ -277,9 +223,11 @@ function StageContent({ loopState, state }: ConversationStageProps) {
   }
 
   return (
-    <div className="recording-status" role={loopState === "idle" ? "status" : undefined}>
-      <span className="recording-status__mark" aria-hidden="true" />
-      <p>{loopState === "idle" ? "Ready" : "Your conversation will appear here"}</p>
+    <div className="flex items-center gap-2 py-2" role={loopState === "idle" ? "status" : undefined}>
+      <span aria-hidden="true" className="size-2 rounded-full bg-muted-foreground" />
+      <p className="text-body text-foreground">
+        {loopState === "idle" ? "Ready" : "Your conversation will appear here"}
+      </p>
     </div>
   );
 }
@@ -294,23 +242,21 @@ function Corrections({ corrections }: { corrections: TutorCorrection[] }) {
   }
 
   return (
-    <ul className="corrections" aria-label="Corrections for this turn">
+    <ul aria-label="Corrections for this turn" className="flex flex-col gap-3">
       {corrections.map((correction, index) => (
-        <li className="correction" key={index}>
-          <span className="tip-chip">
+        <li className="flex flex-col gap-1.5 rounded-lg bg-accent p-3" key={index}>
+          <Badge variant="outline">
             {capitalize(correction.category)} · {capitalize(correction.severity)}
-          </span>
-          <p className="correction__row">
-            <span className="correction__row-label">You said</span>
-            <span className="correction__quote">“{correction.original}”</span>
+          </Badge>
+          <p className="text-body">
+            <span className="text-muted-foreground">You said </span>
+            <span className="text-foreground">“{correction.original}”</span>
           </p>
-          <p className="correction__row">
-            <span className="correction__row-label">Better</span>
-            <span className="correction__quote correction__quote--better">
-              “{correction.correction}”
-            </span>
+          <p className="text-body">
+            <span className="text-muted-foreground">Better </span>
+            <span className="font-medium text-success">“{correction.correction}”</span>
           </p>
-          <p className="correction__explanation">{correction.explanation}</p>
+          <p className="text-caption text-muted-foreground">{correction.explanation}</p>
         </li>
       ))}
     </ul>
@@ -323,23 +269,21 @@ function BetterExpressions({ expressions }: { expressions: BetterExpression[] })
   }
 
   return (
-    <ul className="better-expressions" aria-label="Better ways to say this">
+    <ul aria-label="Better ways to say this" className="flex flex-col gap-3">
       {expressions.map((expression, index) => (
-        <li className="better-expression" key={index}>
+        <li className="flex flex-col gap-1.5 rounded-lg bg-accent p-3" key={index}>
           {expression.original && (
-            <p className="better-expression__row">
-              <span className="better-expression__row-label">Instead of</span>
-              <span className="better-expression__quote">“{expression.original}”</span>
+            <p className="text-body">
+              <span className="text-muted-foreground">Instead of </span>
+              <span className="text-foreground">“{expression.original}”</span>
             </p>
           )}
-          <p className="better-expression__row">
-            <span className="better-expression__row-label">Try</span>
-            <span className="better-expression__quote better-expression__quote--better">
-              “{expression.suggestion}”
-            </span>
+          <p className="text-body">
+            <span className="text-muted-foreground">Try </span>
+            <span className="font-medium text-success">“{expression.suggestion}”</span>
           </p>
           {expression.explanation && (
-            <p className="better-expression__explanation">{expression.explanation}</p>
+            <p className="text-caption text-muted-foreground">{expression.explanation}</p>
           )}
         </li>
       ))}
@@ -356,30 +300,24 @@ function TutorCoaching({ tutorTurn }: { tutorTurn: TutorTurn }) {
   }
 
   return (
-    <div className="tutor-coaching">
-      <button
+    <Collapsible data-testid="tutor-coaching" onOpenChange={setExpanded} open={expanded}>
+      <CollapsibleTrigger
         aria-expanded={expanded}
-        className="tutor-coaching__toggle"
-        onClick={() => setExpanded((value) => !value)}
-        type="button"
+        className="flex w-full items-center justify-between gap-2 text-caption font-medium text-muted-foreground hover:text-foreground"
       >
-        <span className="tutor-coaching__toggle-label">
-          <SparkleIcon className="tutor-coaching__toggle-icon" />
+        <span className="flex items-center gap-1.5">
+          <IconSparkles className="size-3.5" />
           {expanded ? "Hide" : "Show"} {count} tip{count > 1 ? "s" : ""}
         </span>
-        <ChevronIcon
-          className={
-            expanded ? "tutor-coaching__chevron is-open" : "tutor-coaching__chevron"
-          }
+        <IconChevronDown
+          className={cn("size-3.5 transition-transform", expanded && "rotate-180")}
         />
-      </button>
-      {expanded && (
-        <div className="tutor-coaching__body">
-          <Corrections corrections={tutorTurn.corrections} />
-          <BetterExpressions expressions={tutorTurn.betterExpressions} />
-        </div>
-      )}
-    </div>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 flex flex-col gap-3">
+        <Corrections corrections={tutorTurn.corrections} />
+        <BetterExpressions expressions={tutorTurn.betterExpressions} />
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -393,9 +331,15 @@ const REPAIR_PRIORITY_LABELS: Record<RepairPriority, string> = {
 };
 
 const REPAIR_OUTCOME_LABELS: Record<RepairOutcome, string> = {
-  improved: "✓ Fixed",
+  improved: "Fixed",
   failed: "Still tricky",
   skipped: "Skipped",
+};
+
+const REPAIR_OUTCOME_ICONS: Record<RepairOutcome, typeof IconCheck | undefined> = {
+  improved: IconCheck,
+  failed: undefined,
+  skipped: undefined,
 };
 
 function RepairPrompt({
@@ -408,13 +352,13 @@ function RepairPrompt({
   repair: ConversationRepairMeta;
 }) {
   return (
-    <div className="repair-prompt" role="status">
-      <span className="tip-chip tip-chip--repair">
+    <div className="flex items-center gap-2" role="status">
+      <Badge variant="warning">
         {REPAIR_PRIORITY_LABELS[repair.priority]} · Your turn to try again
-      </span>
+      </Badge>
       {onSkip && (
         <button
-          className="repair-prompt__skip"
+          className="text-caption font-medium text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
           disabled={disabled}
           onClick={onSkip}
           type="button"
@@ -428,25 +372,31 @@ function RepairPrompt({
 
 function QuickCorrection({ repair }: { repair: ConversationRepairMeta }) {
   return (
-    <div className="quick-correction">
-      <span className="tip-chip">{REPAIR_PRIORITY_LABELS[repair.priority]} · Quick fix</span>
-      <p className="quick-correction__row">
-        <span className="quick-correction__quote">“{repair.original}”</span>
-        <span aria-hidden="true"> → </span>
-        <span className="quick-correction__quote quick-correction__quote--better">
-          “{repair.suggested}”
+    <div className="flex flex-col gap-1.5 rounded-lg bg-accent p-3">
+      <Badge variant="outline">{REPAIR_PRIORITY_LABELS[repair.priority]} · Quick fix</Badge>
+      <p className="text-body">
+        <span className="text-foreground">“{repair.original}”</span>
+        <span aria-hidden="true" className="text-muted-foreground">
+          {" "}
+          →{" "}
         </span>
+        <span className="font-medium text-success">“{repair.suggested}”</span>
       </p>
-      <p className="quick-correction__explanation">{repair.microExplanation}</p>
+      <p className="text-caption text-muted-foreground">{repair.microExplanation}</p>
     </div>
   );
 }
 
 function RepairOutcomeBadge({ outcome }: { outcome: RepairOutcome }) {
+  const Icon = REPAIR_OUTCOME_ICONS[outcome];
   return (
-    <span className={`repair-outcome repair-outcome--${outcome}`} role="status">
+    <Badge
+      role="status"
+      variant={outcome === "improved" ? "success" : outcome === "failed" ? "destructive" : "secondary"}
+    >
+      {Icon && <Icon data-icon="inline-start" />}
       {REPAIR_OUTCOME_LABELS[outcome]}
-    </span>
+    </Badge>
   );
 }
 
@@ -472,21 +422,20 @@ function ReplayButton({
   const isDisabled = disabled || isThisReplaying || otherReplaying;
 
   return (
-    <span className="replay">
-      <button
+    <span className="inline-flex flex-col gap-1">
+      <Button
         aria-label={isThisReplaying ? "Replaying tutor reply" : "Replay tutor reply"}
-        className={
-          isThisReplaying ? "replay-button replay-button--active" : "replay-button"
-        }
         disabled={isDisabled}
         onClick={() => onReplay(exchangeId)}
+        size="sm"
         type="button"
+        variant="outline"
       >
-        <ReplayIcon className="replay-button__icon" />
-        <span>{isThisReplaying ? "Replaying…" : "Replay"}</span>
-      </button>
+        <IconRefresh className={cn(isThisReplaying && "animate-spin")} data-icon="inline-start" />
+        {isThisReplaying ? "Replaying…" : "Replay"}
+      </Button>
       {hasError && replayState?.error && (
-        <span className="replay__error" role="alert">
+        <span className="text-caption text-destructive" role="alert">
           {replayState.error.message}
         </span>
       )}
@@ -500,7 +449,7 @@ function StorageWarning({ message }: { message?: string }) {
   }
 
   return (
-    <p className="storage-warning" role="status">
+    <p className="text-caption text-warning" role="status">
       {message}
     </p>
   );
@@ -514,15 +463,18 @@ function HistoryWarningBanner({ message }: { message?: string }) {
   }
 
   return (
-    <div className="history-warning" role="status">
-      <p>{message}</p>
+    <div
+      className="flex items-center justify-between gap-3 rounded-lg bg-warning/10 px-3 py-2"
+      role="status"
+    >
+      <p className="text-body text-warning">{message}</p>
       <button
         aria-label="Dismiss"
-        className="history-warning__dismiss"
+        className="rounded-[4px] p-1 text-warning hover:bg-warning/20"
         onClick={() => setDismissed(true)}
         type="button"
       >
-        Dismiss
+        <IconX className="size-4" />
       </button>
     </div>
   );
@@ -537,13 +489,13 @@ function TutorFailure({ exchange }: { exchange: ConversationExchange }) {
     exchange.errorSource === "speech" ? "Speech unavailable" : "Tutor unavailable";
 
   return (
-    <div className="tutor-turn-error" role="alert">
-      <p className="tutor-turn-error__title">{title}</p>
-      <p>{exchange.error.message}</p>
+    <div className="flex flex-col gap-1.5 rounded-lg bg-destructive/10 p-3" role="alert">
+      <p className="text-body font-medium text-destructive">{title}</p>
+      <p className="text-body text-destructive">{exchange.error.message}</p>
       {exchange.error.technicalMessage !== exchange.error.message && (
-        <details>
-          <summary>Technical details</summary>
-          <code>{exchange.error.technicalMessage}</code>
+        <details className="text-caption text-destructive/80">
+          <summary className="cursor-pointer">Technical details</summary>
+          <code className="block whitespace-pre-wrap">{exchange.error.technicalMessage}</code>
         </details>
       )}
     </div>
@@ -583,18 +535,18 @@ function ConversationLog({
   }, [exchanges, speaking, thinking, state.status]);
 
   return (
-    <div className="conversation-log" role="log" aria-live="polite">
+    <div aria-live="polite" className="flex flex-1 flex-col gap-6 overflow-y-auto" role="log">
       {exchanges.map((exchange, index) => {
         const isLatest = index === exchanges.length - 1;
         const latestRecording =
           isLatest && state.status === "transcribed" ? state.recording : undefined;
 
         return (
-          <article className="conversation-exchange" key={exchange.id}>
+          <article className="flex flex-col gap-3 border-b border-border pb-6 last:border-0" key={exchange.id}>
             {exchange.transcript && (
-              <div className="conversation-turn conversation-turn--user">
-                <p className="conversation-turn__speaker">You</p>
-                <p className="conversation-turn__text">{exchange.transcript}</p>
+              <div className="flex flex-col gap-1.5">
+                <p className="text-caption font-medium text-muted-foreground">You</p>
+                <p className="text-body text-foreground">{exchange.transcript}</p>
                 {latestRecording && (
                   <RecordingPlayback recording={latestRecording} title="Recorded audio" />
                 )}
@@ -602,16 +554,14 @@ function ConversationLog({
             )}
 
             {exchange.tutorTurn && (
-              <div className="conversation-turn conversation-turn--tutor">
-                <p className="conversation-turn__speaker">Tutor</p>
-                <div className="conversation-turn__body">
-                  <p className="conversation-turn__text">
-                    {exchange.tutorTurn.reply}
-                  </p>
+              <div className="flex flex-col gap-1.5">
+                <p className="text-caption font-medium text-muted-foreground">Tutor</p>
+                <div className="flex flex-col gap-2">
+                  <p className="text-body text-foreground">{exchange.tutorTurn.reply}</p>
                   {(exchange.responseTimeMs !== undefined || onReplay) && (
-                    <div className="conversation-turn__actions">
+                    <div className="flex flex-wrap items-center gap-3">
                       {exchange.responseTimeMs !== undefined && (
-                        <p className="conversation-turn__meta">
+                        <p className="text-caption text-muted-foreground">
                           Responded in{" "}
                           <time dateTime={`PT${exchange.responseTimeMs / 1000}S`}>
                             {formatTutorResponseTime(exchange.responseTimeMs)}
@@ -668,19 +618,11 @@ function ConversationLog({
             <StorageWarning message={exchange.storageWarning} />
 
             {isLatest && thinking && !exchange.tutorTurn && !exchange.error && (
-              <div className="recording-status recording-status--processing tutor-thinking" role="status">
-                <span className="recording-status__mark" aria-hidden="true" />
-                <p>Thinking</p>
-                <span className="recording-status__time">Your transcript stays on this Mac</span>
-              </div>
+              <StatusRow label="Thinking" meta="Your transcript stays on this Mac" />
             )}
 
             {isLatest && speaking && exchange.tutorTurn && !exchange.error && (
-              <div className="recording-status recording-status--processing tutor-thinking" role="status">
-                <span className="recording-status__mark" aria-hidden="true" />
-                <p>Speaking</p>
-                <span className="recording-status__time">Tutor reply only</span>
-              </div>
+              <StatusRow label="Speaking" meta="Tutor reply only" />
             )}
 
             <TutorFailure exchange={exchange} />
@@ -689,7 +631,7 @@ function ConversationLog({
       })}
 
       {showTransientState && (
-        <div className="conversation-log__transient">
+        <div>
           <StageContent loopState={loopState} state={state} />
         </div>
       )}
@@ -711,25 +653,34 @@ function ConversationStageContent({
   historyWarning,
 }: ConversationStageProps) {
   return (
-    <section className="conversation-stage" aria-labelledby="conversation-title">
-      <h2 id="conversation-title" className="visually-hidden">
+    <section
+      aria-labelledby="conversation-title"
+      className="flex flex-1 flex-col gap-4 overflow-hidden p-6"
+    >
+      <h2 className="sr-only" id="conversation-title">
         Conversation
       </h2>
       <HistoryWarningBanner message={historyWarning} />
       {exchanges.length > 0 ? (
-        <ConversationLog
-          exchanges={exchanges}
-          loopState={loopState}
-          onReplay={onReplay}
-          onSkipRepair={onSkipRepair}
-          replayState={replayState}
-          showCoaching={showCoaching}
-          speaking={speaking}
-          thinking={thinking}
-          state={state}
-        />
+        <Card className="flex flex-1 flex-col overflow-hidden">
+          <CardContent className="flex flex-1 flex-col overflow-hidden pt-4">
+            <ConversationLog
+              exchanges={exchanges}
+              loopState={loopState}
+              onReplay={onReplay}
+              onSkipRepair={onSkipRepair}
+              replayState={replayState}
+              showCoaching={showCoaching}
+              speaking={speaking}
+              thinking={thinking}
+              state={state}
+            />
+          </CardContent>
+        </Card>
       ) : (
-        <StageContent loopState={loopState} state={state} />
+        <div className="flex flex-1 items-center justify-center">
+          <StageContent loopState={loopState} state={state} />
+        </div>
       )}
     </section>
   );
