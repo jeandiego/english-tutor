@@ -4,7 +4,7 @@ import type {
   TranscriptionSetupState,
 } from "../types/transcription";
 import type { TtsProviderId, TtsSettings, TtsSetupState } from "../types/tts";
-import type { TutorSettings, TutorSetupState } from "../types/tutor";
+import type { RepairIntensity, TutorSettings, TutorSetupState } from "../types/tutor";
 
 type SettingsPageProps = {
   transcriptionState: TranscriptionSetupState;
@@ -35,6 +35,28 @@ const TTS_PROVIDER_LABELS: Record<TtsProviderId, string> = {
   kokoro_local: "Kokoro (local)",
   elevenlabs: "ElevenLabs",
 };
+
+const REPAIR_INTENSITY_OPTIONS: Array<{
+  value: RepairIntensity;
+  label: string;
+  description: string;
+}> = [
+  {
+    value: "light",
+    label: "Light",
+    description: "Only flags errors that would genuinely confuse a listener.",
+  },
+  {
+    value: "balanced",
+    label: "Balanced",
+    description: "Flags meaningful or recurring errors without interrupting often.",
+  },
+  {
+    value: "strict",
+    label: "Strict",
+    description: "Flags most errors worth attention, including smaller slips.",
+  },
+];
 
 const DEPENDENCY_NAMES: Record<DependencyCheck["dependency"], string> = {
   whisperExecutable: "Whisper runtime",
@@ -471,6 +493,38 @@ export function SettingsPage({
                 <small>
                   Only affects models that support extended thinking. Turning
                   it off usually replies faster and raises tokens/sec.
+                </small>
+              </span>
+            </div>
+
+            <div className="settings-field">
+              <label className="settings-field__label" htmlFor="repair-intensity">
+                Repair intensity
+              </label>
+              <span className="settings-field__control">
+                <select
+                  disabled={tutorSaving}
+                  id="repair-intensity"
+                  onChange={(event) =>
+                    onTutorDraftChange({
+                      ...tutorDraft,
+                      repairIntensity: event.target.value as RepairIntensity,
+                    })
+                  }
+                  value={tutorDraft.repairIntensity}
+                >
+                  {REPAIR_INTENSITY_OPTIONS.map((option) => (
+                    <option key={option.value} value={option.value}>
+                      {option.label}
+                    </option>
+                  ))}
+                </select>
+                <small>
+                  {
+                    REPAIR_INTENSITY_OPTIONS.find(
+                      (option) => option.value === tutorDraft.repairIntensity,
+                    )?.description
+                  }
                 </small>
               </span>
             </div>

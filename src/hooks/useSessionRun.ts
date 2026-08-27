@@ -14,6 +14,11 @@ import {
 } from "../native/history";
 import { applySessionToLearnerProfile as defaultApplySessionToLearnerProfile } from "../native/learnerProfile";
 import {
+  evaluateRepairOpportunity as defaultEvaluateRepair,
+  recordRepairEvent as defaultRecordRepairEvent,
+  updateRepairEventOutcome as defaultUpdateRepairEventOutcome,
+} from "../native/repair";
+import {
   openGuidedSession as defaultOpenGuidedSession,
   synthesizeSessionSummary as defaultSynthesizeSessionSummary,
   toSessionError,
@@ -25,6 +30,14 @@ import {
   type DurationPresetId,
   type SessionTemplate,
 } from "../sessions/catalog";
+import type {
+  EvaluateRepairRequest,
+  RecordRepairEventRequest,
+  RepairEvaluation,
+  RepairEventSummary,
+  RepairIntensity,
+  UpdateRepairEventOutcomeRequest,
+} from "../types/repair";
 import type { TranscriptionResult } from "../types/transcription";
 import type {
   BetterExpression,
@@ -60,6 +73,10 @@ type UseSessionRunOptions = {
   transcribe?: (recording: RecordedAudio) => Promise<TranscriptionResult>;
   respond?: (request: TutorTurnRequest) => Promise<TutorTurn>;
   speak?: (reply: string) => Promise<void>;
+  repairIntensity?: RepairIntensity;
+  evaluateRepair?: (request: EvaluateRepairRequest) => Promise<RepairEvaluation>;
+  recordRepairEvent?: (request: RecordRepairEventRequest) => Promise<number>;
+  updateRepairEventOutcome?: (request: UpdateRepairEventOutcomeRequest) => Promise<void>;
   startSession?: (request: {
     scenarioId: string;
     difficulty?: CefrLevel;
@@ -87,6 +104,10 @@ export function useSessionRun({
   transcribe,
   respond,
   speak = speakTutorReply,
+  repairIntensity = "balanced",
+  evaluateRepair = defaultEvaluateRepair,
+  recordRepairEvent = defaultRecordRepairEvent,
+  updateRepairEventOutcome = defaultUpdateRepairEventOutcome,
   startSession = defaultStartSession,
   completeSession = defaultCompleteSession,
   openGuidedSession = defaultOpenGuidedSession,
@@ -121,6 +142,10 @@ export function useSessionRun({
     sessionId: conversationSessionId,
     learnerContext: conversationLearnerContext,
     openingReply,
+    repairIntensity,
+    evaluateRepair,
+    recordRepairEvent,
+    updateRepairEventOutcome,
   });
 
   const turnCount = conversation.exchanges.filter(
@@ -221,6 +246,7 @@ export function useSessionRun({
     const turns: TutorMessage[] = [];
     const corrections: TutorCorrection[] = [];
     const betterExpressions: BetterExpression[] = [];
+    const repairEvents: RepairEventSummary[] = [];
     for (const exchange of conversation.exchanges) {
       if (exchange.transcript) {
         turns.push({ role: "user", content: exchange.transcript });
@@ -229,6 +255,14 @@ export function useSessionRun({
         turns.push({ role: "assistant", content: exchange.tutorTurn.reply });
         corrections.push(...exchange.tutorTurn.corrections);
         betterExpressions.push(...exchange.tutorTurn.betterExpressions);
+      }
+      if (exchange.repair) {
+        repairEvents.push({
+          priority: exchange.repair.priority,
+          issue: exchange.repair.issue,
+          mode: exchange.repair.mode,
+          outcome: exchange.repair.outcome,
+        });
       }
     }
 
@@ -239,6 +273,7 @@ export function useSessionRun({
         turns,
         corrections,
         betterExpressions,
+        repairEvents,
       });
     } catch {
       // Wording is secondary to a valid completion — proceed without it.

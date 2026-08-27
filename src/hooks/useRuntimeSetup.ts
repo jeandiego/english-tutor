@@ -36,6 +36,7 @@ const DEFAULT_TUTOR_SETTINGS: TutorSettings = {
   baseUrl: "http://127.0.0.1:11434",
   modelName: "",
   thinkingEnabled: false,
+  repairIntensity: "balanced",
 };
 
 const DEFAULT_TTS_SETTINGS: TtsSettings = {
@@ -58,7 +59,8 @@ function tutorSettingsEqual(left: TutorSettings, right: TutorSettings) {
   return (
     left.baseUrl === right.baseUrl &&
     left.modelName === right.modelName &&
-    left.thinkingEnabled === right.thinkingEnabled
+    left.thinkingEnabled === right.thinkingEnabled &&
+    left.repairIntensity === right.repairIntensity
   );
 }
 

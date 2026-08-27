@@ -165,6 +165,7 @@ const readyTutorSetup: TutorSetup = {
     baseUrl: "http://127.0.0.1:11434",
     modelName: "qwen3.5:9b",
     thinkingEnabled: false,
+    repairIntensity: "balanced",
   },
   preflight: {
     status: "ready",
@@ -179,6 +180,7 @@ const noModelConfiguredTutorSetup: TutorSetup = {
     baseUrl: "http://127.0.0.1:11434",
     modelName: "",
     thinkingEnabled: false,
+    repairIntensity: "balanced",
   },
   preflight: {
     status: "noModelConfigured",
@@ -445,6 +447,7 @@ describe("English Coach shell", () => {
         baseUrl: "http://127.0.0.1:11434",
         modelName: "qwen3.5:9b",
         thinkingEnabled: false,
+        repairIntensity: "balanced",
       }),
     );
     const tutorSettingsPage = document.querySelector(".settings-page") as HTMLElement;

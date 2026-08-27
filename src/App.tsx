@@ -57,6 +57,8 @@ function App() {
     tutorState,
   } = useRuntimeSetup();
   const sessionHistory = useSessionHistory();
+  const repairIntensity =
+    tutorState.status === "loaded" ? tutorState.setup.settings.repairIntensity : undefined;
   const conversation = useTutorConversation({
     enabled:
       activePage === "conversation" &&
@@ -65,6 +67,7 @@ function App() {
       tutorReady,
     sessionId: sessionHistory.sessionId,
     learnerContext: sessionHistory.learnerContext,
+    repairIntensity,
   });
   const voiceBusy =
     conversation.state.status === "requesting" ||
@@ -174,6 +177,7 @@ function App() {
             historyWarning={sessionHistory.startError?.message}
             loopState={conversation.loopState}
             onReplay={conversation.replay}
+            onSkipRepair={conversation.skipRepair}
             replayState={conversation.replayState}
             speaking={conversation.speaking}
             state={conversation.state}
@@ -202,6 +206,7 @@ function App() {
             healthState.status !== "ready" || !transcriptionReady || !tutorReady
           }
           disabledHint={voiceDisabledHint}
+          repairIntensity={repairIntensity}
         />
       ) : activePage === "assessment" ? (
         <AssessmentPage

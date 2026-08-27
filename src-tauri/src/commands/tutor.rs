@@ -11,6 +11,8 @@ use std::{
 use tauri::{AppHandle, Manager};
 use tempfile::NamedTempFile;
 
+use super::repair::RepairIntensity;
+
 const CONFIG_FILE_NAME: &str = "tutor.json";
 const DEFAULT_BASE_URL: &str = "http://127.0.0.1:11434";
 const TECHNICAL_OUTPUT_LIMIT: usize = 4_096;
@@ -55,6 +57,8 @@ pub struct TutorSettings {
     model_name: String,
     #[serde(default)]
     thinking_enabled: bool,
+    #[serde(default)]
+    pub(crate) repair_intensity: RepairIntensity,
 }
 
 impl Default for TutorSettings {
@@ -63,6 +67,7 @@ impl Default for TutorSettings {
             base_url: DEFAULT_BASE_URL.to_string(),
             model_name: String::new(),
             thinking_enabled: false,
+            repair_intensity: RepairIntensity::default(),
         }
     }
 }
@@ -81,6 +86,7 @@ pub(crate) fn test_settings(base_url: String, model_name: &str) -> TutorSettings
         base_url,
         model_name: model_name.to_string(),
         thinking_enabled: false,
+        repair_intensity: RepairIntensity::default(),
     }
 }
 
@@ -244,6 +250,8 @@ pub struct TutorTurn {
     performance: Option<TutorPerformance>,
     #[serde(skip_serializing_if = "Option::is_none")]
     storage_warning: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    turn_id: Option<i64>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -944,6 +952,7 @@ async fn generate(
         better_expressions: turn.better_expressions,
         performance,
         storage_warning: None,
+        turn_id: None,
     })
 }
 
@@ -1004,7 +1013,7 @@ pub async fn generate_tutor_turn(
     let mut turn = generate(&settings, request).await?;
 
     if let Some(session_id) = session_id {
-        if let Err(error) = super::history::persist_turn(
+        match super::history::persist_turn(
             &app_handle,
             session_id,
             transcript,
@@ -1014,7 +1023,8 @@ pub async fn generate_tutor_turn(
         )
         .await
         {
-            turn.storage_warning = Some(error.message().to_string());
+            Ok(user_turn_id) => turn.turn_id = Some(user_turn_id),
+            Err(error) => turn.storage_warning = Some(error.message().to_string()),
         }
     }
 
@@ -1148,6 +1158,7 @@ mod tests {
             base_url,
             model_name: model_name.to_string(),
             thinking_enabled: false,
+            repair_intensity: RepairIntensity::default(),
         }
     }
 
@@ -1164,6 +1175,7 @@ mod tests {
             base_url: "  http://localhost:11434/  ".into(),
             model_name: "  qwen3.5:9b  ".into(),
             thinking_enabled: true,
+            repair_intensity: RepairIntensity::default(),
         }
         .normalized();
         write_settings(&path, &normalized).expect("settings must write");

@@ -9,10 +9,11 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 use super::assessment::{cefr_level_str, competency_label, AssessmentCompetency, CefrLevel};
+use super::repair::{RepairIntensity, RepairMode, RepairOutcome, RepairPriority};
 use super::tutor::{BetterExpression, CorrectionCategory, CorrectionSeverity, TutorCorrection};
 
 const DB_FILE_NAME: &str = "history.sqlite3";
-const SCHEMA_VERSION: i32 = 3;
+const SCHEMA_VERSION: i32 = 4;
 const ALL_TIME_CATEGORY_LIMIT: i64 = 100_000;
 const DEFAULT_LIST_LIMIT: i64 = 10;
 const MAX_LIST_LIMIT: i64 = 100;
@@ -174,6 +175,41 @@ fn severity_str(severity: CorrectionSeverity) -> &'static str {
     }
 }
 
+fn repair_priority_str(priority: RepairPriority) -> &'static str {
+    match priority {
+        RepairPriority::Grammar => "grammar",
+        RepairPriority::Vocabulary => "vocabulary",
+        RepairPriority::Pronunciation => "pronunciation",
+        RepairPriority::Fluency => "fluency",
+        RepairPriority::Coherence => "coherence",
+        RepairPriority::Pragmatics => "pragmatics",
+    }
+}
+
+fn repair_mode_str(mode: RepairMode) -> &'static str {
+    match mode {
+        RepairMode::Implicit => "implicit",
+        RepairMode::Quick => "quick",
+        RepairMode::Repair => "repair",
+    }
+}
+
+fn repair_outcome_str(outcome: RepairOutcome) -> &'static str {
+    match outcome {
+        RepairOutcome::Improved => "improved",
+        RepairOutcome::Failed => "failed",
+        RepairOutcome::Skipped => "skipped",
+    }
+}
+
+fn repair_intensity_str(intensity: RepairIntensity) -> &'static str {
+    match intensity {
+        RepairIntensity::Light => "light",
+        RepairIntensity::Balanced => "balanced",
+        RepairIntensity::Strict => "strict",
+    }
+}
+
 pub(crate) fn db_path(app_handle: &AppHandle) -> Result<PathBuf, HistoryCommandError> {
     app_handle
         .path()
@@ -299,6 +335,29 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    if current_version < 4 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS repair_event (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                turn_id INTEGER NOT NULL REFERENCES turn(id) ON DELETE CASCADE,
+                priority TEXT NOT NULL CHECK (priority IN (
+                    'grammar', 'vocabulary', 'pronunciation', 'fluency', 'coherence', 'pragmatics'
+                )),
+                issue TEXT NOT NULL,
+                original TEXT NOT NULL,
+                suggested TEXT NOT NULL,
+                micro_explanation TEXT NOT NULL,
+                repair_prompt TEXT,
+                mode TEXT NOT NULL CHECK (mode IN ('implicit', 'quick', 'repair')),
+                outcome TEXT CHECK (outcome IN ('improved', 'failed', 'skipped')),
+                intensity TEXT NOT NULL CHECK (intensity IN ('light', 'balanced', 'strict')),
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_repair_event_turn ON repair_event(turn_id);
+            CREATE INDEX IF NOT EXISTS idx_repair_event_priority ON repair_event(priority);",
+        )?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
 }
@@ -383,7 +442,7 @@ pub(crate) fn record_turn_pair(
     corrections: &[TutorCorrection],
     expressions: &[BetterExpression],
     now_ms: i64,
-) -> rusqlite::Result<()> {
+) -> rusqlite::Result<i64> {
     let tx = conn.transaction()?;
 
     tx.execute(
@@ -431,7 +490,77 @@ pub(crate) fn record_turn_pair(
         params![now_ms, session_id],
     )?;
 
-    tx.commit()
+    tx.commit()?;
+    Ok(user_turn_id)
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn insert_repair_event(
+    conn: &Connection,
+    turn_id: i64,
+    priority: RepairPriority,
+    issue: &str,
+    original: &str,
+    suggested: &str,
+    micro_explanation: &str,
+    repair_prompt: Option<&str>,
+    mode: RepairMode,
+    intensity: RepairIntensity,
+    now_ms: i64,
+) -> rusqlite::Result<i64> {
+    conn.execute(
+        "INSERT INTO repair_event
+            (turn_id, priority, issue, original, suggested, micro_explanation, repair_prompt, mode, outcome, intensity, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, ?9, ?10)",
+        params![
+            turn_id,
+            repair_priority_str(priority),
+            issue,
+            original,
+            suggested,
+            micro_explanation,
+            repair_prompt,
+            repair_mode_str(mode),
+            repair_intensity_str(intensity),
+            now_ms,
+        ],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub(crate) fn update_repair_event_outcome(
+    conn: &Connection,
+    event_id: i64,
+    outcome: RepairOutcome,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE repair_event SET outcome = ?1 WHERE id = ?2",
+        params![repair_outcome_str(outcome), event_id],
+    )?;
+    Ok(())
+}
+
+pub(crate) fn repair_priority_counts(
+    conn: &Connection,
+    recent_limit: i64,
+) -> rusqlite::Result<Vec<CategoryCount>> {
+    let mut statement = conn.prepare(
+        "SELECT priority, COUNT(*) as count FROM (
+            SELECT r.priority FROM repair_event r
+            JOIN turn t ON t.id = r.turn_id
+            ORDER BY t.timestamp DESC
+            LIMIT ?1
+         )
+         GROUP BY priority
+         ORDER BY count DESC, priority ASC",
+    )?;
+    let rows = statement.query_map(params![recent_limit], |row| {
+        Ok(CategoryCount {
+            category: row.get(0)?,
+            count: row.get(1)?,
+        })
+    })?;
+    rows.collect()
 }
 
 fn session_summary_from_row(row: &rusqlite::Row) -> rusqlite::Result<SessionSummary> {
@@ -548,11 +677,11 @@ pub(crate) async fn persist_turn(
     reply: String,
     corrections: Vec<TutorCorrection>,
     expressions: Vec<BetterExpression>,
-) -> Result<(), HistoryCommandError> {
+) -> Result<i64, HistoryCommandError> {
     let path = db_path(app_handle)?;
     run_blocking(move || {
         let mut conn = open_connection(&path)?;
-        record_turn_pair(
+        let user_turn_id = record_turn_pair(
             &mut conn,
             session_id,
             &transcript,
@@ -561,7 +690,7 @@ pub(crate) async fn persist_turn(
             &expressions,
             now_ms(),
         )?;
-        Ok(())
+        Ok(user_turn_id)
     })
     .await
 }
@@ -1346,6 +1475,7 @@ mod tests {
             priority_issues: vec!["past tense accuracy".to_string()],
             alternative_phrases: vec![],
             review_items: vec!["past tense forms".to_string()],
+            repair_events: vec![],
         };
         let summary_json = serde_json::to_string(&summary).expect("summary must serialize");
 
@@ -1423,6 +1553,64 @@ mod tests {
             )
             .expect("session must exist");
         assert_eq!(ended_at, 2_000);
+    }
+
+    #[test]
+    fn insert_repair_event_update_outcome_and_repair_priority_counts_round_trip() {
+        let (_directory, path) = scratch_db();
+        let mut conn = open_connection(&path).expect("connection must open");
+        let session_id = create_session(&conn, 1_000, None, None, None, None).expect("session must create");
+        let user_turn_id = record_turn_pair(
+            &mut conn,
+            session_id,
+            "Yesterday I go to the office",
+            "Nice, what did you work on?",
+            &[],
+            &[],
+            2_000,
+        )
+        .expect("turn pair must record");
+
+        let event_id = insert_repair_event(
+            &conn,
+            user_turn_id,
+            RepairPriority::Grammar,
+            "past tense form",
+            "Yesterday I go to the office",
+            "Yesterday I went to the office",
+            "Use past tense for a finished action.",
+            Some("Try that sentence again using 'went'."),
+            RepairMode::Repair,
+            RepairIntensity::Balanced,
+            2_500,
+        )
+        .expect("repair event must insert");
+
+        let outcome: Option<String> = conn
+            .query_row(
+                "SELECT outcome FROM repair_event WHERE id = ?1",
+                params![event_id],
+                |row| row.get(0),
+            )
+            .expect("repair event must exist");
+        assert_eq!(outcome, None);
+
+        update_repair_event_outcome(&conn, event_id, RepairOutcome::Improved)
+            .expect("outcome must update");
+
+        let outcome: Option<String> = conn
+            .query_row(
+                "SELECT outcome FROM repair_event WHERE id = ?1",
+                params![event_id],
+                |row| row.get(0),
+            )
+            .expect("repair event must exist");
+        assert_eq!(outcome, Some("improved".to_string()));
+
+        let counts = repair_priority_counts(&conn, 50).expect("counts must compute");
+        assert_eq!(counts.len(), 1);
+        assert_eq!(counts[0].category, "grammar");
+        assert_eq!(counts[0].count, 1);
     }
 
     #[test]

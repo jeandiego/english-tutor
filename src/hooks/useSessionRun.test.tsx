@@ -11,6 +11,12 @@ import type {
   SessionSummaryPayload,
   SynthesizeSessionSummaryRequest,
 } from "../types/session";
+import type {
+  EvaluateRepairRequest,
+  RecordRepairEventRequest,
+  RepairEvaluation,
+  UpdateRepairEventOutcomeRequest,
+} from "../types/repair";
 import type { TutorTurn, TutorTurnRequest } from "../types/tutor";
 import { useSessionRun } from "./useSessionRun";
 
@@ -37,6 +43,10 @@ type ApplySessionToLearnerProfileFn = (request: {
   scenarioLabel: string;
   priorities: string[];
 }) => Promise<unknown>;
+
+type EvaluateRepairFn = (request: EvaluateRepairRequest) => Promise<RepairEvaluation>;
+type RecordRepairEventFn = (request: RecordRepairEventRequest) => Promise<number>;
+type UpdateRepairEventOutcomeFn = (request: UpdateRepairEventOutcomeRequest) => Promise<void>;
 
 function createRecording(index: number): RecordedAudio {
   const blob = new Blob([`audio-${index}`], { type: "audio/webm" });
@@ -82,9 +92,17 @@ function SessionRunHarness({
     priorityIssues: ["past tense accuracy"],
     alternativePhrases: [],
     reviewItems: ["past tense forms"],
+    repairEvents: [],
   }),
   applySessionToLearnerProfile = vi
     .fn<ApplySessionToLearnerProfileFn>()
+    .mockResolvedValue(undefined),
+  evaluateRepair = vi
+    .fn<EvaluateRepairFn>()
+    .mockResolvedValue({ shouldIntervene: false }),
+  recordRepairEvent = vi.fn<RecordRepairEventFn>().mockResolvedValue(1),
+  updateRepairEventOutcome = vi
+    .fn<UpdateRepairEventOutcomeFn>()
     .mockResolvedValue(undefined),
 }: {
   recorder: AudioRecorder;
@@ -95,6 +113,9 @@ function SessionRunHarness({
   openGuidedSession?: OpenGuidedSessionFn;
   synthesizeSessionSummary?: SynthesizeSessionSummaryFn;
   applySessionToLearnerProfile?: ApplySessionToLearnerProfileFn;
+  evaluateRepair?: EvaluateRepairFn;
+  recordRepairEvent?: RecordRepairEventFn;
+  updateRepairEventOutcome?: UpdateRepairEventOutcomeFn;
 }) {
   const run = useSessionRun({
     enabled: true,
@@ -107,6 +128,9 @@ function SessionRunHarness({
     openGuidedSession,
     synthesizeSessionSummary,
     applySessionToLearnerProfile,
+    evaluateRepair,
+    recordRepairEvent,
+    updateRepairEventOutcome,
   });
 
   return (
@@ -208,6 +232,7 @@ describe("useSessionRun", () => {
       priorityIssues: ["past tense accuracy"],
       alternativePhrases: [],
       reviewItems: ["past tense forms"],
+      repairEvents: [],
     });
     const applySessionToLearnerProfile = vi
       .fn<ApplySessionToLearnerProfileFn>()
@@ -240,6 +265,9 @@ describe("useSessionRun", () => {
       scenarioLabel: TEMPLATE.label,
       priorities: ["past tense accuracy"],
     });
+    expect(synthesizeSessionSummary).toHaveBeenCalledWith(
+      expect.objectContaining({ repairEvents: [] }),
+    );
   });
 
   it("still completes when summary synthesis fails", async () => {

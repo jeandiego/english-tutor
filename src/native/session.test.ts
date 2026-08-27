@@ -27,6 +27,7 @@ describe("native session service", () => {
       priorityIssues: ["past tense accuracy"],
       alternativePhrases: [],
       reviewItems: ["past tense forms"],
+      repairEvents: [],
     };
     invokeMock.mockResolvedValue(summary);
 
@@ -35,6 +36,7 @@ describe("native session service", () => {
       turns: [{ role: "user" as const, content: "I finished the auth work." }],
       corrections: [],
       betterExpressions: [],
+      repairEvents: [],
     };
     await expect(synthesizeSessionSummary(request)).resolves.toBe(summary);
     expect(invokeMock).toHaveBeenCalledWith("synthesize_session_summary", { request });

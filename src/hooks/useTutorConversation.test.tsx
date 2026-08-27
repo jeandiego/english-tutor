@@ -3,6 +3,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AudioRecorder, RecordedAudio } from "../audio/recorder";
 import { ConversationStage } from "../components/ConversationStage";
 import { TalkControl } from "../components/TalkControl";
+import type {
+  EvaluateRepairRequest,
+  RecordRepairEventRequest,
+  RepairEvaluation,
+  RepairIntensity,
+  UpdateRepairEventOutcomeRequest,
+} from "../types/repair";
 import type { TutorTurn, TutorTurnRequest } from "../types/tutor";
 import { useTutorConversation } from "./useTutorConversation";
 
@@ -44,25 +51,37 @@ function turn(reply: string): TutorTurn {
 }
 
 function ConversationHarness({
+  evaluateRepair = vi.fn().mockResolvedValue({ shouldIntervene: false }),
   now,
+  recordRepairEvent = vi.fn().mockResolvedValue(1),
   recorder,
+  repairIntensity,
   respond,
   speak = async () => undefined,
   transcribe,
+  updateRepairEventOutcome = vi.fn().mockResolvedValue(undefined),
 }: {
+  evaluateRepair?: (request: EvaluateRepairRequest) => Promise<RepairEvaluation>;
   now?: () => number;
+  recordRepairEvent?: (request: RecordRepairEventRequest) => Promise<number>;
   recorder: AudioRecorder;
+  repairIntensity?: RepairIntensity;
   respond: (request: TutorTurnRequest) => Promise<TutorTurn>;
   speak?: (reply: string) => Promise<void>;
   transcribe: () => Promise<{ text: string }>;
+  updateRepairEventOutcome?: (request: UpdateRepairEventOutcomeRequest) => Promise<void>;
 }) {
   const conversation = useTutorConversation({
     enabled: true,
+    evaluateRepair,
+    now,
+    recordRepairEvent,
     recorder,
+    repairIntensity,
     respond,
     speak,
     transcribe,
-    now,
+    updateRepairEventOutcome,
   });
 
   return (
@@ -70,6 +89,7 @@ function ConversationHarness({
       <ConversationStage
         exchanges={conversation.exchanges}
         loopState={conversation.loopState}
+        onSkipRepair={conversation.skipRepair}
         speaking={conversation.speaking}
         state={conversation.state}
         thinking={conversation.thinking}
@@ -306,5 +326,193 @@ describe("useTutorConversation", () => {
     expect(screen.getByText("Speech unavailable")).toBeInTheDocument();
     expect(screen.getByText("exit status: 1")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
+  });
+
+  describe("repair loop", () => {
+    function noRepair(): TutorTurn {
+      return { reply: "Sounds good, tell me more.", corrections: [], betterExpressions: [] };
+    }
+
+    it("quick mode shows an inline correction chip without gating the microphone", async () => {
+      const recorder = createRecorder();
+      const respond = vi
+        .fn<(request: TutorTurnRequest) => Promise<TutorTurn>>()
+        .mockResolvedValue({ ...noRepair(), turnId: 1 });
+      const evaluateRepair = vi.fn<(request: EvaluateRepairRequest) => Promise<RepairEvaluation>>()
+        .mockResolvedValue({
+          shouldIntervene: true,
+          priority: "vocabulary",
+          issue: "word choice",
+          original: "I am agree",
+          suggested: "I agree",
+          microExplanation: "Drop 'am' before 'agree'.",
+          repairPrompt: "Try saying it without 'am'.",
+        });
+      const recordRepairEvent = vi.fn().mockResolvedValue(5);
+
+      render(
+        <ConversationHarness
+          evaluateRepair={evaluateRepair}
+          recordRepairEvent={recordRepairEvent}
+          recorder={recorder}
+          respond={respond}
+          transcribe={async () => ({ text: "I am agree with that." })}
+        />,
+      );
+
+      await recordOneTurn();
+
+      // The normal contentful reply still plays — quick mode never gates.
+      expect(await screen.findByText("Sounds good, tell me more.")).toBeInTheDocument();
+      expect(screen.getByText("Vocabulary · Quick fix")).toBeInTheDocument();
+      expect(screen.getByText("“I am agree”")).toBeInTheDocument();
+      expect(screen.getByText("“I agree”")).toBeInTheDocument();
+      expect(recordRepairEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ turnId: 1, mode: "quick", priority: "vocabulary" }),
+      );
+      expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
+    });
+
+    it("repair mode replaces the spoken reply with the repair prompt and records an improved outcome once the retry lands", async () => {
+      const recorder = createRecorder();
+      const transcribe = vi
+        .fn()
+        .mockResolvedValueOnce({ text: "Yesterday I go to the office." })
+        .mockResolvedValueOnce({ text: "Yesterday I went to the office." });
+      const respond = vi
+        .fn<(request: TutorTurnRequest) => Promise<TutorTurn>>()
+        .mockResolvedValueOnce({ ...noRepair(), turnId: 7 })
+        .mockResolvedValueOnce({
+          reply: "Great, that's correct — what happened next?",
+          corrections: [],
+          betterExpressions: [],
+          turnId: 8,
+        });
+      const evaluateRepair = vi
+        .fn<(request: EvaluateRepairRequest) => Promise<RepairEvaluation>>()
+        .mockImplementation((request) =>
+          Promise.resolve(
+            request.pendingRepair
+              ? { shouldIntervene: false, repairOutcome: "improved" }
+              : {
+                  shouldIntervene: true,
+                  priority: "coherence",
+                  issue: "past tense form",
+                  original: "Yesterday I go to the office",
+                  suggested: "Yesterday I went to the office",
+                  microExplanation: "Use past tense for a finished action.",
+                  repairPrompt: "Try that sentence again using 'went'.",
+                },
+          ),
+        );
+      const recordRepairEvent = vi.fn().mockResolvedValue(9);
+      const updateRepairEventOutcome = vi.fn().mockResolvedValue(undefined);
+
+      render(
+        <ConversationHarness
+          evaluateRepair={evaluateRepair}
+          recordRepairEvent={recordRepairEvent}
+          recorder={recorder}
+          respond={respond}
+          transcribe={transcribe}
+          updateRepairEventOutcome={updateRepairEventOutcome}
+        />,
+      );
+
+      await recordOneTurn();
+
+      // The repair prompt stands in for the normal reply — the full
+      // contentful reply must never have been spoken or shown.
+      expect(await screen.findByText("Coherence · Your turn to try again")).toBeInTheDocument();
+      expect(screen.queryByText("Sounds good, tell me more.")).not.toBeInTheDocument();
+      expect(screen.getByRole("button", { name: "Skip" })).toBeInTheDocument();
+
+      await recordOneTurn();
+
+      expect(
+        await screen.findByText("Great, that's correct — what happened next?"),
+      ).toBeInTheDocument();
+      expect(updateRepairEventOutcome).toHaveBeenCalledWith({ eventId: 9, outcome: "improved" });
+      expect(screen.getByText("✓ Fixed")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Skip" })).not.toBeInTheDocument();
+    });
+
+    it("skipRepair records a skipped outcome without requiring a retry turn", async () => {
+      const recorder = createRecorder();
+      const respond = vi
+        .fn<(request: TutorTurnRequest) => Promise<TutorTurn>>()
+        .mockResolvedValue({ ...noRepair(), turnId: 3 });
+      const evaluateRepair = vi.fn<(request: EvaluateRepairRequest) => Promise<RepairEvaluation>>()
+        .mockResolvedValue({
+          shouldIntervene: true,
+          priority: "pragmatics",
+          issue: "tone",
+          original: "Give me the report now",
+          suggested: "Could you send me the report when you get a chance?",
+          microExplanation: "Soften direct requests with colleagues.",
+          repairPrompt: "Try asking that more politely.",
+        });
+      const recordRepairEvent = vi.fn().mockResolvedValue(11);
+      const updateRepairEventOutcome = vi.fn().mockResolvedValue(undefined);
+
+      render(
+        <ConversationHarness
+          evaluateRepair={evaluateRepair}
+          recordRepairEvent={recordRepairEvent}
+          recorder={recorder}
+          respond={respond}
+          transcribe={async () => ({ text: "Give me the report now." })}
+          updateRepairEventOutcome={updateRepairEventOutcome}
+        />,
+      );
+
+      await recordOneTurn();
+      const skipButton = await screen.findByRole("button", { name: "Skip" });
+      fireEvent.click(skipButton);
+
+      await waitFor(() =>
+        expect(updateRepairEventOutcome).toHaveBeenCalledWith({ eventId: 11, outcome: "skipped" }),
+      );
+      expect(await screen.findByText("Skipped")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: "Skip" })).not.toBeInTheDocument();
+    });
+
+    it("implicit mode records the event without changing the reply or showing any repair UI", async () => {
+      const recorder = createRecorder();
+      const respond = vi
+        .fn<(request: TutorTurnRequest) => Promise<TutorTurn>>()
+        .mockResolvedValue({ ...noRepair(), turnId: 2 });
+      const evaluateRepair = vi.fn<(request: EvaluateRepairRequest) => Promise<RepairEvaluation>>()
+        .mockResolvedValue({
+          shouldIntervene: true,
+          priority: "vocabulary",
+          issue: "word choice",
+          original: "I am agree",
+          suggested: "I agree",
+          microExplanation: "Drop 'am' before 'agree'.",
+          repairPrompt: "Try saying it without 'am'.",
+        });
+      const recordRepairEvent = vi.fn().mockResolvedValue(13);
+
+      render(
+        <ConversationHarness
+          evaluateRepair={evaluateRepair}
+          recordRepairEvent={recordRepairEvent}
+          recorder={recorder}
+          repairIntensity="light"
+          respond={respond}
+          transcribe={async () => ({ text: "I am agree with that." })}
+        />,
+      );
+
+      await recordOneTurn();
+
+      expect(await screen.findByText("Sounds good, tell me more.")).toBeInTheDocument();
+      expect(screen.queryByText("Vocabulary · Quick fix")).not.toBeInTheDocument();
+      expect(screen.queryByText(/Your turn to try again/)).not.toBeInTheDocument();
+      expect(recordRepairEvent).toHaveBeenCalledWith(
+        expect.objectContaining({ turnId: 2, mode: "implicit" }),
+      );
+    });
   });
 });

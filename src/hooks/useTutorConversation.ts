@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from "react";
 import type { AudioRecorder, RecordedAudio } from "../audio/recorder";
 import {
+  evaluateRepairOpportunity,
+  recordRepairEvent as nativeRecordRepairEvent,
+  updateRepairEventOutcome as nativeUpdateRepairEventOutcome,
+} from "../native/repair";
+import {
   speakTutorReply,
   toSpeechError,
   type SpeechError,
@@ -10,6 +15,16 @@ import {
   toTutorError,
   type TutorError,
 } from "../native/tutor";
+import { COOLDOWN_TURNS, selectRepairMode, severityTier } from "../sessions/repairPolicy";
+import type {
+  ConversationRepairMeta,
+  EvaluateRepairRequest,
+  RecordRepairEventRequest,
+  RepairEvaluation,
+  RepairIntensity,
+  RepairOutcome,
+  UpdateRepairEventOutcomeRequest,
+} from "../types/repair";
 import type { TranscriptionResult } from "../types/transcription";
 import type { TutorMessage, TutorTurn, TutorTurnRequest } from "../types/tutor";
 import { usePushToTalk } from "./usePushToTalk";
@@ -32,12 +47,19 @@ export type ConversationExchange = {
   error?: TutorError | SpeechError;
   errorSource?: "tutor" | "speech";
   storageWarning?: string;
+  repair?: ConversationRepairMeta;
 };
 
 export type ReplayState = {
   exchangeId: number;
   status: "playing" | "error";
   error?: SpeechError;
+};
+
+type PendingRepairState = {
+  exchangeId: number;
+  eventId?: number;
+  event: ConversationRepairMeta;
 };
 
 type UseTutorConversationOptions = {
@@ -50,6 +72,10 @@ type UseTutorConversationOptions = {
   sessionId?: number;
   learnerContext?: string;
   openingReply?: string;
+  repairIntensity?: RepairIntensity;
+  evaluateRepair?: (request: EvaluateRepairRequest) => Promise<RepairEvaluation>;
+  recordRepairEvent?: (request: RecordRepairEventRequest) => Promise<number>;
+  updateRepairEventOutcome?: (request: UpdateRepairEventOutcomeRequest) => Promise<void>;
 };
 
 const monotonicNow = () => performance.now();
@@ -79,11 +105,16 @@ export function useTutorConversation({
   sessionId,
   learnerContext,
   openingReply,
+  repairIntensity = "balanced",
+  evaluateRepair = evaluateRepairOpportunity,
+  recordRepairEvent = nativeRecordRepairEvent,
+  updateRepairEventOutcome = nativeUpdateRepairEventOutcome,
 }: UseTutorConversationOptions) {
   const [exchanges, setExchanges] = useState<ConversationExchange[]>([]);
   const [thinking, setThinking] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [replayState, setReplayState] = useState<ReplayState | null>(null);
+  const [pendingRepair, setPendingRepair] = useState<PendingRepairState | null>(null);
   const exchangesRef = useRef(exchanges);
   const mountedRef = useRef(true);
   const nextExchangeIdRef = useRef(1);
@@ -96,6 +127,13 @@ export function useTutorConversation({
   const nowRef = useRef(now);
   const sessionIdRef = useRef(sessionId);
   const learnerContextRef = useRef(learnerContext);
+  const repairIntensityRef = useRef(repairIntensity);
+  const evaluateRepairRef = useRef(evaluateRepair);
+  const recordRepairEventRef = useRef(recordRepairEvent);
+  const updateRepairEventOutcomeRef = useRef(updateRepairEventOutcome);
+  const pendingRepairRef = useRef<PendingRepairState | null>(null);
+  const turnsSinceInterventionRef = useRef(Number.POSITIVE_INFINITY);
+  const seenIssueKeysRef = useRef<Set<string>>(new Set());
 
   exchangesRef.current = exchanges;
   respondRef.current = respond;
@@ -103,6 +141,10 @@ export function useTutorConversation({
   nowRef.current = now;
   sessionIdRef.current = sessionId;
   learnerContextRef.current = learnerContext;
+  repairIntensityRef.current = repairIntensity;
+  evaluateRepairRef.current = evaluateRepair;
+  recordRepairEventRef.current = recordRepairEvent;
+  updateRepairEventOutcomeRef.current = updateRepairEventOutcome;
 
   const recording = usePushToTalk({
     enabled: enabled && !thinking && !speaking,
@@ -182,6 +224,143 @@ export function useTutorConversation({
         }
 
         const responseTimeMs = Math.max(0, readTime() - responseStartedAt);
+        const pending = pendingRepairRef.current;
+        let effectiveTurn = tutorTurn;
+        let repairMeta: ConversationRepairMeta | undefined;
+
+        if (pending) {
+          // This turn is the learner's repair attempt: judge whether it
+          // resolves the pending issue instead of running fresh detection —
+          // repair-on-repair chaining is deliberately unsupported so a
+          // retry can never itself trigger another blocking intervention.
+          let outcome: RepairOutcome = "failed";
+          try {
+            const evaluation = await evaluateRepairRef.current({
+              transcript,
+              history,
+              learnerContext: learnerContextRef.current,
+              intensity: repairIntensityRef.current,
+              pendingRepair: {
+                priority: pending.event.priority,
+                issue: pending.event.issue,
+                original: pending.event.original,
+                suggested: pending.event.suggested,
+              },
+            });
+            outcome = evaluation.repairOutcome ?? "failed";
+          } catch {
+            outcome = "failed";
+          }
+
+          if (!mountedRef.current || requestIdRef.current !== requestId) {
+            return;
+          }
+
+          if (pending.eventId !== undefined) {
+            void updateRepairEventOutcomeRef
+              .current({ eventId: pending.eventId, outcome })
+              .catch(() => {});
+          }
+          pendingRepairRef.current = null;
+          setPendingRepair(null);
+          setExchanges((current) =>
+            current.map((exchange) =>
+              exchange.id === pending.exchangeId && exchange.repair
+                ? { ...exchange, repair: { ...exchange.repair, outcome } }
+                : exchange,
+            ),
+          );
+          // effectiveTurn stays the naturally-generated tutorTurn — its own
+          // continuation is the tutor "recognizing the improvement."
+        } else {
+          let evaluation: RepairEvaluation | undefined;
+          try {
+            evaluation = await evaluateRepairRef.current({
+              transcript,
+              history,
+              learnerContext: learnerContextRef.current,
+              intensity: repairIntensityRef.current,
+            });
+          } catch {
+            evaluation = undefined;
+          }
+
+          if (!mountedRef.current || requestIdRef.current !== requestId) {
+            return;
+          }
+
+          if (
+            evaluation?.shouldIntervene &&
+            evaluation.priority &&
+            evaluation.issue &&
+            evaluation.original &&
+            evaluation.suggested &&
+            evaluation.microExplanation &&
+            evaluation.repairPrompt
+          ) {
+            const issueKey = `${evaluation.priority}:${evaluation.issue}`;
+            const isRecurring = seenIssueKeysRef.current.has(issueKey);
+            seenIssueKeysRef.current.add(issueKey);
+
+            const tier = severityTier(evaluation.priority, isRecurring);
+            const cooldownOk =
+              turnsSinceInterventionRef.current >= COOLDOWN_TURNS[repairIntensityRef.current];
+            const mode = selectRepairMode(repairIntensityRef.current, tier, cooldownOk);
+            turnsSinceInterventionRef.current = mode === "implicit" ? turnsSinceInterventionRef.current + 1 : 0;
+
+            const meta: ConversationRepairMeta = {
+              priority: evaluation.priority,
+              issue: evaluation.issue,
+              original: evaluation.original,
+              suggested: evaluation.suggested,
+              microExplanation: evaluation.microExplanation,
+              repairPrompt: evaluation.repairPrompt,
+              mode,
+            };
+
+            let eventId: number | undefined;
+            if (tutorTurn.turnId !== undefined) {
+              try {
+                eventId = await recordRepairEventRef.current({
+                  turnId: tutorTurn.turnId,
+                  priority: evaluation.priority,
+                  issue: evaluation.issue,
+                  original: evaluation.original,
+                  suggested: evaluation.suggested,
+                  microExplanation: evaluation.microExplanation,
+                  repairPrompt: evaluation.repairPrompt,
+                  mode,
+                  intensity: repairIntensityRef.current,
+                });
+              } catch {
+                eventId = undefined;
+              }
+            }
+
+            if (!mountedRef.current || requestIdRef.current !== requestId) {
+              return;
+            }
+
+            repairMeta = { ...meta, eventId };
+
+            if (mode === "repair") {
+              effectiveTurn = {
+                reply: `${evaluation.microExplanation} ${evaluation.repairPrompt}`.trim(),
+                corrections: [],
+                betterExpressions: [],
+              };
+              const nextPending: PendingRepairState = {
+                exchangeId,
+                eventId,
+                event: repairMeta,
+              };
+              pendingRepairRef.current = nextPending;
+              setPendingRepair(nextPending);
+            }
+          } else {
+            turnsSinceInterventionRef.current += 1;
+          }
+        }
 
         setExchanges((current) =>
           current
@@ -189,9 +368,10 @@ export function useTutorConversation({
               exchange.id === exchangeId
                 ? {
                     ...exchange,
-                    tutorTurn,
+                    tutorTurn: effectiveTurn,
                     responseTimeMs,
                     storageWarning: tutorTurn.storageWarning,
+                    repair: repairMeta,
                   }
                 : exchange,
             )
@@ -201,7 +381,7 @@ export function useTutorConversation({
         setSpeaking(true);
 
         try {
-          await speakRef.current(tutorTurn.reply);
+          await speakRef.current(effectiveTurn.reply);
 
           if (!mountedRef.current || requestIdRef.current !== requestId) {
             return;
@@ -287,6 +467,28 @@ export function useTutorConversation({
       });
   };
 
+  const skipRepair = () => {
+    const pending = pendingRepairRef.current;
+    if (!pending) {
+      return;
+    }
+
+    pendingRepairRef.current = null;
+    setPendingRepair(null);
+    setExchanges((current) =>
+      current.map((exchange) =>
+        exchange.id === pending.exchangeId && exchange.repair
+          ? { ...exchange, repair: { ...exchange.repair, outcome: "skipped" as const } }
+          : exchange,
+      ),
+    );
+    if (pending.eventId !== undefined) {
+      void updateRepairEventOutcomeRef
+        .current({ eventId: pending.eventId, outcome: "skipped" })
+        .catch(() => {});
+    }
+  };
+
   return {
     ...recording,
     exchanges,
@@ -295,5 +497,7 @@ export function useTutorConversation({
     loopState,
     replay,
     replayState,
+    pendingRepair,
+    skipRepair,
   };
 }

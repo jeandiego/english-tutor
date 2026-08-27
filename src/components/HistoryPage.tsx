@@ -11,12 +11,28 @@ import type {
   ExpressionSummary,
   SessionSummary,
 } from "../types/history";
+import type { RepairOutcome, RepairPriority } from "../types/repair";
 
 const CATEGORY_LABELS: Record<string, string> = {
   grammar: "Grammar",
   vocabulary: "Vocabulary",
   naturalness: "Naturalness",
   clarity: "Clarity",
+};
+
+const REPAIR_PRIORITY_LABELS: Record<RepairPriority, string> = {
+  grammar: "Grammar",
+  vocabulary: "Vocabulary",
+  pronunciation: "Pronunciation",
+  fluency: "Fluency",
+  coherence: "Coherence",
+  pragmatics: "Pragmatics",
+};
+
+const REPAIR_OUTCOME_LABELS: Record<RepairOutcome, string> = {
+  improved: "Fixed",
+  failed: "Still tricky",
+  skipped: "Skipped",
 };
 
 type HistoryData = {
@@ -87,6 +103,19 @@ function SessionSummaryDetail({ session }: { session: SessionSummary }) {
               <ul>
                 {summary.reviewItems.map((item, index) => (
                   <li key={index}>{item}</li>
+                ))}
+              </ul>
+            </div>
+          )}
+          {summary.repairEvents.length > 0 && (
+            <div className="history-session__summary-section">
+              <h4>Repair practice</h4>
+              <ul>
+                {summary.repairEvents.map((event, index) => (
+                  <li key={index}>
+                    {REPAIR_PRIORITY_LABELS[event.priority]}: {event.issue}
+                    {event.outcome && <> — {REPAIR_OUTCOME_LABELS[event.outcome]}</>}
+                  </li>
                 ))}
               </ul>
             </div>

@@ -316,21 +316,38 @@ fn category_label(category: &str) -> &str {
         "vocabulary" => "vocabulary choices",
         "naturalness" => "natural phrasing",
         "clarity" => "clarity",
+        "pronunciation" => "pronunciation & intelligibility",
+        "fluency" => "fluency",
+        "coherence" => "coherence",
+        "pragmatics" => "pragmatics",
         other => other,
     }
 }
 
+/// Merges error signal from both the passive `correction` table and the
+/// interactive `repair_event` table into one recurring-issues view — both
+/// are error evidence for the same learner model, just gathered by
+/// different mechanisms (post-hoc note vs. in-conversation repair loop).
 fn recurring_issues(conn: &Connection) -> rusqlite::Result<Vec<LearnerIssue>> {
-    let counts = history::category_counts(conn, RECENT_CORRECTIONS_WINDOW)?;
-    Ok(counts
+    let mut counts_by_category: HashMap<String, i64> = HashMap::new();
+    for entry in history::category_counts(conn, RECENT_CORRECTIONS_WINDOW)? {
+        *counts_by_category.entry(entry.category).or_insert(0) += entry.count;
+    }
+    for entry in history::repair_priority_counts(conn, RECENT_CORRECTIONS_WINDOW)? {
+        *counts_by_category.entry(entry.category).or_insert(0) += entry.count;
+    }
+
+    let mut issues: Vec<LearnerIssue> = counts_by_category
         .into_iter()
-        .filter(|entry| entry.count >= RECURRING_MIN_COUNT)
-        .map(|entry| LearnerIssue {
-            label: category_label(&entry.category).to_string(),
-            category: entry.category,
-            count: entry.count,
+        .filter(|(_, count)| *count >= RECURRING_MIN_COUNT)
+        .map(|(category, count)| LearnerIssue {
+            label: category_label(&category).to_string(),
+            category,
+            count,
         })
-        .collect())
+        .collect();
+    issues.sort_by(|left, right| right.count.cmp(&left.count).then(left.category.cmp(&right.category)));
+    Ok(issues)
 }
 
 fn active_vocabulary(conn: &Connection) -> rusqlite::Result<Vec<VocabularyItem>> {
@@ -642,8 +659,10 @@ mod tests {
     use super::*;
     use crate::commands::history::{
         category_counts as history_category_counts, create_session as history_create_session,
+        insert_repair_event as history_insert_repair_event,
         open_connection as history_open_connection, record_turn_pair as history_record_turn_pair,
     };
+    use crate::commands::repair::{RepairIntensity, RepairMode, RepairPriority};
     use crate::commands::tutor::{
         BetterExpression, CorrectionCategory, CorrectionSeverity, TutorCorrection,
     };
@@ -880,5 +899,47 @@ mod tests {
         // category_counts itself stays available for other call sites (history.rs tests).
         let _ = history_category_counts(&conn, RECENT_CORRECTIONS_WINDOW)
             .expect("category counts must still be reachable");
+    }
+
+    #[test]
+    fn recurring_issues_sums_counts_from_both_corrections_and_repair_events() {
+        let directory = scratch_dir();
+        let path = seeded_db_path(&directory);
+        let mut conn = history_open_connection(&path).expect("connection must open");
+        let session_id = history_create_session(&conn, 1_000, None, None, None, None).expect("session must create");
+
+        let user_turn_id = history_record_turn_pair(
+            &mut conn,
+            session_id,
+            "since many years I am agree",
+            "That's a good point.",
+            &[correction(CorrectionCategory::Grammar)],
+            &[],
+            2_000,
+        )
+        .expect("turn pair must record");
+
+        history_insert_repair_event(
+            &conn,
+            user_turn_id,
+            RepairPriority::Grammar,
+            "past tense form",
+            "Yesterday I go to the office",
+            "Yesterday I went to the office",
+            "Use past tense for a finished action.",
+            None,
+            RepairMode::Repair,
+            RepairIntensity::Balanced,
+            2_500,
+        )
+        .expect("repair event must insert");
+
+        // One correction-table grammar entry plus one repair_event grammar
+        // entry must sum into a single recurring "grammar" issue with
+        // count 2, not two separate below-threshold entries.
+        let issues = recurring_issues(&conn).expect("issues must compute");
+        assert_eq!(issues.len(), 1);
+        assert_eq!(issues[0].category, "grammar");
+        assert_eq!(issues[0].count, 2);
     }
 }

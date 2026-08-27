@@ -7,6 +7,7 @@ import type {
 } from "../hooks/useTutorConversation";
 import type { RecordingState } from "../hooks/usePushToTalk";
 import { TranscriptionError } from "../native/transcription";
+import type { ConversationRepairMeta, RepairOutcome, RepairPriority } from "../types/repair";
 import type { BetterExpression, TutorCorrection, TutorTurn } from "../types/tutor";
 
 type ConversationStageProps = {
@@ -19,6 +20,7 @@ type ConversationStageProps = {
   onReplay?: (exchangeId: number) => void;
   replayState?: ReplayState | null;
   showCoaching?: boolean;
+  onSkipRepair?: () => void;
 };
 
 function ReplayIcon({ className }: { className?: string }) {
@@ -381,6 +383,73 @@ function TutorCoaching({ tutorTurn }: { tutorTurn: TutorTurn }) {
   );
 }
 
+const REPAIR_PRIORITY_LABELS: Record<RepairPriority, string> = {
+  grammar: "Grammar",
+  vocabulary: "Vocabulary",
+  pronunciation: "Pronunciation",
+  fluency: "Fluency",
+  coherence: "Coherence",
+  pragmatics: "Pragmatics",
+};
+
+const REPAIR_OUTCOME_LABELS: Record<RepairOutcome, string> = {
+  improved: "✓ Fixed",
+  failed: "Still tricky",
+  skipped: "Skipped",
+};
+
+function RepairPrompt({
+  disabled,
+  onSkip,
+  repair,
+}: {
+  disabled: boolean;
+  onSkip?: () => void;
+  repair: ConversationRepairMeta;
+}) {
+  return (
+    <div className="repair-prompt" role="status">
+      <span className="tip-chip tip-chip--repair">
+        {REPAIR_PRIORITY_LABELS[repair.priority]} · Your turn to try again
+      </span>
+      {onSkip && (
+        <button
+          className="repair-prompt__skip"
+          disabled={disabled}
+          onClick={onSkip}
+          type="button"
+        >
+          Skip
+        </button>
+      )}
+    </div>
+  );
+}
+
+function QuickCorrection({ repair }: { repair: ConversationRepairMeta }) {
+  return (
+    <div className="quick-correction">
+      <span className="tip-chip">{REPAIR_PRIORITY_LABELS[repair.priority]} · Quick fix</span>
+      <p className="quick-correction__row">
+        <span className="quick-correction__quote">“{repair.original}”</span>
+        <span aria-hidden="true"> → </span>
+        <span className="quick-correction__quote quick-correction__quote--better">
+          “{repair.suggested}”
+        </span>
+      </p>
+      <p className="quick-correction__explanation">{repair.microExplanation}</p>
+    </div>
+  );
+}
+
+function RepairOutcomeBadge({ outcome }: { outcome: RepairOutcome }) {
+  return (
+    <span className={`repair-outcome repair-outcome--${outcome}`} role="status">
+      {REPAIR_OUTCOME_LABELS[outcome]}
+    </span>
+  );
+}
+
 function ReplayButton({
   disabled,
   exchangeId,
@@ -485,6 +554,7 @@ function ConversationLog({
   exchanges,
   loopState,
   onReplay,
+  onSkipRepair,
   replayState,
   showCoaching = true,
   speaking = false,
@@ -493,7 +563,13 @@ function ConversationLog({
 }: Required<Pick<ConversationStageProps, "exchanges" | "thinking">> &
   Pick<
     ConversationStageProps,
-    "loopState" | "onReplay" | "replayState" | "showCoaching" | "speaking" | "state"
+    | "loopState"
+    | "onReplay"
+    | "onSkipRepair"
+    | "replayState"
+    | "showCoaching"
+    | "speaking"
+    | "state"
   >) {
   const endRef = useRef<HTMLDivElement | null>(null);
   const showTransientState =
@@ -574,6 +650,21 @@ function ConversationLog({
               <TutorCoaching tutorTurn={exchange.tutorTurn} />
             )}
 
+            {exchange.repair?.mode === "quick" && (
+              <QuickCorrection repair={exchange.repair} />
+            )}
+
+            {exchange.repair?.mode === "repair" &&
+              (exchange.repair.outcome ? (
+                <RepairOutcomeBadge outcome={exchange.repair.outcome} />
+              ) : (
+                <RepairPrompt
+                  disabled={thinking || speaking}
+                  onSkip={onSkipRepair}
+                  repair={exchange.repair}
+                />
+              ))}
+
             <StorageWarning message={exchange.storageWarning} />
 
             {isLatest && thinking && !exchange.tutorTurn && !exchange.error && (
@@ -610,6 +701,7 @@ function ConversationLog({
 function ConversationStageContent({
   loopState,
   onReplay,
+  onSkipRepair,
   replayState,
   showCoaching = true,
   speaking = false,
@@ -629,6 +721,7 @@ function ConversationStageContent({
           exchanges={exchanges}
           loopState={loopState}
           onReplay={onReplay}
+          onSkipRepair={onSkipRepair}
           replayState={replayState}
           showCoaching={showCoaching}
           speaking={speaking}

@@ -41,6 +41,7 @@ describe("HistoryPage", () => {
           priorityIssues: ["past tense accuracy"],
           alternativePhrases: [],
           reviewItems: ["past tense forms"],
+          repairEvents: [],
         },
       },
     ]);

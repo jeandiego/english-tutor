@@ -1,7 +1,10 @@
+export type RepairIntensity = "light" | "balanced" | "strict";
+
 export type TutorSettings = {
   baseUrl: string;
   modelName: string;
   thinkingEnabled: boolean;
+  repairIntensity: RepairIntensity;
 };
 
 export type TutorPreflightStatus =
@@ -65,6 +68,7 @@ export type TutorTurn = {
   betterExpressions: BetterExpression[];
   performance?: TutorPerformance;
   storageWarning?: string;
+  turnId?: number;
 };
 
 export type TutorSetupState =

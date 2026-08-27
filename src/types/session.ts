@@ -1,4 +1,5 @@
 import type { BetterExpression, TutorMessage, TutorCorrection } from "./tutor";
+import type { RepairEventSummary } from "./repair";
 
 export type SessionRunStatus = "active" | "completed" | "abandoned";
 
@@ -16,6 +17,7 @@ export type SessionSummaryPayload = {
   priorityIssues: string[];
   alternativePhrases: BetterExpression[];
   reviewItems: string[];
+  repairEvents: RepairEventSummary[];
 };
 
 export type SynthesizeSessionSummaryRequest = {
@@ -23,6 +25,7 @@ export type SynthesizeSessionSummaryRequest = {
   turns: TutorMessage[];
   corrections: TutorCorrection[];
   betterExpressions: BetterExpression[];
+  repairEvents: RepairEventSummary[];
 };
 
 export type ApplySessionToLearnerProfileRequest = {

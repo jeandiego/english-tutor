@@ -2,10 +2,21 @@ use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use tauri::AppHandle;
 
+use super::repair::{RepairMode, RepairOutcome, RepairPriority};
 use super::tutor::{
     self, BetterExpression, OllamaRequestMessage, TutorCommandError, TutorCorrection,
     TutorMessage, TutorMessageRole, TutorPerformance,
 };
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct RepairEventSummary {
+    priority: RepairPriority,
+    issue: String,
+    mode: RepairMode,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    outcome: Option<RepairOutcome>,
+}
 
 const OPENING_SYSTEM_INSTRUCTION: &str = r#"You are an English conversation tutor opening a guided practice session with a specific scenario. You will be given scenario instructions describing the setting, your role, and the learner's goal, plus optional context about the learner.
 
@@ -218,6 +229,8 @@ pub struct SynthesizeSessionSummaryRequest {
     corrections: Vec<TutorCorrection>,
     #[serde(default)]
     better_expressions: Vec<BetterExpression>,
+    #[serde(default)]
+    repair_events: Vec<RepairEventSummary>,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -273,15 +286,18 @@ pub struct SessionSummaryPayload {
     pub(crate) priority_issues: Vec<String>,
     pub(crate) alternative_phrases: Vec<BetterExpression>,
     pub(crate) review_items: Vec<String>,
+    #[serde(default)]
+    pub(crate) repair_events: Vec<RepairEventSummary>,
 }
 
-impl From<StructuredSessionSummary> for SessionSummaryPayload {
-    fn from(value: StructuredSessionSummary) -> Self {
+impl SessionSummaryPayload {
+    fn from_structured(value: StructuredSessionSummary, repair_events: Vec<RepairEventSummary>) -> Self {
         Self {
             what_went_well: value.what_went_well,
             priority_issues: value.priority_issues,
             alternative_phrases: value.alternative_phrases,
             review_items: value.review_items,
+            repair_events,
         }
     }
 }
@@ -420,7 +436,14 @@ pub async fn synthesize_session_summary(
         })?
         .validated()?;
 
-    Ok(parsed.into())
+    // repair_events are echoed back from what the caller already observed
+    // during the session, not authored by the summary LLM call — same
+    // principle as the learner model's recurring issues being computed,
+    // never guessed.
+    Ok(SessionSummaryPayload::from_structured(
+        parsed,
+        request.repair_events,
+    ))
 }
 
 #[cfg(test)]
@@ -635,11 +658,18 @@ mod tests {
         .validated()
         .expect("summary must validate");
 
-        let payload: SessionSummaryPayload = summary.into();
+        let repair_events = vec![RepairEventSummary {
+            priority: RepairPriority::Grammar,
+            issue: "past tense form".to_string(),
+            mode: RepairMode::Repair,
+            outcome: Some(RepairOutcome::Improved),
+        }];
+        let payload = SessionSummaryPayload::from_structured(summary, repair_events.clone());
         assert_eq!(payload.what_went_well, vec!["Gave a clear update.".to_string()]);
         assert_eq!(payload.priority_issues, vec!["past tense accuracy".to_string()]);
         assert_eq!(payload.alternative_phrases[0].suggestion, "I agree.");
         assert_eq!(payload.review_items, vec!["past tense forms".to_string()]);
+        assert_eq!(payload.repair_events, repair_events);
     }
 
     #[test]

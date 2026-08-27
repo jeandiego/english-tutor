@@ -8,12 +8,29 @@ import {
   type DurationPresetId,
   type SessionTemplate,
 } from "../sessions/catalog";
+import type { RepairIntensity, RepairOutcome, RepairPriority } from "../types/repair";
 import { ConversationStage } from "./ConversationStage";
 import { TalkControl } from "./TalkControl";
 
 type SessionsPageProps = {
   disabled: boolean;
   disabledHint?: string;
+  repairIntensity?: RepairIntensity;
+};
+
+const REPAIR_PRIORITY_LABELS: Record<RepairPriority, string> = {
+  grammar: "Grammar",
+  vocabulary: "Vocabulary",
+  pronunciation: "Pronunciation",
+  fluency: "Fluency",
+  coherence: "Coherence",
+  pragmatics: "Pragmatics",
+};
+
+const REPAIR_OUTCOME_LABELS: Record<RepairOutcome, string> = {
+  improved: "Fixed",
+  failed: "Still tricky",
+  skipped: "Skipped",
 };
 
 const CEFR_LEVELS: CefrLevel[] = ["A1", "A2", "B1", "B2", "C1", "C2"];
@@ -193,6 +210,19 @@ function SessionSummaryView({
               </ul>
             </div>
           )}
+          {summary.repairEvents.length > 0 && (
+            <div className="assessment-result__summary-section">
+              <h4>Repair practice</h4>
+              <ul>
+                {summary.repairEvents.map((event, index) => (
+                  <li key={index}>
+                    {REPAIR_PRIORITY_LABELS[event.priority]}: {event.issue}
+                    {event.outcome && <> — {REPAIR_OUTCOME_LABELS[event.outcome]}</>}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       ) : (
         <p className="history-empty">
@@ -206,9 +236,9 @@ function SessionSummaryView({
   );
 }
 
-export function SessionsPage({ disabled, disabledHint }: SessionsPageProps) {
+export function SessionsPage({ disabled, disabledHint, repairIntensity }: SessionsPageProps) {
   const [defaultDifficulty, setDefaultDifficulty] = useState<CefrLevel | undefined>();
-  const run = useSessionRun({ enabled: !disabled });
+  const run = useSessionRun({ enabled: !disabled, repairIntensity });
 
   useEffect(() => {
     void getLearnerProfile()
@@ -271,6 +301,7 @@ export function SessionsPage({ disabled, disabledHint }: SessionsPageProps) {
           <ConversationStage
             exchanges={run.conversation.exchanges}
             loopState={run.conversation.loopState}
+            onSkipRepair={run.conversation.skipRepair}
             showCoaching={false}
             speaking={run.conversation.speaking}
             state={run.conversation.state}
