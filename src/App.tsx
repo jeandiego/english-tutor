@@ -157,7 +157,7 @@ function App() {
   };
 
   return (
-    <SidebarProvider data-page={activePage}>
+    <SidebarProvider className="h-svh" data-page={activePage}>
       <AppSidebar
         activePage={activePage}
         estimatedLevel={estimatedLevel}
@@ -177,7 +177,7 @@ function App() {
         <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
           <SidebarTrigger />
         </header>
-        <div className="flex flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
           {activePage === "conversation" ? (
         <>
           <ConversationStage

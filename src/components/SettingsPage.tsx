@@ -270,8 +270,9 @@ export function SettingsPage({
   return (
     <section
       aria-labelledby="settings-title"
-      className="mx-auto flex w-full max-w-2xl flex-col gap-8 overflow-y-auto p-6"
+      className="min-h-0 flex-1 overflow-y-auto"
     >
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 p-6">
       <div className="flex items-start justify-between gap-4">
         <div>
           <h2 className="text-subheading font-semibold text-foreground" id="settings-title">
@@ -826,6 +827,7 @@ export function SettingsPage({
           </form>
         </SettingsSection>
       )}
+      </div>
     </section>
   );
 }

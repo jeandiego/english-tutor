@@ -236,10 +236,8 @@ export function HistoryPage({ focusSessionId }: { focusSessionId?: number } = {}
   }, [focusSessionId, query.data]);
 
   return (
-    <section
-      aria-labelledby="history-title"
-      className="mx-auto flex w-full max-w-2xl flex-col gap-6 overflow-y-auto p-6"
-    >
+    <section aria-labelledby="history-title" className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
       <h2 className="text-subheading font-semibold text-foreground" id="history-title">
         Recent learning
       </h2>
@@ -264,6 +262,7 @@ export function HistoryPage({ focusSessionId }: { focusSessionId?: number } = {}
           </HistorySection>
         </div>
       )}
+      </div>
     </section>
   );
 }

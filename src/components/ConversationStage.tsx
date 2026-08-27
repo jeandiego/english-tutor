@@ -535,7 +535,11 @@ function ConversationLog({
   }, [exchanges, speaking, thinking, state.status]);
 
   return (
-    <div aria-live="polite" className="flex flex-1 flex-col gap-6 overflow-y-auto" role="log">
+    <div
+      aria-live="polite"
+      className="flex min-h-0 flex-1 flex-col gap-6 overflow-y-auto [&>*]:shrink-0"
+      role="log"
+    >
       {exchanges.map((exchange, index) => {
         const isLatest = index === exchanges.length - 1;
         const latestRecording =
@@ -655,15 +659,15 @@ function ConversationStageContent({
   return (
     <section
       aria-labelledby="conversation-title"
-      className="flex flex-1 flex-col gap-4 overflow-hidden p-6"
+      className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-6"
     >
       <h2 className="sr-only" id="conversation-title">
         Conversation
       </h2>
       <HistoryWarningBanner message={historyWarning} />
       {exchanges.length > 0 ? (
-        <Card className="flex flex-1 flex-col overflow-hidden">
-          <CardContent className="flex flex-1 flex-col overflow-hidden pt-4">
+        <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden pt-4">
             <ConversationLog
               exchanges={exchanges}
               loopState={loopState}

@@ -202,10 +202,8 @@ export function AssessmentPage({
     disabled || session.status !== "awaitingAnswer";
 
   return (
-    <section
-      aria-labelledby="assessment-title"
-      className="mx-auto flex w-full max-w-2xl flex-col gap-6 overflow-y-auto p-6"
-    >
+    <section aria-labelledby="assessment-title" className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
       <h2 className="text-subheading font-semibold text-foreground" id="assessment-title">
         Assessment
       </h2>
@@ -229,8 +227,8 @@ export function AssessmentPage({
       )}
 
       {showConversation && (
-        <div className="flex flex-1 flex-col gap-4 overflow-hidden">
-          <Card className="flex-1 overflow-y-auto">
+        <div className="flex flex-col gap-4">
+          <Card>
             <CardContent className="flex flex-col gap-4 pt-4">
               {session.exchanges.map((exchange) => (
                 <div className="flex flex-col gap-3" key={exchange.id}>
@@ -316,6 +314,7 @@ export function AssessmentPage({
           )}
         </CardContent>
       </Card>
+      </div>
     </section>
   );
 }

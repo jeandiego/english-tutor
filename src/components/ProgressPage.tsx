@@ -106,30 +106,28 @@ export function ProgressPage() {
 
   if (state.status === "checking") {
     return (
-      <section
-        aria-labelledby="progress-title"
-        className="mx-auto flex w-full max-w-2xl flex-col gap-6 overflow-y-auto p-6"
-      >
-        <h2 className="text-subheading font-semibold text-foreground" id="progress-title">
-          My Progress
-        </h2>
-        <p className="text-body text-muted-foreground">Loading…</p>
+      <section aria-labelledby="progress-title" className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
+          <h2 className="text-subheading font-semibold text-foreground" id="progress-title">
+            My Progress
+          </h2>
+          <p className="text-body text-muted-foreground">Loading…</p>
+        </div>
       </section>
     );
   }
 
   if (state.status === "error") {
     return (
-      <section
-        aria-labelledby="progress-title"
-        className="mx-auto flex w-full max-w-2xl flex-col gap-6 overflow-y-auto p-6"
-      >
-        <h2 className="text-subheading font-semibold text-foreground" id="progress-title">
-          My Progress
-        </h2>
-        <p className="text-body text-destructive" role="alert">
-          {state.message}
-        </p>
+      <section aria-labelledby="progress-title" className="min-h-0 flex-1 overflow-y-auto">
+        <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
+          <h2 className="text-subheading font-semibold text-foreground" id="progress-title">
+            My Progress
+          </h2>
+          <p className="text-body text-destructive" role="alert">
+            {state.message}
+          </p>
+        </div>
       </section>
     );
   }
@@ -140,10 +138,8 @@ export function ProgressPage() {
   >;
 
   return (
-    <section
-      aria-labelledby="progress-title"
-      className="mx-auto flex w-full max-w-2xl flex-col gap-8 overflow-y-auto p-6"
-    >
+    <section aria-labelledby="progress-title" className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 p-6">
       <h2 className="text-subheading font-semibold text-foreground" id="progress-title">
         My Progress
       </h2>
@@ -269,6 +265,7 @@ export function ProgressPage() {
             </ul>
           )}
         </ProgressSection>
+      </div>
       </div>
     </section>
   );

@@ -284,10 +284,8 @@ export function SessionsPage({ disabled, disabledHint, repairIntensity }: Sessio
   const talkControlDisabled = disabled || run.status !== "active";
 
   return (
-    <section
-      aria-labelledby="sessions-title"
-      className="mx-auto flex w-full max-w-2xl flex-col gap-6 overflow-y-auto p-6"
-    >
+    <section aria-labelledby="sessions-title" className="min-h-0 flex-1 overflow-y-auto">
+      <div className="mx-auto flex w-full max-w-2xl flex-col gap-6 p-6">
       <h2 className="text-subheading font-semibold text-foreground" id="sessions-title">
         Sessions
       </h2>
@@ -306,7 +304,7 @@ export function SessionsPage({ disabled, disabledHint, repairIntensity }: Sessio
       )}
 
       {(run.status === "active" || run.status === "finishing") && (
-        <div className="flex flex-1 flex-col gap-4 overflow-hidden">
+        <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-3">
             <Badge variant="outline">{run.template?.label}</Badge>
             {run.targetTurns !== undefined && (
@@ -382,6 +380,7 @@ export function SessionsPage({ disabled, disabledHint, repairIntensity }: Sessio
       {run.status === "complete" && (
         <SessionSummaryView run={run} onBackToCatalog={() => run.reset()} />
       )}
+      </div>
     </section>
   );
 }
