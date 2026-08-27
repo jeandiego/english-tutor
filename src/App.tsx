@@ -1,10 +1,10 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { AppHeader, type AppPage } from "./components/AppHeader";
 import { AssessmentPage } from "./components/AssessmentPage";
 import { ConversationStage } from "./components/ConversationStage";
 import { HistoryPage } from "./components/HistoryPage";
 import { ProgressPage } from "./components/ProgressPage";
+import { AppSidebar, type AppPage } from "./components/sidebar/AppSidebar";
 import { SessionsPage } from "./components/SessionsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import type {
@@ -12,6 +12,7 @@ import type {
   TutorDiagnostic,
 } from "./components/SystemDiagnostics";
 import { TalkControl } from "./components/TalkControl";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
 import { useRuntimeSetup } from "./hooks/useRuntimeSetup";
 import { useSessionHistory } from "./hooks/useSessionHistory";
 import { useTutorConversation } from "./hooks/useTutorConversation";
@@ -21,6 +22,7 @@ import "./App.css";
 
 function App() {
   const [activePage, setActivePage] = useState<AppPage>("conversation");
+  const [focusSessionId, setFocusSessionId] = useState<number | undefined>();
   const queryClient = useQueryClient();
   const latestAssessmentQuery = useQuery({
     queryKey: assessmentKeys.latest(),
@@ -150,24 +152,34 @@ function App() {
             canOpenSettings: true,
           };
 
+  const navigate = (page: AppPage) => {
+    setFocusSessionId(undefined);
+    setActivePage(page);
+  };
+
   return (
-    <main
-      className={`coach-shell coach-shell--${activePage}`}
-      data-page={activePage}
-    >
-      <AppHeader
+    <SidebarProvider data-page={activePage}>
+      <AppSidebar
         activePage={activePage}
         estimatedLevel={estimatedLevel}
         healthState={healthState}
         navigationDisabled={voiceBusy}
-        onNavigate={setActivePage}
-        onOpenSettings={() => setActivePage("settings")}
+        onNavigate={navigate}
+        onOpenSession={(sessionId) => {
+          setFocusSessionId(sessionId);
+          setActivePage("history");
+        }}
+        onOpenSettings={() => navigate("settings")}
         settingsNeedsAttention={settingsNeedsAttention}
         transcription={transcriptionDiagnostic}
         tutor={tutorDiagnostic}
       />
-
-      {activePage === "conversation" ? (
+      <SidebarInset>
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
+          <SidebarTrigger />
+        </header>
+        <div className="flex flex-1 flex-col overflow-hidden">
+          {activePage === "conversation" ? (
         <>
           <ConversationStage
             exchanges={conversation.exchanges}
@@ -218,7 +230,7 @@ function App() {
           }
         />
       ) : activePage === "history" ? (
-        <HistoryPage />
+        <HistoryPage focusSessionId={focusSessionId} />
       ) : activePage === "progress" ? (
         <ProgressPage />
       ) : (
@@ -246,7 +258,9 @@ function App() {
           tutorState={tutorState}
         />
       )}
-    </main>
+        </div>
+      </SidebarInset>
+    </SidebarProvider>
   );
 }
 

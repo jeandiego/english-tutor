@@ -1,5 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   listCorrectionCategoryCounts,
   listRecentExpressions,
@@ -7,7 +7,7 @@ import {
   toHistoryError,
 } from "../native/history";
 import { historyKeys } from "../queryKeys/history";
-import { findSessionTemplate } from "../sessions/catalog";
+import { scenarioLabelFor } from "../sessions/catalog";
 import type {
   CategoryCount,
   ExpressionSummary,
@@ -57,10 +57,6 @@ function formatSessionDate(startedAt: number): string {
     dateStyle: "medium",
     timeStyle: "short",
   });
-}
-
-function scenarioLabel(session: SessionSummary): string {
-  return findSessionTemplate(session.mode)?.label ?? "Free conversation";
 }
 
 function SessionSummaryDetail({ session }: { session: SessionSummary }) {
@@ -132,7 +128,13 @@ function SessionSummaryDetail({ session }: { session: SessionSummary }) {
   );
 }
 
-function SessionList({ sessions }: { sessions: SessionSummary[] }) {
+function SessionList({
+  sessions,
+  focusSessionId,
+}: {
+  sessions: SessionSummary[];
+  focusSessionId?: number;
+}) {
   if (sessions.length === 0) {
     return <p className="history-empty">No sessions yet.</p>;
   }
@@ -140,9 +142,18 @@ function SessionList({ sessions }: { sessions: SessionSummary[] }) {
   return (
     <ul className="history-sessions">
       {sessions.map((session) => (
-        <li className="history-session" key={session.id}>
+        <li
+          className="history-session"
+          id={`history-session-${session.id}`}
+          key={session.id}
+          style={
+            session.id === focusSessionId
+              ? { outline: "2px solid var(--mint)", outlineOffset: "2px" }
+              : undefined
+          }
+        >
           <div className="history-session__row">
-            <span className="history-session__scenario">{scenarioLabel(session)}</span>
+            <span className="history-session__scenario">{scenarioLabelFor(session.mode)}</span>
             <span className="history-session__date">
               {formatSessionDate(session.startedAt)}
             </span>
@@ -212,11 +223,20 @@ function ExpressionList({ expressions }: { expressions: ExpressionSummary[] }) {
   );
 }
 
-export function HistoryPage() {
+export function HistoryPage({ focusSessionId }: { focusSessionId?: number } = {}) {
   const query = useQuery({
     queryKey: historyKeys.recent(10),
     queryFn: loadHistoryData,
   });
+
+  useEffect(() => {
+    if (focusSessionId === undefined || !query.data) {
+      return;
+    }
+    document
+      .getElementById(`history-session-${focusSessionId}`)
+      ?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [focusSessionId, query.data]);
 
   return (
     <section className="history-page" aria-labelledby="history-title">
@@ -233,7 +253,7 @@ export function HistoryPage() {
         <div className="history-sections">
           <div className="history-section">
             <h3>Recent sessions</h3>
-            <SessionList sessions={query.data.sessions} />
+            <SessionList focusSessionId={focusSessionId} sessions={query.data.sessions} />
           </div>
           <div className="history-section">
             <h3>Recurring patterns</h3>

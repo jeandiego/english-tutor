@@ -97,6 +97,10 @@ export function findSessionTemplate(id: string | undefined): SessionTemplate | u
     : SESSION_TEMPLATES.find((template) => template.id === id);
 }
 
+export function scenarioLabelFor(mode: string | undefined): string {
+  return findSessionTemplate(mode)?.label ?? "Free conversation";
+}
+
 export function findDurationPreset(id: DurationPresetId): DurationPreset {
   return DURATION_PRESETS.find((preset) => preset.id === id) ?? DURATION_PRESETS[1];
 }
