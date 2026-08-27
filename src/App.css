@@ -1,14 +1,23 @@
 :root {
-  font-family:
-    -apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial,
-    sans-serif;
-  color: #08090a;
-  background: #ffffff;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   -webkit-text-size-adjust: 100%;
+
+  /* Legacy tokens still referenced by pages not yet migrated to
+     Tailwind/shadcn (src/index.css). Values match
+     design-references/DESIGN.md — kept as a separate block, rather than
+     renamed at each of their ~170 call sites, so this whole block (and
+     every remaining .css selector using it) can be deleted in one pass
+     once the last page is migrated. Do not add new usages. */
+  --rule: #e5e5e5; /* mist-divider */
+  --mist: #ececec; /* neutral hover tint */
+  --legacy-muted: #4f4f52; /* slate-text */
+  --ink: #141414; /* ink-black */
+  --mint: #3f6b52; /* muted success */
+  --error: #a5363f; /* destructive */
+  --amber: #8a5a12; /* muted warning */
 }
 
 * {
@@ -31,30 +40,6 @@ body {
 button,
 code {
   font: inherit;
-}
-
-.coach-shell {
-  --rule: #dddddd;
-  --mist: #f2f2f2;
-  --muted: rgba(8, 9, 10, 0.5);
-  --ink: #08090a;
-  --mint: #0c8c5e;
-  --error: #a5363f;
-  --amber: #b8720c;
-
-  display: grid;
-  grid-template-rows: 64px minmax(12rem, 1fr) auto;
-  width: 100vw;
-  height: 100vh;
-  overflow: hidden;
-  background: #ffffff;
-}
-
-.coach-shell--settings,
-.coach-shell--history,
-.coach-shell--assessment,
-.coach-shell--progress {
-  grid-template-rows: 64px minmax(0, 1fr);
 }
 
 .app-header {
@@ -252,13 +237,13 @@ code {
 }
 
 .system-status__status {
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-size: 0.76rem;
   overflow-wrap: anywhere;
 }
 
 .system-status__separator {
-  color: var(--muted);
+  color: var(--legacy-muted);
 }
 
 .system-status__guidance {
@@ -371,7 +356,7 @@ code {
   cursor: not-allowed;
   opacity: 1;
   border-color: var(--rule);
-  color: var(--muted);
+  color: var(--legacy-muted);
 }
 
 .talk-control:not(:disabled):hover {
@@ -407,7 +392,7 @@ code {
 }
 
 .talk-control__hint {
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-size: 0.84rem;
   font-weight: 450;
 }
@@ -462,7 +447,7 @@ code {
 }
 
 .recording-status__time {
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-size: 0.82rem;
   font-variant-numeric: tabular-nums;
   font-weight: 500;
@@ -483,7 +468,7 @@ code {
   font-weight: 600;
   letter-spacing: -0.01em;
   text-align: center;
-  color: var(--muted);
+  color: var(--legacy-muted);
 }
 
 .recording-result audio {
@@ -499,7 +484,7 @@ code {
   justify-content: center;
   gap: 0;
   margin: 0;
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-size: 0.74rem;
 }
 
@@ -667,7 +652,7 @@ code {
 
 .conversation-turn__meta {
   margin: 0;
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-size: 0.74rem;
   line-height: 1.3;
   font-variant-numeric: tabular-nums;
@@ -679,7 +664,7 @@ code {
 }
 
 .conversation-turn .recording-result__title {
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-size: 0.74rem;
 }
 
@@ -868,14 +853,14 @@ code {
 .correction__row-label,
 .better-expression__row-label {
   flex: 0 0 auto;
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-size: 0.76rem;
   font-weight: 600;
 }
 
 .correction__quote,
 .better-expression__quote {
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-size: 0.88rem;
   font-weight: 500;
   line-height: 1.4;
@@ -920,7 +905,7 @@ code {
   border: 1px solid var(--rule);
   border-radius: 999px;
   background: #ffffff;
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-size: 0.78rem;
   font-weight: 600;
   cursor: pointer;
@@ -953,7 +938,7 @@ code {
   align-items: baseline;
   gap: 0.4rem;
   margin: 0;
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-size: 0.88rem;
   font-weight: 500;
   line-height: 1.4;
@@ -991,7 +976,7 @@ code {
 }
 
 .repair-outcome--skipped {
-  color: var(--muted);
+  color: var(--legacy-muted);
   background: var(--mist);
 }
 
@@ -1141,7 +1126,7 @@ code {
 
 .settings-section__heading p {
   margin: 0;
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-size: 0.8rem;
   line-height: 1.5;
 }
@@ -1170,7 +1155,7 @@ code {
   margin-top: 0.32rem;
   border: 2px solid currentColor;
   border-radius: 50%;
-  color: var(--muted);
+  color: var(--legacy-muted);
 }
 
 .dependency-row__mark--ready {
@@ -1196,7 +1181,7 @@ code {
 
 .dependency-row__mark--unavailable {
   border-radius: 2px;
-  color: var(--muted);
+  color: var(--legacy-muted);
   background: currentColor;
 }
 
@@ -1216,7 +1201,7 @@ code {
 .dependency-row__meta {
   display: block;
   margin-top: 0.25rem;
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-size: 0.74rem;
 }
 
@@ -1297,7 +1282,7 @@ code {
 
 .history-empty {
   margin: 0;
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
   font-size: 0.86rem;
 }
 
@@ -1340,7 +1325,7 @@ code {
 
 .history-session__date,
 .history-session__turns {
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
 }
 
 .history-session__status {
@@ -1348,7 +1333,7 @@ code {
   padding: 0.15rem 0.55rem;
   border-radius: 999px;
   background: rgba(8, 9, 10, 0.06);
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
   font-size: 0.76rem;
   text-transform: capitalize;
 }
@@ -1407,7 +1392,7 @@ code {
 
 .history-expression__row-label {
   margin-right: 0.4rem;
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
 }
 
 .history-expression__quote--better {
@@ -1416,7 +1401,7 @@ code {
 
 .storage-warning {
   margin: 0.4rem 0 0;
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
   font-size: 0.76rem;
 }
 
@@ -1482,7 +1467,7 @@ code {
 
 .progress-empty {
   margin: 0;
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
   font-size: 0.86rem;
 }
 
@@ -1537,7 +1522,7 @@ code {
   border: 0;
   border-radius: 50%;
   background: transparent;
-  color: var(--muted);
+  color: var(--legacy-muted);
   cursor: pointer;
   font-size: 0.9rem;
   line-height: 1;
@@ -1584,7 +1569,7 @@ code {
 }
 
 .progress-note__date {
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
   font-size: 0.74rem;
 }
 
@@ -1631,11 +1616,11 @@ code {
 }
 
 .settings-field input::placeholder {
-  color: var(--muted);
+  color: var(--legacy-muted);
 }
 
 .settings-field input:disabled {
-  color: var(--muted);
+  color: var(--legacy-muted);
   background: var(--mist);
   cursor: progress;
 }
@@ -1654,7 +1639,7 @@ code {
 }
 
 .settings-field select:disabled {
-  color: var(--muted);
+  color: var(--legacy-muted);
   background: var(--mist);
   cursor: progress;
 }
@@ -1675,7 +1660,7 @@ code {
 
 .settings-field__range output {
   min-width: 3.4rem;
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-family: monospace;
   font-size: 0.78rem;
   text-align: right;
@@ -1708,7 +1693,7 @@ code {
 }
 
 .settings-field small {
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-size: 0.74rem;
   line-height: 1.45;
 }
@@ -1731,7 +1716,7 @@ code {
 
 .settings-form__footer p {
   margin: 0;
-  color: var(--muted);
+  color: var(--legacy-muted);
   font-size: 0.76rem;
 }
 
@@ -2003,7 +1988,7 @@ code {
 
 .assessment-intro p {
   margin: 0 0 1rem;
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
   font-size: 0.9rem;
 }
 
@@ -2024,7 +2009,7 @@ code {
 
 .assessment-disabled-hint {
   margin-top: 0.5rem;
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
   font-size: 0.8rem;
 }
 
@@ -2046,7 +2031,7 @@ code {
 }
 
 .assessment-result__confidence {
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
   font-size: 0.86rem;
 }
 
@@ -2073,7 +2058,7 @@ code {
 }
 
 .assessment-result__competency-confidence {
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
   font-size: 0.78rem;
 }
 
@@ -2096,7 +2081,7 @@ code {
 
 .assessment-result__notes summary {
   cursor: pointer;
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
   font-size: 0.82rem;
 }
 
@@ -2137,7 +2122,7 @@ code {
 
 .sessions-catalog__intro {
   margin: 0 0 1rem;
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
   font-size: 0.9rem;
 }
 
@@ -2175,7 +2160,7 @@ code {
 
 .sessions-catalog__card-description {
   font-size: 0.82rem;
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
 }
 
 .sessions-catalog__options {
@@ -2192,7 +2177,7 @@ code {
   display: grid;
   gap: 0.3rem;
   font-size: 0.82rem;
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
 }
 
 .sessions-catalog__field--wide {
@@ -2217,7 +2202,7 @@ code {
 }
 
 .sessions-active__progress {
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
   font-size: 0.82rem;
 }
 
@@ -2232,7 +2217,7 @@ code {
   border: 1px solid var(--rule);
   border-radius: 12px;
   background: #ffffff;
-  color: var(--muted, rgba(8, 9, 10, 0.5));
+  color: var(--legacy-muted, rgba(8, 9, 10, 0.5));
   font-size: 0.88rem;
   font-weight: 600;
   cursor: pointer;
