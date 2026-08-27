@@ -1,6 +1,7 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import * as learnerProfileNative from "../native/learnerProfile";
+import { renderWithQueryClient } from "../test/queryTestUtils";
 import { useLearnerProfile } from "./useLearnerProfile";
 
 vi.mock("../native/learnerProfile", async (importOriginal) => {
@@ -64,7 +65,7 @@ afterEach(() => {
 
 describe("useLearnerProfile", () => {
   it("loads the profile once and seeds the preferences draft from it", async () => {
-    render(<Harness />);
+    renderWithQueryClient(<Harness />);
 
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("loaded"));
     expect(screen.getByTestId("goals")).toHaveTextContent("prepare for interviews");
@@ -72,7 +73,7 @@ describe("useLearnerProfile", () => {
   });
 
   it("marks the draft dirty after an edit and clean again after reset", async () => {
-    render(<Harness />);
+    renderWithQueryClient(<Harness />);
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("loaded"));
 
     fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
@@ -88,7 +89,7 @@ describe("useLearnerProfile", () => {
       goals: ["prepare for interviews", "new goal"],
     });
 
-    render(<Harness />);
+    renderWithQueryClient(<Harness />);
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("loaded"));
 
     fireEvent.click(screen.getByRole("button", { name: "Add goal" }));
@@ -114,7 +115,7 @@ describe("useLearnerProfile", () => {
       technicalMessage: "disk full",
     });
 
-    render(<Harness />);
+    renderWithQueryClient(<Harness />);
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("loaded"));
 
     fireEvent.click(screen.getByRole("button", { name: "Add goal" }));

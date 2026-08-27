@@ -1,8 +1,8 @@
-import { useEffect, useRef, useState } from "react";
+import { useMutation } from "@tanstack/react-query";
+import { useEffect, useRef } from "react";
 import {
   startSession as defaultStartSession,
   toHistoryError,
-  type HistoryError,
 } from "../native/history";
 import type { SessionStart } from "../types/history";
 
@@ -10,50 +10,24 @@ type UseSessionHistoryOptions = {
   startSession?: () => Promise<SessionStart>;
 };
 
-type SessionHistoryState = {
-  sessionId?: number;
-  learnerContext?: string;
-  startError?: HistoryError;
-};
-
 export function useSessionHistory({
   startSession = defaultStartSession,
 }: UseSessionHistoryOptions = {}) {
-  const [state, setState] = useState<SessionHistoryState>({});
   const startedRef = useRef(false);
-  const mountedRef = useRef(true);
-
-  useEffect(() => {
-    mountedRef.current = true;
-
-    return () => {
-      mountedRef.current = false;
-    };
-  }, []);
+  const mutation = useMutation({ mutationFn: () => startSession() });
+  const mutate = mutation.mutate;
 
   useEffect(() => {
     if (startedRef.current) {
       return;
     }
     startedRef.current = true;
+    mutate();
+  }, [mutate]);
 
-    void startSession()
-      .then((session) => {
-        if (!mountedRef.current) {
-          return;
-        }
-        setState({
-          sessionId: session.sessionId,
-          learnerContext: session.learnerContext,
-        });
-      })
-      .catch((error: unknown) => {
-        if (!mountedRef.current) {
-          return;
-        }
-        setState({ startError: toHistoryError(error) });
-      });
-  }, [startSession]);
-
-  return state;
+  return {
+    sessionId: mutation.data?.sessionId,
+    learnerContext: mutation.data?.learnerContext,
+    startError: mutation.error ? toHistoryError(mutation.error) : undefined,
+  };
 }

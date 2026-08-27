@@ -1,6 +1,7 @@
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { getLearnerProfile, saveLearnerProfilePreferences } from "../native/learnerProfile";
+import { renderWithQueryClient as render } from "../test/queryTestUtils";
 import { ProgressPage } from "./ProgressPage";
 
 vi.mock("../native/learnerProfile", async (importOriginal) => {

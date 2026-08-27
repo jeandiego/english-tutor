@@ -1,8 +1,10 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AudioRecorder, RecordedAudio } from "../audio/recorder";
 import { TalkControl } from "../components/TalkControl";
+import { learnerProfileKeys } from "../queryKeys/learnerProfile";
 import { SESSION_TEMPLATES } from "../sessions/catalog";
+import { renderWithQueryClient as render } from "../test/queryTestUtils";
 import type { CefrLevel } from "../types/assessment";
 import type { SessionStart } from "../types/history";
 import type {
@@ -239,7 +241,7 @@ describe("useSessionRun", () => {
       .mockResolvedValue(undefined);
     const recorder = createRecorder();
 
-    render(
+    const { client } = render(
       <SessionRunHarness
         recorder={recorder}
         transcribe={async () => ({ text: "I finished the login page." })}
@@ -248,6 +250,7 @@ describe("useSessionRun", () => {
         applySessionToLearnerProfile={applySessionToLearnerProfile}
       />,
     );
+    const invalidateQueriesSpy = vi.spyOn(client, "invalidateQueries");
 
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("active"));
@@ -267,6 +270,11 @@ describe("useSessionRun", () => {
     });
     expect(synthesizeSessionSummary).toHaveBeenCalledWith(
       expect.objectContaining({ repairEvents: [] }),
+    );
+    await waitFor(() =>
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+        queryKey: learnerProfileKeys.all,
+      }),
     );
   });
 

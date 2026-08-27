@@ -1,4 +1,6 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { learnerProfileKeys } from "../queryKeys/learnerProfile";
 import type { CefrLevel } from "../types/assessment";
 import type { SessionStart } from "../types/history";
 import type {
@@ -114,6 +116,7 @@ export function useSessionRun({
   synthesizeSessionSummary = defaultSynthesizeSessionSummary,
   applySessionToLearnerProfile = defaultApplySessionToLearnerProfile,
 }: UseSessionRunOptions) {
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<SessionRunStatus>("catalog");
   const [template, setTemplate] = useState<SessionTemplate | undefined>();
   const [targetTurns, setTargetTurns] = useState<number | undefined>();
@@ -304,6 +307,7 @@ export function useSessionRun({
         scenarioLabel: engine.template.label,
         priorities: summaryPayload?.priorityIssues ?? [],
       });
+      void queryClient.invalidateQueries({ queryKey: learnerProfileKeys.all });
     } catch {
       // The learner profile update is supplementary — a failure here must
       // not discard an otherwise-valid, completed session.

@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HistoryPage } from "./HistoryPage";
 import {
@@ -6,6 +6,7 @@ import {
   listRecentExpressions,
   listRecentSessions,
 } from "../native/history";
+import { renderWithQueryClient as render } from "../test/queryTestUtils";
 
 vi.mock("../native/history", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../native/history")>();

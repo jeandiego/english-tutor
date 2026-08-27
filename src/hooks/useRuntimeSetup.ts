@@ -1,5 +1,13 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type UseMutationResult,
+  type UseQueryResult,
+} from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { getRuntimeHealth } from "../native/health";
+import { runtimeKeys } from "../queryKeys/runtime";
 import {
   loadTranscriptionSetup,
   saveTranscriptionSettings,
@@ -21,10 +29,7 @@ import type {
   TranscriptionSetupState,
 } from "../types/transcription";
 import type { TtsSettings, TtsSetupState } from "../types/tts";
-import type {
-  TutorSettings,
-  TutorSetupState,
-} from "../types/tutor";
+import type { TutorSettings, TutorSetupState } from "../types/tutor";
 
 const DEFAULT_SETTINGS: TranscriptionSettings = {
   whisperExecutablePath: "",
@@ -73,18 +78,88 @@ function ttsSettingsEqual(left: TtsSettings, right: TtsSettings) {
   );
 }
 
+type SetupStatus<TSetup> =
+  | { status: "checking" }
+  | { status: "loaded"; setup: TSetup; saving: boolean; saveError?: string }
+  | { status: "error"; message: string };
+
+function toSetupState<TSetup>(
+  query: Pick<UseQueryResult<TSetup>, "isPending" | "isError" | "error" | "data">,
+  mutation: Pick<UseMutationResult<TSetup, unknown, unknown>, "isPending" | "error">,
+  toErrorMessage: (error: unknown) => string,
+): SetupStatus<TSetup> {
+  if (query.isPending) {
+    return { status: "checking" };
+  }
+  if (query.isError) {
+    return { status: "error", message: toErrorMessage(query.error) };
+  }
+  return {
+    status: "loaded",
+    setup: query.data as TSetup,
+    saving: mutation.isPending,
+    saveError: mutation.error ? toErrorMessage(mutation.error) : undefined,
+  };
+}
+
 export function useRuntimeSetup() {
-  const [healthState, setHealthState] = useState<HealthState>({
-    status: "checking",
+  const queryClient = useQueryClient();
+  const healthQuery = useQuery({
+    queryKey: runtimeKeys.health(),
+    queryFn: getRuntimeHealth,
   });
-  const [transcriptionState, setTranscriptionState] =
-    useState<TranscriptionSetupState>({ status: "checking" });
-  const [tutorState, setTutorState] = useState<TutorSetupState>({
-    status: "checking",
+  const healthState: HealthState = healthQuery.isPending
+    ? { status: "checking" }
+    : healthQuery.isError
+      ? {
+          status: "error",
+          message:
+            healthQuery.error instanceof Error
+              ? healthQuery.error.message
+              : String(healthQuery.error),
+        }
+      : { status: "ready", health: healthQuery.data };
+
+  const transcriptionQuery = useQuery({
+    queryKey: runtimeKeys.transcriptionSetup(),
+    queryFn: loadTranscriptionSetup,
   });
-  const [ttsState, setTtsState] = useState<TtsSetupState>({
-    status: "checking",
+  const transcriptionMutation = useMutation({
+    mutationFn: (settings: TranscriptionSettings) =>
+      saveTranscriptionSettings(settings),
   });
+  const transcriptionState = toSetupState(
+    transcriptionQuery,
+    transcriptionMutation,
+    (error) => toTranscriptionError(error).message,
+  ) as TranscriptionSetupState;
+
+  const tutorQuery = useQuery({
+    queryKey: runtimeKeys.tutorSetup(),
+    queryFn: loadTutorSetup,
+  });
+  const tutorMutation = useMutation({
+    mutationFn: (settings: TutorSettings) => persistTutorSettings(settings),
+  });
+  const tutorState = toSetupState(
+    tutorQuery,
+    tutorMutation,
+    (error) => toTutorError(error).message,
+  ) as TutorSetupState;
+
+  const ttsQuery = useQuery({
+    queryKey: runtimeKeys.ttsSetup(),
+    queryFn: loadTtsSetup,
+  });
+  const ttsMutation = useMutation({
+    mutationFn: (settings: TtsSettings) => persistTtsSettings(settings),
+  });
+  const ttsState = toSetupState(
+    ttsQuery,
+    ttsMutation,
+    (error) => toTtsError(error).message,
+  ) as TtsSetupState;
+
   const [settingsDraft, setSettingsDraft] =
     useState<TranscriptionSettings>(DEFAULT_SETTINGS);
   const [tutorSettingsDraft, setTutorSettingsDraft] = useState<TutorSettings>(
@@ -95,179 +170,33 @@ export function useRuntimeSetup() {
   );
 
   useEffect(() => {
-    let ignore = false;
-
-    async function checkDesktopRuntime() {
-      try {
-        const health = await getRuntimeHealth();
-
-        if (!ignore) {
-          setHealthState({ status: "ready", health });
-        }
-      } catch (error) {
-        if (!ignore) {
-          setHealthState({
-            status: "error",
-            message: error instanceof Error ? error.message : String(error),
-          });
-        }
-      }
+    if (transcriptionQuery.data) {
+      setSettingsDraft(transcriptionQuery.data.settings);
     }
-
-    void checkDesktopRuntime();
-
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  const reloadTutorSetup = useCallback(async () => {
-    setTutorState({ status: "checking" });
-
-    try {
-      const setup = await loadTutorSetup();
-      setTutorSettingsDraft(setup.settings);
-      setTutorState({ status: "loaded", setup, saving: false });
-    } catch (error) {
-      const tutorError = toTutorError(error);
-      setTutorState({ status: "error", message: tutorError.message });
-    }
-  }, []);
+  }, [transcriptionQuery.data]);
 
   useEffect(() => {
-    let ignore = false;
-
-    async function checkTutorRuntime() {
-      try {
-        const setup = await loadTutorSetup();
-
-        if (!ignore) {
-          setTutorSettingsDraft(setup.settings);
-          setTutorState({ status: "loaded", setup, saving: false });
-        }
-      } catch (error) {
-        if (!ignore) {
-          const tutorError = toTutorError(error);
-          setTutorState({ status: "error", message: tutorError.message });
-        }
-      }
+    if (tutorQuery.data) {
+      setTutorSettingsDraft(tutorQuery.data.settings);
     }
-
-    void checkTutorRuntime();
-
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  const reloadTtsSetup = useCallback(async () => {
-    setTtsState({ status: "checking" });
-
-    try {
-      const setup = await loadTtsSetup();
-      setTtsSettingsDraft(setup.settings);
-      setTtsState({ status: "loaded", setup, saving: false });
-    } catch (error) {
-      const ttsError = toTtsError(error);
-      setTtsState({ status: "error", message: ttsError.message });
-    }
-  }, []);
+  }, [tutorQuery.data]);
 
   useEffect(() => {
-    let ignore = false;
-
-    async function checkTtsRuntime() {
-      try {
-        const setup = await loadTtsSetup();
-
-        if (!ignore) {
-          setTtsSettingsDraft(setup.settings);
-          setTtsState({ status: "loaded", setup, saving: false });
-        }
-      } catch (error) {
-        if (!ignore) {
-          const ttsError = toTtsError(error);
-          setTtsState({ status: "error", message: ttsError.message });
-        }
-      }
+    if (ttsQuery.data) {
+      setTtsSettingsDraft(ttsQuery.data.settings);
     }
-
-    void checkTtsRuntime();
-
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  const reloadTranscriptionSetup = useCallback(async () => {
-    setTranscriptionState({ status: "checking" });
-
-    try {
-      const setup = await loadTranscriptionSetup();
-      setSettingsDraft(setup.settings);
-      setTranscriptionState({ status: "loaded", setup, saving: false });
-    } catch (error) {
-      const transcriptionError = toTranscriptionError(error);
-      setTranscriptionState({
-        status: "error",
-        message: transcriptionError.message,
-      });
-    }
-  }, []);
-
-  useEffect(() => {
-    let ignore = false;
-
-    async function checkTranscriptionRuntime() {
-      try {
-        const setup = await loadTranscriptionSetup();
-
-        if (!ignore) {
-          setSettingsDraft(setup.settings);
-          setTranscriptionState({ status: "loaded", setup, saving: false });
-        }
-      } catch (error) {
-        if (!ignore) {
-          const transcriptionError = toTranscriptionError(error);
-          setTranscriptionState({
-            status: "error",
-            message: transcriptionError.message,
-          });
-        }
-      }
-    }
-
-    void checkTranscriptionRuntime();
-
-    return () => {
-      ignore = true;
-    };
-  }, []);
+  }, [ttsQuery.data]);
 
   const saveSettings = async () => {
     if (transcriptionState.status !== "loaded") {
       return;
     }
-
-    const previousSetup = transcriptionState.setup;
-    setTranscriptionState({
-      status: "loaded",
-      setup: previousSetup,
-      saving: true,
-    });
-
     try {
-      const setup = await saveTranscriptionSettings(settingsDraft);
+      const setup = await transcriptionMutation.mutateAsync(settingsDraft);
+      queryClient.setQueryData(runtimeKeys.transcriptionSetup(), setup);
       setSettingsDraft(setup.settings);
-      setTranscriptionState({ status: "loaded", setup, saving: false });
-    } catch (error) {
-      const transcriptionError = toTranscriptionError(error);
-      setTranscriptionState({
-        status: "loaded",
-        setup: previousSetup,
-        saving: false,
-        saveError: transcriptionError.message,
-      });
+    } catch {
+      // surfaced via transcriptionState.saveError
     }
   };
 
@@ -275,22 +204,12 @@ export function useRuntimeSetup() {
     if (tutorState.status !== "loaded") {
       return;
     }
-
-    const previousSetup = tutorState.setup;
-    setTutorState({ status: "loaded", setup: previousSetup, saving: true });
-
     try {
-      const setup = await persistTutorSettings(tutorSettingsDraft);
+      const setup = await tutorMutation.mutateAsync(tutorSettingsDraft);
+      queryClient.setQueryData(runtimeKeys.tutorSetup(), setup);
       setTutorSettingsDraft(setup.settings);
-      setTutorState({ status: "loaded", setup, saving: false });
-    } catch (error) {
-      const tutorError = toTutorError(error);
-      setTutorState({
-        status: "loaded",
-        setup: previousSetup,
-        saving: false,
-        saveError: tutorError.message,
-      });
+    } catch {
+      // surfaced via tutorState.saveError
     }
   };
 
@@ -298,22 +217,12 @@ export function useRuntimeSetup() {
     if (ttsState.status !== "loaded") {
       return;
     }
-
-    const previousSetup = ttsState.setup;
-    setTtsState({ status: "loaded", setup: previousSetup, saving: true });
-
     try {
-      const setup = await persistTtsSettings(ttsSettingsDraft);
+      const setup = await ttsMutation.mutateAsync(ttsSettingsDraft);
+      queryClient.setQueryData(runtimeKeys.ttsSetup(), setup);
       setTtsSettingsDraft(setup.settings);
-      setTtsState({ status: "loaded", setup, saving: false });
-    } catch (error) {
-      const ttsError = toTtsError(error);
-      setTtsState({
-        status: "loaded",
-        setup: previousSetup,
-        saving: false,
-        saveError: ttsError.message,
-      });
+    } catch {
+      // surfaced via ttsState.saveError
     }
   };
 
@@ -355,9 +264,15 @@ export function useRuntimeSetup() {
 
   return {
     healthState,
-    reloadTranscriptionSetup,
-    reloadTtsSetup,
-    reloadTutorSetup,
+    reloadTranscriptionSetup: async () => {
+      await transcriptionQuery.refetch();
+    },
+    reloadTtsSetup: async () => {
+      await ttsQuery.refetch();
+    },
+    reloadTutorSetup: async () => {
+      await tutorQuery.refetch();
+    },
     resetSettingsDraft,
     resetTtsSettingsDraft,
     resetTutorSettingsDraft,

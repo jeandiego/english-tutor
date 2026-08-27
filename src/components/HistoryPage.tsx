@@ -1,10 +1,12 @@
-import { useEffect, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useState } from "react";
 import {
   listCorrectionCategoryCounts,
   listRecentExpressions,
   listRecentSessions,
   toHistoryError,
 } from "../native/history";
+import { historyKeys } from "../queryKeys/history";
 import { findSessionTemplate } from "../sessions/catalog";
 import type {
   CategoryCount,
@@ -41,10 +43,14 @@ type HistoryData = {
   expressions: ExpressionSummary[];
 };
 
-type HistoryLoadState =
-  | { status: "loading" }
-  | { status: "loaded"; data: HistoryData }
-  | { status: "error"; message: string };
+async function loadHistoryData(): Promise<HistoryData> {
+  const [sessions, categories, expressions] = await Promise.all([
+    listRecentSessions(10),
+    listCorrectionCategoryCounts(),
+    listRecentExpressions(10),
+  ]);
+  return { sessions, categories, expressions };
+}
 
 function formatSessionDate(startedAt: number): string {
   return new Date(startedAt).toLocaleString(undefined, {
@@ -207,60 +213,35 @@ function ExpressionList({ expressions }: { expressions: ExpressionSummary[] }) {
 }
 
 export function HistoryPage() {
-  const [state, setState] = useState<HistoryLoadState>({ status: "loading" });
-
-  useEffect(() => {
-    let cancelled = false;
-
-    setState({ status: "loading" });
-
-    void Promise.all([
-      listRecentSessions(10),
-      listCorrectionCategoryCounts(),
-      listRecentExpressions(10),
-    ])
-      .then(([sessions, categories, expressions]) => {
-        if (cancelled) {
-          return;
-        }
-        setState({ status: "loaded", data: { sessions, categories, expressions } });
-      })
-      .catch((error: unknown) => {
-        if (cancelled) {
-          return;
-        }
-        setState({ status: "error", message: toHistoryError(error).message });
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const query = useQuery({
+    queryKey: historyKeys.recent(10),
+    queryFn: loadHistoryData,
+  });
 
   return (
     <section className="history-page" aria-labelledby="history-title">
       <h2 id="history-title">Recent learning</h2>
 
-      {state.status === "loading" && <p className="history-empty">Loading…</p>}
-      {state.status === "error" && (
+      {query.isPending && <p className="history-empty">Loading…</p>}
+      {query.isError && (
         <p className="history-empty" role="alert">
-          {state.message}
+          {toHistoryError(query.error).message}
         </p>
       )}
 
-      {state.status === "loaded" && (
+      {query.data && (
         <div className="history-sections">
           <div className="history-section">
             <h3>Recent sessions</h3>
-            <SessionList sessions={state.data.sessions} />
+            <SessionList sessions={query.data.sessions} />
           </div>
           <div className="history-section">
             <h3>Recurring patterns</h3>
-            <CategoryList categories={state.data.categories} />
+            <CategoryList categories={query.data.categories} />
           </div>
           <div className="history-section">
             <h3>Useful expressions</h3>
-            <ExpressionList expressions={state.data.expressions} />
+            <ExpressionList expressions={query.data.expressions} />
           </div>
         </div>
       )}

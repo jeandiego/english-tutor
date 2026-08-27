@@ -1,4 +1,6 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { learnerProfileKeys } from "../queryKeys/learnerProfile";
 import { aggregateResult } from "../assessment/aggregator";
 import { BLUEPRINT_TASKS, BLUEPRINT_VERSION } from "../assessment/blueprint";
 import {
@@ -98,6 +100,7 @@ export function useAssessmentSession({
   transcribe,
   speak = speakTutorReply,
 }: UseAssessmentSessionOptions) {
+  const queryClient = useQueryClient();
   const [status, setStatus] = useState<AssessmentSessionStatus>("idle");
   const [currentQuestion, setCurrentQuestion] = useState<string | undefined>();
   const [exchanges, setExchanges] = useState<AssessmentExchange[]>([]);
@@ -380,6 +383,7 @@ export function useAssessmentSession({
         dimensionLevels,
         priorities: summaryText?.priorities ?? [],
       });
+      void queryClient.invalidateQueries({ queryKey: learnerProfileKeys.all });
     } catch {
       // The learner profile is supplementary context for the tutor — a
       // failed update must not discard an otherwise-valid, evidence-backed

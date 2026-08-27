@@ -1,9 +1,11 @@
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useState } from "react";
 import {
   getLearnerProfile,
   saveLearnerProfilePreferences,
   toLearnerProfileError,
 } from "../native/learnerProfile";
+import { learnerProfileKeys } from "../queryKeys/learnerProfile";
 import type { LearnerProfile } from "../types/learnerProfile";
 
 export type LearnerProfileState =
@@ -51,74 +53,55 @@ const EMPTY_DRAFT: PreferencesDraft = {
 };
 
 export function useLearnerProfile() {
-  const [state, setState] = useState<LearnerProfileState>({ status: "checking" });
+  const queryClient = useQueryClient();
+  const query = useQuery({
+    queryKey: learnerProfileKeys.detail(),
+    queryFn: getLearnerProfile,
+  });
   const [draft, setDraft] = useState<PreferencesDraft>(EMPTY_DRAFT);
 
-  const refresh = useCallback(async () => {
-    setState({ status: "checking" });
-    try {
-      const profile = await getLearnerProfile();
-      setDraft(draftFromProfile(profile));
-      setState({ status: "loaded", profile, saving: false });
-    } catch (error) {
-      setState({ status: "error", message: toLearnerProfileError(error).message });
-    }
-  }, []);
-
   useEffect(() => {
-    let ignore = false;
-
-    async function load() {
-      try {
-        const profile = await getLearnerProfile();
-        if (!ignore) {
-          setDraft(draftFromProfile(profile));
-          setState({ status: "loaded", profile, saving: false });
-        }
-      } catch (error) {
-        if (!ignore) {
-          setState({ status: "error", message: toLearnerProfileError(error).message });
-        }
-      }
+    if (query.data) {
+      setDraft(draftFromProfile(query.data));
     }
+  }, [query.data]);
 
-    void load();
+  const mutation = useMutation({
+    mutationFn: (nextDraft: PreferencesDraft) =>
+      saveLearnerProfilePreferences(nextDraft),
+    onSuccess: (profile) => {
+      queryClient.setQueryData(learnerProfileKeys.detail(), profile);
+      setDraft(draftFromProfile(profile));
+    },
+  });
 
-    return () => {
-      ignore = true;
-    };
-  }, []);
-
-  const save = useCallback(async () => {
-    if (state.status !== "loaded") {
+  const save = useCallback(() => {
+    if (!query.data) {
       return;
     }
-
-    const previousProfile = state.profile;
-    setState({ status: "loaded", profile: previousProfile, saving: true });
-
-    try {
-      const profile = await saveLearnerProfilePreferences(draft);
-      setDraft(draftFromProfile(profile));
-      setState({ status: "loaded", profile, saving: false });
-    } catch (error) {
-      setState({
-        status: "loaded",
-        profile: previousProfile,
-        saving: false,
-        saveError: toLearnerProfileError(error).message,
-      });
-    }
-  }, [draft, state]);
+    mutation.mutate(draft);
+  }, [draft, mutation, query.data]);
 
   const reset = useCallback(() => {
-    if (state.status === "loaded") {
-      setDraft(draftFromProfile(state.profile));
+    if (query.data) {
+      setDraft(draftFromProfile(query.data));
     }
-  }, [state]);
+  }, [query.data]);
 
-  const dirty =
-    state.status === "loaded" && !draftsEqual(draft, draftFromProfile(state.profile));
+  const dirty = query.data !== undefined && !draftsEqual(draft, draftFromProfile(query.data));
+
+  const state: LearnerProfileState = query.isPending
+    ? { status: "checking" }
+    : query.isError
+      ? { status: "error", message: toLearnerProfileError(query.error).message }
+      : {
+          status: "loaded",
+          profile: query.data,
+          saving: mutation.isPending,
+          saveError: mutation.error
+            ? toLearnerProfileError(mutation.error).message
+            : undefined,
+        };
 
   return {
     state,
@@ -127,6 +110,6 @@ export function useLearnerProfile() {
     dirty,
     save,
     reset,
-    refresh,
+    refresh: query.refetch,
   };
 }

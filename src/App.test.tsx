@@ -1,13 +1,13 @@
 import {
   cleanup,
   fireEvent,
-  render,
   screen,
   waitFor,
   within,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
+import { renderWithQueryClient as render } from "./test/queryTestUtils";
 import { getLatestAssessment, listAssessments } from "./native/assessment";
 import { getRuntimeHealth } from "./native/health";
 import {
@@ -395,7 +395,9 @@ describe("English Coach shell", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Save and verify" }));
 
-    expect(screen.getByLabelText("Whisper executable")).toBeDisabled();
+    await waitFor(() =>
+      expect(screen.getByLabelText("Whisper executable")).toBeDisabled(),
+    );
     expect(screen.getByLabelText("Whisper model")).toBeDisabled();
     expect(
       screen.getByRole("button", { name: "Saving and verifying…" }),

@@ -1,5 +1,6 @@
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { renderWithQueryClient } from "../test/queryTestUtils";
 import type { SessionStart } from "../types/history";
 import { useSessionHistory } from "./useSessionHistory";
 
@@ -29,7 +30,7 @@ describe("useSessionHistory", () => {
       learnerContext: "Focus on articles.",
     });
 
-    render(<Harness startSession={startSession} />);
+    renderWithQueryClient(<Harness startSession={startSession} />);
 
     expect(await screen.findByText("session:7")).toBeInTheDocument();
     expect(screen.getByText("context:Focus on articles.")).toBeInTheDocument();
@@ -43,7 +44,7 @@ describe("useSessionHistory", () => {
       technicalMessage: "disk full",
     });
 
-    render(<Harness startSession={startSession} />);
+    renderWithQueryClient(<Harness startSession={startSession} />);
 
     expect(
       await screen.findByText("error:The learning history could not be saved."),
@@ -53,7 +54,9 @@ describe("useSessionHistory", () => {
   it("does not start a second session on re-render", async () => {
     const startSession = vi.fn().mockResolvedValue({ sessionId: 1 });
 
-    const { rerender } = render(<Harness startSession={startSession} />);
+    const { rerender } = renderWithQueryClient(
+      <Harness startSession={startSession} />,
+    );
     await screen.findByText("session:1");
 
     await act(async () => {

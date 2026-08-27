@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssessmentTask } from "../assessment/types";
 import type { AudioRecorder, RecordedAudio } from "../audio/recorder";
@@ -6,6 +6,8 @@ import { TalkControl } from "../components/TalkControl";
 import * as assessmentNative from "../native/assessment";
 import * as learnerProfileNative from "../native/learnerProfile";
 import * as speechNative from "../native/speech";
+import { learnerProfileKeys } from "../queryKeys/learnerProfile";
+import { renderWithQueryClient as render } from "../test/queryTestUtils";
 import { useAssessmentSession } from "./useAssessmentSession";
 
 vi.mock("../native/assessment", async (importOriginal) => {
@@ -179,12 +181,13 @@ describe("useAssessmentSession", () => {
     });
 
     const recorder = createRecorder();
-    render(
+    const { client } = render(
       <AssessmentHarness
         recorder={recorder}
         transcribe={async () => ({ text: "It was a normal day." })}
       />,
     );
+    const invalidateQueriesSpy = vi.spyOn(client, "invalidateQueries");
 
     fireEvent.click(screen.getByRole("button", { name: "Start" }));
     await waitFor(() =>
@@ -225,6 +228,11 @@ describe("useAssessmentSession", () => {
       dimensionLevels: { fluency: "B2" },
       priorities: ["Practice linking ideas."],
     });
+    await waitFor(() =>
+      expect(invalidateQueriesSpy).toHaveBeenCalledWith({
+        queryKey: learnerProfileKeys.all,
+      }),
+    );
   });
 
   it("still completes the assessment when the learner profile update fails", async () => {

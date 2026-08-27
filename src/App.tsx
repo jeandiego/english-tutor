@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { AppHeader, type AppPage } from "./components/AppHeader";
 import { AssessmentPage } from "./components/AssessmentPage";
 import { ConversationStage } from "./components/ConversationStage";
@@ -15,21 +16,17 @@ import { useRuntimeSetup } from "./hooks/useRuntimeSetup";
 import { useSessionHistory } from "./hooks/useSessionHistory";
 import { useTutorConversation } from "./hooks/useTutorConversation";
 import { getLatestAssessment } from "./native/assessment";
+import { assessmentKeys } from "./queryKeys/assessment";
 import "./App.css";
 
 function App() {
   const [activePage, setActivePage] = useState<AppPage>("conversation");
-  const [estimatedLevel, setEstimatedLevel] = useState<string | undefined>();
-
-  const refreshEstimatedLevel = useCallback(() => {
-    void getLatestAssessment()
-      .then((latest) => setEstimatedLevel(latest?.estimatedLevel))
-      .catch(() => setEstimatedLevel(undefined));
-  }, []);
-
-  useEffect(() => {
-    refreshEstimatedLevel();
-  }, [refreshEstimatedLevel]);
+  const queryClient = useQueryClient();
+  const latestAssessmentQuery = useQuery({
+    queryKey: assessmentKeys.latest(),
+    queryFn: getLatestAssessment,
+  });
+  const estimatedLevel = latestAssessmentQuery.data?.estimatedLevel ?? undefined;
   const {
     healthState,
     reloadTranscriptionSetup,
@@ -214,7 +211,11 @@ function App() {
             healthState.status !== "ready" || !transcriptionReady || !tutorReady
           }
           disabledHint={voiceDisabledHint}
-          onAssessmentCompleted={refreshEstimatedLevel}
+          onAssessmentCompleted={() =>
+            void queryClient.invalidateQueries({
+              queryKey: assessmentKeys.latest(),
+            })
+          }
         />
       ) : activePage === "history" ? (
         <HistoryPage />
