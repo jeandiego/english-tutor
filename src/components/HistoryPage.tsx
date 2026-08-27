@@ -14,6 +14,10 @@ import type {
   SessionSummary,
 } from "../types/history";
 import type { RepairOutcome, RepairPriority } from "../types/repair";
+import { Badge } from "./ui/badge";
+import { Card, CardContent, CardHeader } from "./ui/card";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { cn } from "../lib/utils";
 
 const CATEGORY_LABELS: Record<string, string> = {
   grammar: "Grammar",
@@ -59,6 +63,33 @@ function formatSessionDate(startedAt: number): string {
   });
 }
 
+function HistorySection({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Card>
+      <CardHeader>
+        <h3 className="text-body-lg font-medium text-foreground">{title}</h3>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">{children}</CardContent>
+    </Card>
+  );
+}
+
+function SummaryList({ heading, items }: { heading: string; items: string[] }) {
+  if (items.length === 0) {
+    return null;
+  }
+  return (
+    <div className="flex flex-col gap-1">
+      <h4 className="text-caption font-medium text-muted-foreground">{heading}</h4>
+      <ul className="flex flex-col gap-0.5 text-body text-foreground">
+        {items.map((item, index) => (
+          <li key={index}>{item}</li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function SessionSummaryDetail({ session }: { session: SessionSummary }) {
   const [expanded, setExpanded] = useState(false);
   const summary = session.summary;
@@ -68,63 +99,34 @@ function SessionSummaryDetail({ session }: { session: SessionSummary }) {
   }
 
   return (
-    <div className="history-session__summary">
-      <button
+    <Collapsible onOpenChange={setExpanded} open={expanded}>
+      <CollapsibleTrigger
         aria-expanded={expanded}
-        className="history-session__summary-toggle"
-        onClick={() => setExpanded((value) => !value)}
-        type="button"
+        className="text-caption font-medium text-primary hover:underline"
       >
         {expanded ? "Hide summary" : "Show summary"}
-      </button>
-      {expanded && (
-        <div className="history-session__summary-body">
-          {summary.whatWentWell.length > 0 && (
-            <div className="history-session__summary-section">
-              <h4>What went well</h4>
-              <ul>
-                {summary.whatWentWell.map((item, index) => (
-                  <li key={index}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {summary.priorityIssues.length > 0 && (
-            <div className="history-session__summary-section">
-              <h4>Priorities</h4>
-              <ul>
-                {summary.priorityIssues.map((item, index) => (
-                  <li key={index}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {summary.reviewItems.length > 0 && (
-            <div className="history-session__summary-section">
-              <h4>Review later</h4>
-              <ul>
-                {summary.reviewItems.map((item, index) => (
-                  <li key={index}>{item}</li>
-                ))}
-              </ul>
-            </div>
-          )}
-          {summary.repairEvents.length > 0 && (
-            <div className="history-session__summary-section">
-              <h4>Repair practice</h4>
-              <ul>
-                {summary.repairEvents.map((event, index) => (
-                  <li key={index}>
-                    {REPAIR_PRIORITY_LABELS[event.priority]}: {event.issue}
-                    {event.outcome && <> — {REPAIR_OUTCOME_LABELS[event.outcome]}</>}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </div>
-      )}
-    </div>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2 flex flex-col gap-3">
+        <SummaryList heading="What went well" items={summary.whatWentWell} />
+        <SummaryList heading="Priorities" items={summary.priorityIssues} />
+        <SummaryList heading="Review later" items={summary.reviewItems} />
+        {summary.repairEvents.length > 0 && (
+          <div className="flex flex-col gap-1">
+            <h4 className="text-caption font-medium text-muted-foreground">
+              Repair practice
+            </h4>
+            <ul className="flex flex-col gap-0.5 text-body text-foreground">
+              {summary.repairEvents.map((event, index) => (
+                <li key={index}>
+                  {REPAIR_PRIORITY_LABELS[event.priority]}: {event.issue}
+                  {event.outcome && <> — {REPAIR_OUTCOME_LABELS[event.outcome]}</>}
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -136,36 +138,32 @@ function SessionList({
   focusSessionId?: number;
 }) {
   if (sessions.length === 0) {
-    return <p className="history-empty">No sessions yet.</p>;
+    return <p className="text-body text-muted-foreground">No sessions yet.</p>;
   }
 
   return (
-    <ul className="history-sessions">
+    <ul className="flex flex-col divide-y divide-border">
       {sessions.map((session) => (
         <li
-          className="history-session"
+          className={cn(
+            "flex flex-col gap-2 py-3 first:pt-0 last:pb-0",
+            session.id === focusSessionId && "-mx-2 rounded-lg px-2 ring-2 ring-primary",
+          )}
           id={`history-session-${session.id}`}
           key={session.id}
-          style={
-            session.id === focusSessionId
-              ? { outline: "2px solid var(--mint)", outlineOffset: "2px" }
-              : undefined
-          }
         >
-          <div className="history-session__row">
-            <span className="history-session__scenario">{scenarioLabelFor(session.mode)}</span>
-            <span className="history-session__date">
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+            <span className="text-body font-medium text-foreground">
+              {scenarioLabelFor(session.mode)}
+            </span>
+            <span className="text-caption text-muted-foreground">
               {formatSessionDate(session.startedAt)}
             </span>
-            <span className="history-session__turns">
+            <span className="text-caption text-muted-foreground">
               {session.turnCount} {session.turnCount === 1 ? "turn" : "turns"}
             </span>
             {session.status !== "active" && (
-              <span
-                className={`history-session__status history-session__status--${session.status}`}
-              >
-                {session.status}
-              </span>
+              <Badge variant="outline">{session.status}</Badge>
             )}
           </div>
           <SessionSummaryDetail session={session} />
@@ -177,17 +175,20 @@ function SessionList({
 
 function CategoryList({ categories }: { categories: CategoryCount[] }) {
   if (categories.length === 0) {
-    return <p className="history-empty">No recurring patterns yet.</p>;
+    return <p className="text-body text-muted-foreground">No recurring patterns yet.</p>;
   }
 
   return (
-    <ul className="history-categories">
+    <ul className="flex flex-col divide-y divide-border">
       {categories.map((entry) => (
-        <li className="history-category" key={entry.category}>
-          <span className="history-category__label">
+        <li
+          className="flex items-center justify-between py-2 first:pt-0 last:pb-0"
+          key={entry.category}
+        >
+          <span className="text-body text-foreground">
             {CATEGORY_LABELS[entry.category] ?? entry.category}
           </span>
-          <span className="history-category__count">{entry.count}</span>
+          <span className="text-caption text-muted-foreground">{entry.count}</span>
         </li>
       ))}
     </ul>
@@ -196,26 +197,22 @@ function CategoryList({ categories }: { categories: CategoryCount[] }) {
 
 function ExpressionList({ expressions }: { expressions: ExpressionSummary[] }) {
   if (expressions.length === 0) {
-    return <p className="history-empty">No saved expressions yet.</p>;
+    return <p className="text-body text-muted-foreground">No saved expressions yet.</p>;
   }
 
   return (
-    <ul className="history-expressions">
+    <ul className="flex flex-col divide-y divide-border">
       {expressions.map((expression, index) => (
-        <li className="history-expression" key={index}>
+        <li className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0" key={index}>
           {expression.original && (
-            <p className="history-expression__row">
-              <span className="history-expression__row-label">Instead of</span>
-              <span className="history-expression__quote">
-                “{expression.original}”
-              </span>
+            <p className="text-body">
+              <span className="text-muted-foreground">Instead of </span>
+              <span className="text-foreground">“{expression.original}”</span>
             </p>
           )}
-          <p className="history-expression__row">
-            <span className="history-expression__row-label">Try</span>
-            <span className="history-expression__quote history-expression__quote--better">
-              “{expression.suggestion}”
-            </span>
+          <p className="text-body">
+            <span className="text-muted-foreground">Try </span>
+            <span className="font-medium text-success">“{expression.suggestion}”</span>
           </p>
         </li>
       ))}
@@ -239,30 +236,32 @@ export function HistoryPage({ focusSessionId }: { focusSessionId?: number } = {}
   }, [focusSessionId, query.data]);
 
   return (
-    <section className="history-page" aria-labelledby="history-title">
-      <h2 id="history-title">Recent learning</h2>
+    <section
+      aria-labelledby="history-title"
+      className="mx-auto flex w-full max-w-2xl flex-col gap-6 overflow-y-auto p-6"
+    >
+      <h2 className="text-subheading font-semibold text-foreground" id="history-title">
+        Recent learning
+      </h2>
 
-      {query.isPending && <p className="history-empty">Loading…</p>}
+      {query.isPending && <p className="text-body text-muted-foreground">Loading…</p>}
       {query.isError && (
-        <p className="history-empty" role="alert">
+        <p className="text-body text-destructive" role="alert">
           {toHistoryError(query.error).message}
         </p>
       )}
 
       {query.data && (
-        <div className="history-sections">
-          <div className="history-section">
-            <h3>Recent sessions</h3>
+        <div className="flex flex-col gap-6">
+          <HistorySection title="Recent sessions">
             <SessionList focusSessionId={focusSessionId} sessions={query.data.sessions} />
-          </div>
-          <div className="history-section">
-            <h3>Recurring patterns</h3>
+          </HistorySection>
+          <HistorySection title="Recurring patterns">
             <CategoryList categories={query.data.categories} />
-          </div>
-          <div className="history-section">
-            <h3>Useful expressions</h3>
+          </HistorySection>
+          <HistorySection title="Useful expressions">
             <ExpressionList expressions={query.data.expressions} />
-          </div>
+          </HistorySection>
         </div>
       )}
     </section>
