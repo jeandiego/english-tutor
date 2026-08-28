@@ -90,8 +90,8 @@ export function AppSidebar({
   });
 
   return (
-    <Sidebar className="border-r-0">
-      <SidebarHeader>
+    <Sidebar>
+      <SidebarHeader className="pt-10">
         <div className="flex items-center gap-2 px-2 py-1.5">
           <span className="flex size-6 items-center justify-center rounded-[4px] bg-primary text-xs font-bold text-primary-foreground">
             E
@@ -104,6 +104,7 @@ export function AppSidebar({
           {NAV_ITEMS.map((item) => (
             <SidebarMenuItem key={item.page}>
               <SidebarMenuButton
+                className="rounded-lg!"
                 disabled={!item.alwaysEnabled && navigationDisabled}
                 isActive={activePage === item.page}
                 onClick={() => onNavigate(item.page)}

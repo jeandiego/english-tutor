@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useState, type CSSProperties } from "react";
 import { AssessmentPage } from "./components/AssessmentPage";
 import { ConversationStage } from "./components/ConversationStage";
 import { HistoryPage } from "./components/HistoryPage";
@@ -12,12 +12,23 @@ import type {
   TutorDiagnostic,
 } from "./components/SystemDiagnostics";
 import { TalkControl } from "./components/TalkControl";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
+import { TopBar } from "./components/TopBar";
+import { SidebarInset, SidebarProvider } from "./components/ui/sidebar";
 import { useRuntimeSetup } from "./hooks/useRuntimeSetup";
 import { useSessionHistory } from "./hooks/useSessionHistory";
 import { useTutorConversation } from "./hooks/useTutorConversation";
+import { SIDEBAR_WIDTH_PX } from "./lib/layout";
 import { getLatestAssessment } from "./native/assessment";
 import { assessmentKeys } from "./queryKeys/assessment";
+
+const PAGE_HEADER: Record<AppPage, { eyebrow: string; title: string }> = {
+  conversation: { eyebrow: "Conversation", title: "Live practice" },
+  sessions: { eyebrow: "Sessions", title: "Choose a scenario" },
+  assessment: { eyebrow: "Assessment", title: "Level check" },
+  history: { eyebrow: "History", title: "Past conversations" },
+  progress: { eyebrow: "My Progress", title: "Learning trends" },
+  settings: { eyebrow: "Settings", title: "Runtime & voice" },
+};
 
 function App() {
   const [activePage, setActivePage] = useState<AppPage>("conversation");
@@ -157,7 +168,11 @@ function App() {
   };
 
   return (
-    <SidebarProvider className="h-svh" data-page={activePage}>
+    <SidebarProvider
+      className="h-svh"
+      data-page={activePage}
+      style={{ "--sidebar-width": `${SIDEBAR_WIDTH_PX}px` } as CSSProperties}
+    >
       <AppSidebar
         activePage={activePage}
         estimatedLevel={estimatedLevel}
@@ -174,10 +189,13 @@ function App() {
         tutor={tutorDiagnostic}
       />
       <SidebarInset>
-        <header className="flex h-12 shrink-0 items-center gap-2 border-b border-border px-3">
-          <SidebarTrigger />
-        </header>
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <TopBar
+          eyebrow={PAGE_HEADER[activePage].eyebrow}
+          newSessionDisabled={voiceBusy}
+          onNewSession={() => navigate("sessions")}
+          title={PAGE_HEADER[activePage].title}
+        />
+        <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-10">
           {activePage === "conversation" ? (
         <>
           <ConversationStage

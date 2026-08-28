@@ -356,7 +356,7 @@ export function SettingsPage({
                     spellCheck={false}
                     value={transcriptionDraft.whisperExecutablePath}
                   />
-                  <FieldDescription>The locally installed whisper.cpp command.</FieldDescription>
+                  <FieldDescription className="text-xs text-muted-foreground/62">The locally installed whisper.cpp command.</FieldDescription>
                 </FieldContent>
               </Field>
 
@@ -377,7 +377,7 @@ export function SettingsPage({
                     spellCheck={false}
                     value={transcriptionDraft.whisperModelPath}
                   />
-                  <FieldDescription>
+                  <FieldDescription className="text-xs text-muted-foreground/62">
                     An English-capable GGML model file stored locally.
                   </FieldDescription>
                 </FieldContent>
@@ -400,7 +400,7 @@ export function SettingsPage({
                     spellCheck={false}
                     value={transcriptionDraft.ffmpegExecutablePath}
                   />
-                  <FieldDescription>
+                  <FieldDescription className="text-xs text-muted-foreground/62">
                     Converts recordings to mono 16 kHz WAV before Whisper.
                   </FieldDescription>
                 </FieldContent>
@@ -508,7 +508,7 @@ export function SettingsPage({
                     spellCheck={false}
                     value={tutorDraft.baseUrl}
                   />
-                  <FieldDescription>
+                  <FieldDescription  className="text-xs text-muted-foreground/62">
                     Use localhost, 127.0.0.1, ::1, or a private network address (e.g.
                     192.168.x.x) with any local port.
                   </FieldDescription>
@@ -551,7 +551,7 @@ export function SettingsPage({
                       ))}
                     </SelectContent>
                   </Select>
-                  <FieldDescription>
+                  <FieldDescription  className="text-xs text-muted-foreground/62">
                     {tutorSetup.preflight.availableModels.length > 0
                       ? `${tutorSetup.preflight.availableModels.length} local model${
                           tutorSetup.preflight.availableModels.length === 1 ? "" : "s"
@@ -564,7 +564,7 @@ export function SettingsPage({
               <Field orientation="horizontal">
                 <FieldContent>
                   <FieldLabel htmlFor="ollama-thinking-enabled">Thinking mode</FieldLabel>
-                  <FieldDescription>
+                  <FieldDescription className="text-xs text-muted-foreground/62">
                     Only affects models that support extended thinking. Turning it off
                     usually replies faster and raises tokens/sec.
                   </FieldDescription>
@@ -603,7 +603,7 @@ export function SettingsPage({
                       ))}
                     </SelectContent>
                   </Select>
-                  <FieldDescription>
+                  <FieldDescription className="text-xs text-muted-foreground/62">
                     {
                       REPAIR_INTENSITY_OPTIONS.find(
                         (option) => option.value === tutorDraft.repairIntensity,
@@ -713,7 +713,7 @@ export function SettingsPage({
                       ))}
                     </SelectContent>
                   </Select>
-                  <FieldDescription>
+                  <FieldDescription className="text-xs text-muted-foreground/62">
                     Unavailable providers fall back to macOS speech automatically.
                   </FieldDescription>
                 </FieldContent>
@@ -745,7 +745,7 @@ export function SettingsPage({
                       </option>
                     ))}
                   </datalist>
-                  <FieldDescription>
+                  <FieldDescription  className="text-xs text-muted-foreground/62">
                     {selectedProvider?.voices.length
                       ? `${selectedProvider.voices.length} voice${
                           selectedProvider.voices.length === 1 ? "" : "s"
@@ -777,7 +777,7 @@ export function SettingsPage({
                         {ttsDraft.rate ?? 175} wpm
                       </output>
                     </div>
-                    <FieldDescription>Words per minute.</FieldDescription>
+                    <FieldDescription  className="text-xs text-muted-foreground/62">Words per minute.</FieldDescription>
                   </FieldContent>
                 </Field>
               )}

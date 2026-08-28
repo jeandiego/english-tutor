@@ -1,3 +1,4 @@
+import { IconMicrophone, IconMicrophoneFilled } from "@tabler/icons-react";
 import type { PressOwner, RecordingState } from "../hooks/usePushToTalk";
 import { cn } from "../lib/utils";
 
@@ -35,11 +36,11 @@ export function TalkControl({
       ? "Speaking…"
       : thinking
       ? "Thinking…"
-      : state.status === "recording"
-      ? "Release to finish"
       : state.status === "transcribing"
         ? "Transcribing…"
-        : "Hold to talk";
+        : isHeld
+          ? "Release"
+          : "Hold to talk";
   let hint = "Hold the button or Space to speak";
 
   if (speaking) {
@@ -73,20 +74,28 @@ export function TalkControl({
     onEnd("pointer");
   };
 
-  const isRecording = !speaking && !thinking && state.status === "recording";
+  let secondary: string | null = null;
+  if (state.status === "recording") {
+    secondary = formatElapsedTime(state.elapsedMs);
+  } else if (state.status === "requesting") {
+    secondary = "Requesting…";
+  } else if (!isDisabled) {
+    secondary = "Space";
+  }
 
   return (
-    <section aria-label="Voice controls" className="flex shrink-0 justify-center border-t border-border bg-card p-6">
+    <section aria-label="Voice controls" className="flex shrink-0 justify-center px-4 pb-4 pt-1">
       <button
         aria-describedby="talk-control-hint"
         aria-label={label}
         aria-pressed={isHeld}
         className={cn(
-          "flex w-full max-w-2xl flex-col items-center gap-1 rounded-[4px] border border-foreground bg-card px-6 py-4 text-center transition-colors",
-          "hover:enabled:bg-accent",
+          "group flex items-center gap-2 rounded-[var(--radius-inputs)] border border-transparent px-4 py-2 text-background transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
-          "disabled:cursor-not-allowed disabled:border-border disabled:text-muted-foreground",
-          isRecording && "border-foreground bg-foreground text-background hover:enabled:bg-foreground",
+          "disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground",
+          isHeld
+            ? "bg-sidebar-accent text-sidebar-accent-foreground"
+            : "bg-foreground hover:enabled:bg-foreground/90",
         )}
         disabled={isDisabled}
         onClick={(event) => {
@@ -114,11 +123,25 @@ export function TalkControl({
         onPointerUp={finishPointerPress}
         type="button"
       >
-        <span className="text-body-lg font-medium">{label}</span>
-        <span
-          className={cn("text-caption text-muted-foreground", isRecording && "text-background/80")}
-          id="talk-control-hint"
-        >
+        {isHeld ? (
+          <IconMicrophoneFilled className="size-[15px] shrink-0" />
+        ) : (
+          <IconMicrophone className="size-[15px] shrink-0" />
+        )}
+        <span className="text-[13px] font-medium">{label}</span>
+        {secondary && (
+          <span
+            className={cn(
+              "text-[11px]",
+              isHeld
+                ? "text-sidebar-accent-foreground/70"
+                : "text-background/60 group-disabled:text-muted-foreground",
+            )}
+          >
+            {secondary}
+          </span>
+        )}
+        <span className="sr-only" id="talk-control-hint">
           {hint}
         </span>
       </button>

@@ -191,7 +191,7 @@ function StageContent({ loopState, state }: ConversationStageProps) {
   if (state.status === "transcribed") {
     return (
       <article aria-label="Your latest conversation turn" className="flex flex-col gap-2">
-        <p className="text-caption font-medium text-muted-foreground">You</p>
+        <p className="text-[11px] font-medium text-muted-foreground">You</p>
         <p className="text-body text-foreground" role="status">
           {state.text}
         </p>
@@ -246,7 +246,10 @@ function Corrections({ corrections }: { corrections: TutorCorrection[] }) {
   return (
     <ul aria-label="Corrections for this turn" className="flex flex-col gap-3">
       {corrections.map((correction, index) => (
-        <li className="flex flex-col gap-1.5 rounded-lg bg-accent p-3" key={index}>
+        <li
+          className="flex flex-col gap-1.5 rounded-[var(--radius-cards)] bg-card p-3 shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+          key={index}
+        >
           <Badge variant="outline">
             {capitalize(correction.category)} · {capitalize(correction.severity)}
           </Badge>
@@ -273,7 +276,10 @@ function BetterExpressions({ expressions }: { expressions: BetterExpression[] })
   return (
     <ul aria-label="Better ways to say this" className="flex flex-col gap-3">
       {expressions.map((expression, index) => (
-        <li className="flex flex-col gap-1.5 rounded-lg bg-accent p-3" key={index}>
+        <li
+          className="flex flex-col gap-1.5 rounded-[var(--radius-cards)] bg-card p-3 shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+          key={index}
+        >
           {expression.original && (
             <p className="text-body">
               <span className="text-muted-foreground">Instead of </span>
@@ -374,7 +380,7 @@ function RepairPrompt({
 
 function QuickCorrection({ repair }: { repair: ConversationRepairMeta }) {
   return (
-    <div className="flex flex-col gap-1.5 rounded-lg bg-accent p-3">
+    <div className="flex flex-col gap-1.5 rounded-[var(--radius-cards)] bg-card p-3 shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
       <Badge variant="outline">{REPAIR_PRIORITY_LABELS[repair.priority]} · Quick fix</Badge>
       <p className="text-body">
         <span className="text-foreground">“{repair.original}”</span>
@@ -488,6 +494,7 @@ function ReplayButton({
     <span className="inline-flex flex-col gap-1">
       <Button
         aria-label={isThisReplaying ? "Replaying tutor reply" : "Replay tutor reply"}
+        className="rounded-[var(--radius-buttons)] border-border text-[11px] text-muted-foreground"
         disabled={isDisabled}
         onClick={() => onReplay(exchangeId)}
         size="sm"
@@ -614,7 +621,7 @@ function ConversationLog({
           <article className="flex flex-col gap-3 border-b border-border pb-6 last:border-0" key={exchange.id}>
             {exchange.transcript && (
               <div className="flex flex-col gap-1.5">
-                <p className="text-caption font-medium text-muted-foreground">You</p>
+                <p className="text-[11px] font-medium text-muted-foreground">You</p>
                 <p className="text-body text-foreground">{exchange.transcript}</p>
                 {latestRecording && (
                   <RecordingPlayback recording={latestRecording} title="Recorded audio" />
@@ -624,7 +631,7 @@ function ConversationLog({
 
             {exchange.tutorTurn && (
               <div className="flex flex-col gap-1.5">
-                <p className="text-caption font-medium text-muted-foreground">Tutor</p>
+                <p className="text-[11px] font-medium text-muted-foreground">Tutor</p>
                 <div className="flex flex-col gap-2">
                   <p className="text-body text-foreground">{exchange.tutorTurn.reply}</p>
                   {(exchange.responseTimeMs !== undefined || onReplay) && (
