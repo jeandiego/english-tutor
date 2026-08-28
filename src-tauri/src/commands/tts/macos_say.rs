@@ -53,6 +53,7 @@ fn parse_voice_line(line: &str) -> Option<TtsVoice> {
         id: name.clone(),
         label: name,
         locale: Some(locale),
+        preview_url: None,
     })
 }
 

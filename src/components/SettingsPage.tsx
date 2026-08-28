@@ -25,7 +25,7 @@ import type {
   TranscriptionSettings,
   TranscriptionSetupState,
 } from "../types/transcription";
-import type { TtsProviderId, TtsSettings, TtsSetupState } from "../types/tts";
+import { TTS_PROVIDER_LABELS, type TtsProviderId, type TtsSettings, type TtsSetupState } from "../types/tts";
 import type { RepairIntensity, TutorSettings, TutorSetupState } from "../types/tutor";
 
 type SettingsPageProps = {
@@ -50,12 +50,6 @@ type SettingsPageProps = {
   onTtsReset: () => void;
   onTtsRetry: () => Promise<void>;
   onTtsSave: () => Promise<void>;
-};
-
-const TTS_PROVIDER_LABELS: Record<TtsProviderId, string> = {
-  macos_say: "macOS Speech",
-  kokoro_local: "Kokoro (local)",
-  elevenlabs: "ElevenLabs",
 };
 
 const REPAIR_INTENSITY_OPTIONS: Array<{
@@ -622,7 +616,7 @@ export function SettingsPage({
 
             <FormFooter
               dirty={tutorDirty}
-              note="English Coach never pulls or selects an Ollama model automatically."
+              note="Pako never pulls or selects an Ollama model automatically."
               onReset={onTutorReset}
               saveLabel="Save and verify tutor"
               saving={tutorSaving}

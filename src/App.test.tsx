@@ -265,7 +265,7 @@ afterEach(() => {
   vi.resetAllMocks();
 });
 
-describe("English Coach shell", () => {
+describe("Pako shell", () => {
   it("keeps voice input disabled while native checks are pending", () => {
     getRuntimeHealthMock.mockReturnValue(new Promise(() => undefined));
     loadTranscriptionSetupMock.mockReturnValue(new Promise(() => undefined));

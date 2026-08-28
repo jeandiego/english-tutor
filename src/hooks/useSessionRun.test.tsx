@@ -171,7 +171,7 @@ function SessionRunHarness({
 async function recordOneTurn() {
   fireEvent.keyDown(window, { code: "Space" });
   await waitFor(() =>
-    expect(screen.getByRole("button", { name: /release to finish/i })).toBeInTheDocument(),
+    expect(screen.getByRole("button", { name: /release/i })).toBeInTheDocument(),
   );
   fireEvent.keyUp(window, { code: "Space" });
 }

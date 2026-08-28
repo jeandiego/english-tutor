@@ -128,20 +128,20 @@ export function SystemDiagnostics({
   const errorCount = statuses.filter((status) => status === "error").length;
   const summaryLabel = summaryLabelFor(overall, errorCount);
   const [manualOpen, setManualOpen] = useState(() => overall !== "ready");
-  const expanded = manualOpen || overall !== "ready";
+  const expanded = manualOpen
 
   return (
     <Popover open={expanded} onOpenChange={setManualOpen}>
       <PopoverTrigger
         aria-label={`System status: ${summaryLabel}`}
-        className="flex w-full items-center gap-2 rounded-[8px] px-2 py-1.5 text-left text-body hover:bg-accent"
+        className={cn("flex w-full items-center gap-2 rounded-[8px] px-2 py-1.5 text-left text-body hover:bg-foreground/5", { 'bg-destructive/5 hover:bg-destructive/10 border-destructive/24 border': overall !== 'ready'})}
       >
         <StatusDot status={overall} />
         <span className="min-w-0 flex-1 truncate text-foreground">{summaryLabel}</span>
         <IconChevronDown
           className={cn(
             "size-4 shrink-0 text-muted-foreground transition-transform",
-            expanded && "rotate-180",
+            expanded && "-rotate-90",
           )}
         />
       </PopoverTrigger>

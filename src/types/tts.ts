@@ -1,9 +1,16 @@
 export type TtsProviderId = "macos_say" | "kokoro_local" | "elevenlabs";
 
+export const TTS_PROVIDER_LABELS: Record<TtsProviderId, string> = {
+  macos_say: "macOS Speech",
+  kokoro_local: "Kokoro (local)",
+  elevenlabs: "ElevenLabs",
+};
+
 export type TtsVoice = {
   id: string;
   label: string;
   locale?: string;
+  previewUrl?: string;
 };
 
 export type TtsAvailability = {

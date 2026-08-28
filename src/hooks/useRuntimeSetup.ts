@@ -28,7 +28,7 @@ import type {
   TranscriptionSettings,
   TranscriptionSetupState,
 } from "../types/transcription";
-import type { TtsSettings, TtsSetupState } from "../types/tts";
+import type { TtsProviderId, TtsSettings, TtsSetupState } from "../types/tts";
 import type { TutorSettings, TutorSetupState } from "../types/tutor";
 
 const DEFAULT_SETTINGS: TranscriptionSettings = {
@@ -226,6 +226,23 @@ export function useRuntimeSetup() {
     }
   };
 
+  const selectTtsVoice = async (provider: TtsProviderId, voiceId: string) => {
+    if (ttsState.status !== "loaded") {
+      return;
+    }
+    try {
+      const setup = await ttsMutation.mutateAsync({
+        ...ttsState.setup.settings,
+        provider,
+        voiceId,
+      });
+      queryClient.setQueryData(runtimeKeys.ttsSetup(), setup);
+      setTtsSettingsDraft(setup.settings);
+    } catch {
+      // surfaced via ttsState.saveError
+    }
+  };
+
   const transcriptionReady =
     transcriptionState.status === "loaded" &&
     !transcriptionState.saving &&
@@ -279,6 +296,7 @@ export function useRuntimeSetup() {
     saveSettings,
     saveTtsSettings: saveTtsSettingsAction,
     saveTutorSettings,
+    selectTtsVoice,
     settingsDirty,
     settingsDraft,
     setSettingsDraft,

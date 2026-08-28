@@ -38,7 +38,7 @@ export interface AudioRecorder {
 
 const ERROR_MESSAGES: Record<RecordingErrorCode, string> = {
   "permission-denied":
-    "Microphone access is off. Allow English Coach in System Settings > Privacy & Security > Microphone, then try again.",
+    "Microphone access is off. Allow Pako in System Settings > Privacy & Security > Microphone, then try again.",
   "no-device":
     "No microphone was found. Connect or enable a microphone, then try again.",
   "device-busy":

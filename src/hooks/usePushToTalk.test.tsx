@@ -117,7 +117,7 @@ describe("usePushToTalk interactions", () => {
     expect(recorder.start).toHaveBeenCalledOnce();
 
     fireEvent.click(
-      screen.getByRole("button", { name: /release to finish/i }),
+      screen.getByRole("button", { name: /release/i }),
       { detail: 0 },
     );
     await screen.findByText("This is a local transcript.");
@@ -173,7 +173,7 @@ describe("usePushToTalk interactions", () => {
     recorder.start.mockRejectedValue(
       new RecordingError(
         "permission-denied",
-        "Allow English Coach in System Settings and try again.",
+        "Allow Pako in System Settings and try again.",
         "NotAllowedError: Permission denied",
       ),
     );
@@ -183,7 +183,7 @@ describe("usePushToTalk interactions", () => {
 
     expect(await screen.findByText("Microphone unavailable")).toBeInTheDocument();
     expect(
-      screen.getByText("Allow English Coach in System Settings and try again."),
+      screen.getByText("Allow Pako in System Settings and try again."),
     ).toBeInTheDocument();
     expect(screen.getByText("Technical details")).toBeInTheDocument();
   });

@@ -34,6 +34,8 @@ import { listRecentSessions } from "../../native/history";
 import { historyKeys } from "../../queryKeys/history";
 import { scenarioLabelFor } from "../../sessions/loadPacks";
 import type { HealthState } from "../../types/runtime";
+import type { TtsProviderId, TtsSetupState } from "../../types/tts";
+import { VoiceSwitcher } from "./VoiceSwitcher";
 
 export type AppPage =
   | "conversation"
@@ -70,6 +72,8 @@ type AppSidebarProps = {
   onOpenSettings: () => void;
   onOpenSession: (sessionId: number) => void;
   estimatedLevel?: string;
+  ttsState: TtsSetupState;
+  onSelectVoice: (provider: TtsProviderId, voiceId: string) => void;
 };
 
 export function AppSidebar({
@@ -83,6 +87,8 @@ export function AppSidebar({
   onOpenSettings,
   onOpenSession,
   estimatedLevel,
+  ttsState,
+  onSelectVoice,
 }: AppSidebarProps) {
   const recentSessionsQuery = useQuery({
     queryKey: historyKeys.recentSessions(RECENT_CONVERSATIONS_LIMIT),
@@ -91,15 +97,14 @@ export function AppSidebar({
 
   return (
     <Sidebar>
-      <SidebarHeader className="pt-10">
-        <div className="flex items-center gap-2 px-2 py-1.5">
-          <span className="flex size-6 items-center justify-center rounded-[4px] bg-primary text-xs font-bold text-primary-foreground">
-            E
-          </span>
-          <span className="truncate text-body font-medium text-foreground">
-            English Coach
-          </span>
-        </div>
+      <SidebarHeader className="mt-10!">
+        <SidebarMenu>
+          <VoiceSwitcher
+            onOpenSettings={onOpenSettings}
+            onSelectVoice={onSelectVoice}
+            ttsState={ttsState}
+          />
+        </SidebarMenu>
         <SidebarMenu>
           {NAV_ITEMS.map((item) => (
             <SidebarMenuItem key={item.page}>

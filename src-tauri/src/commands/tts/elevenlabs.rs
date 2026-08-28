@@ -45,6 +45,8 @@ struct VoiceEntry {
     name: String,
     #[serde(default)]
     labels: Option<VoiceLabels>,
+    #[serde(default)]
+    preview_url: Option<String>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -99,6 +101,7 @@ async fn fetch_voices(client: &Client, key: &str) -> Result<Vec<TtsVoice>, TtsCo
             id: voice.voice_id,
             label: voice.name,
             locale: voice.labels.and_then(|labels| labels.accent),
+            preview_url: voice.preview_url,
         })
         .collect())
 }

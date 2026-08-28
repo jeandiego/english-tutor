@@ -50,6 +50,7 @@ function App() {
     saveSettings,
     saveTtsSettings,
     saveTutorSettings,
+    selectTtsVoice,
     settingsDirty,
     settingsDraft,
     setSettingsDraft,
@@ -184,8 +185,10 @@ function App() {
           setActivePage("history");
         }}
         onOpenSettings={() => navigate("settings")}
+        onSelectVoice={(provider, voiceId) => void selectTtsVoice(provider, voiceId)}
         settingsNeedsAttention={settingsNeedsAttention}
         transcription={transcriptionDiagnostic}
+        ttsState={ttsState}
         tutor={tutorDiagnostic}
       />
       <SidebarInset>

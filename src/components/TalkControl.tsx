@@ -90,7 +90,7 @@ export function TalkControl({
         aria-label={label}
         aria-pressed={isHeld}
         className={cn(
-          "group flex items-center gap-2 rounded-[var(--radius-inputs)] border border-transparent px-4 py-2 text-background transition-colors",
+          "group flex w-max items-center gap-2 whitespace-nowrap rounded-[var(--radius-inputs)] border border-transparent px-4 py-2 text-background transition-colors",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2",
           "disabled:cursor-not-allowed disabled:bg-muted disabled:text-muted-foreground",
           isHeld

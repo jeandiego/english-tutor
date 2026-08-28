@@ -78,6 +78,8 @@ pub struct TtsVoice {
     label: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     locale: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    preview_url: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
