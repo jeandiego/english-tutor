@@ -32,7 +32,7 @@ import {
 } from "../SystemDiagnostics";
 import { listRecentSessions } from "../../native/history";
 import { historyKeys } from "../../queryKeys/history";
-import { scenarioLabelFor } from "../../sessions/catalog";
+import { scenarioLabelFor } from "../../sessions/loadPacks";
 import type { HealthState } from "../../types/runtime";
 
 export type AppPage =

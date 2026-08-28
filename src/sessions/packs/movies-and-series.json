@@ -1,0 +1,54 @@
+{
+  "id": "movies-and-series",
+  "title": "Movies and series",
+  "shortDescription": "Chat casually about what you've been watching and recommend shows.",
+  "recommendedLevels": ["A2", "B1", "B2"],
+  "communicativeGoals": [
+    "Describe a show or movie's plot briefly",
+    "Give and justify an opinion",
+    "Recommend something based on shared interests"
+  ],
+  "vocabulary": [
+    "plot twist",
+    "binge-watch",
+    "season finale",
+    "genre",
+    "overrated",
+    "cliffhanger",
+    "spoiler",
+    "cast"
+  ],
+  "grammarTargets": [
+    "Present perfect for recent viewing ('I've just finished...')",
+    "Opinion structures ('I think...', 'In my opinion...')",
+    "Present simple for genre preferences"
+  ],
+  "conversationMoves": [
+    "Ask what the learner has been watching",
+    "React with opinions",
+    "Recommend something based on what they say",
+    "Keep it conversational and opinionated, not a lecture"
+  ],
+  "warmUpPrompts": [
+    "What's the last thing you watched?",
+    "Do you prefer movies or series?"
+  ],
+  "rolePlayPrompts": [
+    "Recommend a show to me and convince me to watch it.",
+    "Disagree with my opinion about a movie and explain why."
+  ],
+  "challengePrompts": [
+    "Summarize a plot without giving away spoilers.",
+    "Debate whether the book or the movie adaptation is better."
+  ],
+  "successCriteria": [
+    "Learner gives an opinion, not just a description",
+    "Learner justifies their opinion with a reason",
+    "Learner asks at least one follow-up question about my taste"
+  ],
+  "suggestedReviewItems": [
+    { "content": "'In my opinion...' for introducing a viewpoint", "type": "phrase" },
+    { "content": "Present perfect for recent viewing habits", "type": "grammar_pattern" }
+  ],
+  "focusPlaceholder": "e.g. a genre you'd like to discuss"
+}

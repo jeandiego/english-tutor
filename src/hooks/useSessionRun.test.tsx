@@ -3,10 +3,10 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AudioRecorder, RecordedAudio } from "../audio/recorder";
 import { TalkControl } from "../components/TalkControl";
 import { learnerProfileKeys } from "../queryKeys/learnerProfile";
-import { SESSION_TEMPLATES } from "../sessions/catalog";
 import { renderWithQueryClient as render } from "../test/queryTestUtils";
 import type { CefrLevel } from "../types/assessment";
 import type { SessionStart } from "../types/history";
+import type { SessionSource } from "../types/scenarioPack";
 import type {
   OpenSessionRequest,
   OpeningTurn,
@@ -75,7 +75,12 @@ function tutorTurn(reply: string): TutorTurn {
   return { reply, corrections: [], betterExpressions: [] };
 }
 
-const TEMPLATE = SESSION_TEMPLATES[0];
+const TEMPLATE: SessionSource = {
+  id: "daily-standup",
+  label: "Daily standup",
+  systemPrompt: "You are the learner's teammate running a daily standup meeting.",
+  focusPlaceholder: "e.g. talking about a specific project or blocker",
+};
 
 function SessionRunHarness({
   recorder,
@@ -203,7 +208,7 @@ describe("useSessionRun", () => {
     );
     expect(openGuidedSession).toHaveBeenCalledWith(
       expect.objectContaining({
-        scenarioSystemPrompt: TEMPLATE.scenarioSystemPrompt,
+        scenarioSystemPrompt: TEMPLATE.systemPrompt,
         learnerContext: "B1 learner.",
       }),
     );

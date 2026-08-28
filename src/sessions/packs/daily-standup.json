@@ -1,0 +1,58 @@
+{
+  "id": "daily-standup",
+  "title": "Daily standup",
+  "shortDescription": "Give a short work update: what you did, what's next, and any blockers.",
+  "recommendedLevels": ["A2", "B1", "B2"],
+  "communicativeGoals": [
+    "Summarize recent work concisely",
+    "Flag blockers clearly",
+    "State near-term plans"
+  ],
+  "vocabulary": [
+    "blocker",
+    "update",
+    "in progress",
+    "wrap up",
+    "follow up",
+    "dependency",
+    "ticket",
+    "sprint"
+  ],
+  "grammarTargets": [
+    "Simple past for yesterday's work",
+    "Present continuous for ongoing tasks",
+    "Going to / will for next steps"
+  ],
+  "conversationMoves": [
+    "Ask what the learner worked on yesterday",
+    "Ask what they're doing today",
+    "Ask whether anything is blocking them",
+    "Follow up naturally on specifics they mention instead of moving through a checklist",
+    "Keep the tone brisk and professional, like a real standup"
+  ],
+  "warmUpPrompts": [
+    "Tell me one thing you finished yesterday.",
+    "What's the first thing you're tackling today?"
+  ],
+  "rolePlayPrompts": [
+    "Give a full standup update covering yesterday, today, and blockers.",
+    "Explain a blocker and ask a teammate for help."
+  ],
+  "challengePrompts": [
+    "Explain a technical blocker to a non-technical stakeholder in plain language.",
+    "Push back politely when asked to take on more work mid-sprint."
+  ],
+  "successCriteria": [
+    "Update covers yesterday, today, and blockers without prompting",
+    "Blockers are stated clearly enough that a teammate could help",
+    "Learner uses appropriate tense for completed vs ongoing work"
+  ],
+  "suggestedReviewItems": [
+    { "content": "blocker (noun) — something preventing progress", "type": "vocabulary" },
+    {
+      "content": "Present continuous for describing ongoing work ('I'm working on...')",
+      "type": "grammar_pattern"
+    }
+  ],
+  "focusPlaceholder": "e.g. talking about a specific project or blocker"
+}

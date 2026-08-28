@@ -1,0 +1,52 @@
+{
+  "id": "small-talk",
+  "title": "Small talk",
+  "shortDescription": "Practice easy, everyday small talk — weather, weekend plans, and more.",
+  "recommendedLevels": ["A1", "A2", "B1"],
+  "communicativeGoals": [
+    "Make and respond to light conversational openers",
+    "Ask follow-up questions to keep a casual chat going",
+    "Close a conversation politely"
+  ],
+  "vocabulary": [
+    "catch up",
+    "plans",
+    "weather",
+    "busy week",
+    "how's it going",
+    "take it easy",
+    "weekend"
+  ],
+  "grammarTargets": [
+    "Present continuous for current activities",
+    "Going to / will for weekend plans",
+    "Question forms for casual follow-ups"
+  ],
+  "conversationMoves": [
+    "Cover light topics like weekend plans, weather, or how their week is going",
+    "Follow up naturally on whatever they share",
+    "Keep the tone casual and friendly, like waiting in line or before a meeting"
+  ],
+  "warmUpPrompts": [
+    "How's your week going so far?",
+    "Any plans for the weekend?"
+  ],
+  "rolePlayPrompts": [
+    "Make small talk while waiting for a meeting to start.",
+    "Catch up with someone you haven't spoken to in a while."
+  ],
+  "challengePrompts": [
+    "Keep a conversation going for several turns using only follow-up questions.",
+    "Politely wrap up a conversation because you need to leave."
+  ],
+  "successCriteria": [
+    "Learner asks at least two follow-up questions",
+    "Learner shares something about themselves, not just answers",
+    "Learner closes the conversation naturally"
+  ],
+  "suggestedReviewItems": [
+    { "content": "'How's it going?' as a casual opener", "type": "phrase" },
+    { "content": "Going to / will for talking about plans", "type": "grammar_pattern" }
+  ],
+  "focusPlaceholder": "e.g. a specific setting (office, waiting room, party)"
+}

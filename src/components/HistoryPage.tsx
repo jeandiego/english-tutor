@@ -8,7 +8,7 @@ import {
 } from "../native/history";
 import { listRecentReviewEvents } from "../native/review";
 import { historyKeys } from "../queryKeys/history";
-import { scenarioLabelFor } from "../sessions/catalog";
+import { scenarioLabelFor } from "../sessions/loadPacks";
 import type {
   CategoryCount,
   ExpressionSummary,

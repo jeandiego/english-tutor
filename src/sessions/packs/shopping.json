@@ -1,0 +1,55 @@
+{
+  "id": "shopping",
+  "title": "Shopping",
+  "shortDescription": "Ask for help finding something, sizes, prices, and check out.",
+  "recommendedLevels": ["A1", "A2", "B1"],
+  "communicativeGoals": [
+    "Ask for help finding an item",
+    "Discuss sizes, colors, or alternatives",
+    "Complete a purchase"
+  ],
+  "vocabulary": [
+    "size",
+    "fit",
+    "discount",
+    "receipt",
+    "try on",
+    "exchange",
+    "checkout",
+    "in stock"
+  ],
+  "grammarTargets": [
+    "Comparatives for comparing options ('cheaper', 'bigger')",
+    "Present simple for preferences",
+    "Could/would for polite requests"
+  ],
+  "conversationMoves": [
+    "Help the learner find an item",
+    "Discuss sizes or colors",
+    "Mention prices",
+    "Handle check out",
+    "React naturally to what they're looking for rather than following a script"
+  ],
+  "warmUpPrompts": [
+    "What are you shopping for today?",
+    "Do you have a size or color in mind?"
+  ],
+  "rolePlayPrompts": [
+    "Ask for a different size or color of something you tried on.",
+    "Ask whether an item is on sale or available in another store."
+  ],
+  "challengePrompts": [
+    "Negotiate or ask about a price match.",
+    "Return or exchange an item and explain why."
+  ],
+  "successCriteria": [
+    "Learner clearly states what they're looking for",
+    "Learner asks about at least one detail (size, price, availability)",
+    "Learner completes the transaction with appropriate language"
+  ],
+  "suggestedReviewItems": [
+    { "content": "'Do you have this in a different...?' for requesting alternatives", "type": "phrase" },
+    { "content": "Comparatives for comparing products", "type": "grammar_pattern" }
+  ],
+  "focusPlaceholder": "e.g. clothing, electronics, a gift"
+}

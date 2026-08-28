@@ -1,16 +1,15 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { IconStar, IconStarFilled } from "@tabler/icons-react";
+import { useEffect, useMemo, useState } from "react";
 import type { CefrLevel } from "../types/assessment";
+import { useFavoritePacks } from "../hooks/useFavoritePacks";
 import { useSessionRun } from "../hooks/useSessionRun";
 import { getLearnerProfile } from "../native/learnerProfile";
 import { listDueReviewItems } from "../native/review";
 import { reviewKeys } from "../queryKeys/review";
-import {
-  DURATION_PRESETS,
-  SESSION_TEMPLATES,
-  type DurationPresetId,
-  type SessionTemplate,
-} from "../sessions/catalog";
+import { DURATION_PRESETS, type DurationPresetId } from "../sessions/catalog";
+import { PACK_CATALOG } from "../sessions/loadPacks";
+import { toSessionSource, type ScenarioPack, type SessionSource } from "../types/scenarioPack";
 import type { RepairIntensity, RepairOutcome, RepairPriority } from "../types/repair";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Badge } from "./ui/badge";
@@ -98,6 +97,26 @@ function DueReviewItems() {
   );
 }
 
+function PackLoadErrors() {
+  const { errors } = PACK_CATALOG;
+  if (errors.length === 0) {
+    return null;
+  }
+
+  return (
+    <Alert variant="destructive">
+      <AlertTitle>Some scenario packs could not be loaded</AlertTitle>
+      <AlertDescription className="flex flex-col gap-1">
+        {errors.map((error) => (
+          <p key={error.file}>
+            {error.file}: {error.message}
+          </p>
+        ))}
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 function SessionCatalog({
   defaultDifficulty,
   disabled,
@@ -108,14 +127,16 @@ function SessionCatalog({
   disabled: boolean;
   disabledHint?: string;
   onStart: (
-    template: SessionTemplate,
+    source: SessionSource,
     options: { difficulty: CefrLevel; focus?: string; durationPresetId: DurationPresetId },
   ) => void;
 }) {
   const [selectedId, setSelectedId] = useState<string | undefined>();
+  const [selectedVariationId, setSelectedVariationId] = useState<string | undefined>();
   const [difficulty, setDifficulty] = useState<CefrLevel>(defaultDifficulty ?? "B1");
   const [focus, setFocus] = useState("");
   const [durationPresetId, setDurationPresetId] = useState<DurationPresetId>("standard");
+  const { isFavorite, toggleFavorite, favoriteIds } = useFavoritePacks();
 
   useEffect(() => {
     if (defaultDifficulty) {
@@ -123,7 +144,24 @@ function SessionCatalog({
     }
   }, [defaultDifficulty]);
 
-  const selectedTemplate = SESSION_TEMPLATES.find((template) => template.id === selectedId);
+  const packs = PACK_CATALOG.packs;
+  const orderedPacks = useMemo<ScenarioPack[]>(() => {
+    return [...packs].sort((a, b) => {
+      const aFavorite = favoriteIds.includes(a.id);
+      const bFavorite = favoriteIds.includes(b.id);
+      if (aFavorite === bFavorite) {
+        return 0;
+      }
+      return aFavorite ? -1 : 1;
+    });
+  }, [packs, favoriteIds]);
+
+  const selectedPack = packs.find((pack) => pack.id === selectedId);
+
+  function selectPack(id: string) {
+    setSelectedId(id);
+    setSelectedVariationId(undefined);
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -132,30 +170,55 @@ function SessionCatalog({
         closing summary.
       </p>
 
+      <PackLoadErrors />
+
       <DueReviewItems />
 
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {SESSION_TEMPLATES.map((template) => (
-          <li key={template.id}>
-            <button
-              aria-pressed={selectedId === template.id}
+        {orderedPacks.map((pack) => (
+          <li key={pack.id}>
+            <div
+              aria-pressed={selectedId === pack.id}
               className={cn(
-                "flex w-full flex-col gap-1 rounded-xl bg-card p-4 text-left ring-1 ring-foreground/10 transition-colors hover:ring-foreground/20",
-                selectedId === template.id && "ring-2 ring-primary hover:ring-primary",
+                "relative flex w-full flex-col gap-1 rounded-xl bg-card p-4 text-left ring-1 ring-foreground/10 transition-colors hover:ring-foreground/20",
+                selectedId === pack.id && "ring-2 ring-primary hover:ring-primary",
               )}
-              onClick={() => setSelectedId(template.id)}
-              type="button"
+              onClick={() => selectPack(pack.id)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter" || event.key === " ") {
+                  event.preventDefault();
+                  selectPack(pack.id);
+                }
+              }}
+              role="button"
+              tabIndex={0}
             >
-              <span className="text-body font-medium text-foreground">{template.label}</span>
+              <button
+                aria-label={isFavorite(pack.id) ? "Unfavorite this pack" : "Favorite this pack"}
+                aria-pressed={isFavorite(pack.id)}
+                className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggleFavorite(pack.id);
+                }}
+                type="button"
+              >
+                {isFavorite(pack.id) ? (
+                  <IconStarFilled className="size-4 text-primary" />
+                ) : (
+                  <IconStar className="size-4" />
+                )}
+              </button>
+              <span className="pr-6 text-body font-medium text-foreground">{pack.title}</span>
               <span className="text-caption text-muted-foreground">
-                {template.description}
+                {pack.shortDescription}
               </span>
-            </button>
+            </div>
           </li>
         ))}
       </ul>
 
-      {selectedTemplate && (
+      {selectedPack && (
         <Card>
           <CardContent className="flex flex-col gap-4 pt-4">
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -198,13 +261,37 @@ function SessionCatalog({
               </Field>
             </div>
 
+            {selectedPack.variations && selectedPack.variations.length > 0 && (
+              <Field>
+                <FieldLabel htmlFor="session-variation">Variation (optional)</FieldLabel>
+                <Select
+                  onValueChange={(value) =>
+                    setSelectedVariationId(!value || value === "standard" ? undefined : value)
+                  }
+                  value={selectedVariationId ?? "standard"}
+                >
+                  <SelectTrigger className="w-full" id="session-variation">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="standard">Standard</SelectItem>
+                    {selectedPack.variations.map((variation) => (
+                      <SelectItem key={variation.id} value={variation.id}>
+                        {variation.title}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </Field>
+            )}
+
             <Field>
               <FieldLabel htmlFor="session-focus">Focus (optional)</FieldLabel>
               <FieldContent>
                 <Input
                   id="session-focus"
                   onChange={(event) => setFocus(event.target.value)}
-                  placeholder={selectedTemplate.focusPlaceholder}
+                  placeholder={selectedPack.focusPlaceholder}
                   type="text"
                   value={focus}
                 />
@@ -216,7 +303,7 @@ function SessionCatalog({
                 className="w-fit"
                 disabled={disabled}
                 onClick={() =>
-                  onStart(selectedTemplate, {
+                  onStart(toSessionSource(selectedPack, selectedVariationId), {
                     difficulty,
                     focus: focus.trim() || undefined,
                     durationPresetId,

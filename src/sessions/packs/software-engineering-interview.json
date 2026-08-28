@@ -1,0 +1,70 @@
+{
+  "id": "software-engineering-interview",
+  "title": "Software engineering interview",
+  "shortDescription": "Practice answering common interview questions about your experience and skills.",
+  "recommendedLevels": ["B1", "B2", "C1"],
+  "communicativeGoals": [
+    "Describe past experience with specific examples",
+    "Explain reasoning behind technical decisions",
+    "Answer behavioral questions using a clear structure"
+  ],
+  "vocabulary": [
+    "strength",
+    "weakness",
+    "trade-off",
+    "scalable",
+    "codebase",
+    "deadline",
+    "stakeholder",
+    "ownership"
+  ],
+  "grammarTargets": [
+    "Present perfect for experience ('I've worked on...')",
+    "Past simple for specific stories",
+    "Conditionals for hypothetical scenarios ('What would you do if...')"
+  ],
+  "conversationMoves": [
+    "Ask about their background and experience",
+    "Ask about a challenge they solved",
+    "Ask why they're interested in the role",
+    "Probe for specifics with natural follow-ups, the way a real interviewer would",
+    "Acknowledge good answers briefly before moving to the next question"
+  ],
+  "warmUpPrompts": [
+    "Tell me about yourself in two or three sentences.",
+    "What's a project you're proud of?"
+  ],
+  "rolePlayPrompts": [
+    "Walk me through a challenge you solved and how you approached it.",
+    "Tell me about a time you disagreed with a technical decision."
+  ],
+  "challengePrompts": [
+    "Explain a complex technical trade-off to a non-technical interviewer.",
+    "Answer 'What's your biggest weakness?' honestly but strategically."
+  ],
+  "successCriteria": [
+    "Answers include a specific example, not just generalities",
+    "Learner uses present perfect correctly when describing experience",
+    "Learner asks at least one clarifying or thoughtful question back"
+  ],
+  "suggestedReviewItems": [
+    {
+      "content": "Present perfect vs past simple for describing experience",
+      "type": "grammar_pattern"
+    },
+    { "content": "trade-off (noun) — a balance between two competing things", "type": "vocabulary" }
+  ],
+  "focusPlaceholder": "e.g. the specific role or industry to interview for",
+  "variations": [
+    {
+      "id": "backend-focused",
+      "title": "Backend-focused interview",
+      "extraPrompt": "Focus questions on backend systems, APIs, and databases rather than general software topics."
+    },
+    {
+      "id": "behavioral-focused",
+      "title": "Behavioral-focused interview",
+      "extraPrompt": "Focus mostly on behavioral questions about teamwork, conflict, and communication, with fewer technical deep-dives."
+    }
+  ]
+}

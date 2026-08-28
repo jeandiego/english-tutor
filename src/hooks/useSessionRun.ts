@@ -31,11 +31,8 @@ import {
   type SessionError,
 } from "../native/session";
 import { speakTutorReply } from "../native/speech";
-import {
-  findDurationPreset,
-  type DurationPresetId,
-  type SessionTemplate,
-} from "../sessions/catalog";
+import { findDurationPreset, type DurationPresetId } from "../sessions/catalog";
+import type { SessionSource } from "../types/scenarioPack";
 import type {
   EvaluateRepairRequest,
   RecordRepairEventRequest,
@@ -75,7 +72,7 @@ export type StartSessionRunOptions = {
 };
 
 type Engine = {
-  template: SessionTemplate;
+  template: SessionSource;
   sessionId: number;
 };
 
@@ -134,7 +131,7 @@ export function useSessionRun({
 }: UseSessionRunOptions) {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<SessionRunStatus>("catalog");
-  const [template, setTemplate] = useState<SessionTemplate | undefined>();
+  const [template, setTemplate] = useState<SessionSource | undefined>();
   const [targetTurns, setTargetTurns] = useState<number | undefined>();
   const [summary, setSummary] = useState<SessionSummaryPayload | undefined>();
   const [error, setError] = useState<SessionError | undefined>();
@@ -183,7 +180,7 @@ export function useSessionRun({
     setStatus("error");
   }
 
-  async function start(chosenTemplate: SessionTemplate, options: StartSessionRunOptions = {}) {
+  async function start(chosenTemplate: SessionSource, options: StartSessionRunOptions = {}) {
     if (status !== "catalog" && status !== "error" && status !== "complete") {
       return;
     }
@@ -225,7 +222,7 @@ export function useSessionRun({
     let opening: string;
     try {
       const openingTurn = await openGuidedSession({
-        scenarioSystemPrompt: chosenTemplate.scenarioSystemPrompt,
+        scenarioSystemPrompt: chosenTemplate.systemPrompt,
         learnerContext: started.learnerContext,
       });
       opening = openingTurn.opening;
@@ -249,7 +246,7 @@ export function useSessionRun({
       return;
     }
 
-    const mergedContext = [chosenTemplate.scenarioSystemPrompt, started.learnerContext]
+    const mergedContext = [chosenTemplate.systemPrompt, started.learnerContext]
       .map((part) => part?.trim())
       .filter((part): part is string => Boolean(part))
       .join("\n\n");

@@ -1,0 +1,53 @@
+{
+  "id": "storytelling-past-experiences",
+  "title": "Storytelling about past experiences",
+  "shortDescription": "Tell a story about something that happened to you and reflect on it.",
+  "recommendedLevels": ["A2", "B1", "B2"],
+  "communicativeGoals": [
+    "Narrate a sequence of past events clearly",
+    "Add detail and reflection to a story",
+    "Respond to follow-up questions about a personal experience"
+  ],
+  "vocabulary": [
+    "eventually",
+    "at first",
+    "turned out",
+    "looking back",
+    "memorable",
+    "unexpected",
+    "in the end"
+  ],
+  "grammarTargets": [
+    "Past simple for the main story events",
+    "Past continuous for background context ('I was walking when...')",
+    "Time connectors (then, after that, eventually)"
+  ],
+  "conversationMoves": [
+    "Ask a warm opening question",
+    "Follow up on details they mention to help them build the story out",
+    "Especially encourage past-tense narration",
+    "React genuinely, like a curious friend"
+  ],
+  "warmUpPrompts": [
+    "Tell me about a trip you remember well.",
+    "What's something unexpected that happened to you recently?"
+  ],
+  "rolePlayPrompts": [
+    "Tell a full story about a memorable day, with a beginning, middle, and end.",
+    "Tell me about a challenge you overcame and what you learned."
+  ],
+  "challengePrompts": [
+    "Tell a story that includes a plot twist or unexpected turn.",
+    "Reflect on how a past experience changed your perspective."
+  ],
+  "successCriteria": [
+    "Story has a clear beginning, middle, and end",
+    "Learner uses past simple and past continuous appropriately",
+    "Learner reflects on the experience, not just lists events"
+  ],
+  "suggestedReviewItems": [
+    { "content": "Past continuous for background context in a story", "type": "grammar_pattern" },
+    { "content": "'Looking back...' for reflecting on a past experience", "type": "phrase" }
+  ],
+  "focusPlaceholder": "e.g. travel, a challenge, a memorable event"
+}

@@ -32,6 +32,8 @@ pub fn run() {
             commands::review::evaluate_review_attempt,
             commands::review::record_review_outcome,
             commands::review::list_recent_review_events,
+            commands::scenario_packs::list_favorite_packs,
+            commands::scenario_packs::set_pack_favorite,
             commands::session::open_guided_session,
             commands::session::synthesize_session_summary,
             commands::transcription::load_transcription_setup,

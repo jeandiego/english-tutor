@@ -1,0 +1,66 @@
+{
+  "id": "restaurant",
+  "title": "Restaurant",
+  "shortDescription": "Order food, ask about the menu, and handle a restaurant conversation.",
+  "recommendedLevels": ["A1", "A2", "B1"],
+  "communicativeGoals": [
+    "Order food and drinks",
+    "Ask about menu items and ingredients",
+    "Handle a bill or payment question"
+  ],
+  "vocabulary": [
+    "appetizer",
+    "special",
+    "allergy",
+    "check/bill",
+    "recommend",
+    "medium rare",
+    "to go",
+    "reservation"
+  ],
+  "grammarTargets": [
+    "Would like for polite requests",
+    "Present simple for preferences and allergies",
+    "Could/can for polite questions"
+  ],
+  "conversationMoves": [
+    "Greet the learner",
+    "Mention specials if it fits naturally",
+    "Take their order",
+    "Handle follow-up questions about the menu, allergies, or the bill the way a real server would"
+  ],
+  "warmUpPrompts": [
+    "What kind of food are you in the mood for today?",
+    "Do you have any allergies I should know about?"
+  ],
+  "rolePlayPrompts": [
+    "Order a full meal including a drink and dessert.",
+    "Ask about an ingredient you might be allergic to before ordering."
+  ],
+  "challengePrompts": [
+    "Politely send a dish back because it's not what you ordered.",
+    "Ask to split the bill between two people."
+  ],
+  "successCriteria": [
+    "Order includes at least one polite request form ('I'd like...', 'Could I have...')",
+    "Learner asks at least one clarifying question about the menu",
+    "Learner handles the bill/payment exchange appropriately"
+  ],
+  "suggestedReviewItems": [
+    { "content": "'I'd like...' for polite ordering", "type": "phrase" },
+    { "content": "appetizer (noun) — a small dish served before the main course", "type": "vocabulary" }
+  ],
+  "focusPlaceholder": "e.g. a cuisine, dietary restriction, or occasion",
+  "variations": [
+    {
+      "id": "fine-dining",
+      "title": "Fine dining",
+      "extraPrompt": "This is an upscale restaurant — use more formal language and mention wine pairings where it fits."
+    },
+    {
+      "id": "fast-casual",
+      "title": "Fast casual",
+      "extraPrompt": "This is a fast-casual counter-service spot — keep the tone quick and casual, no table service."
+    }
+  ]
+}

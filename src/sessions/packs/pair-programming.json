@@ -1,0 +1,55 @@
+{
+  "id": "pair-programming",
+  "title": "Pair programming",
+  "shortDescription": "Talk through a coding problem together, thinking out loud as you go.",
+  "recommendedLevels": ["B1", "B2", "C1"],
+  "communicativeGoals": [
+    "Think out loud while problem-solving",
+    "Suggest an approach and justify it",
+    "React to a partner's reasoning and question trade-offs"
+  ],
+  "vocabulary": [
+    "edge case",
+    "refactor",
+    "approach",
+    "trade-off",
+    "debug",
+    "readable",
+    "test case",
+    "architecture"
+  ],
+  "grammarTargets": [
+    "First conditional for proposing approaches ('If we do X, then...')",
+    "Modal verbs for suggestions ('We could...', 'We should...')",
+    "Questions for clarifying requirements"
+  ],
+  "conversationMoves": [
+    "Suggest an approach to a coding problem",
+    "Ask what the learner thinks",
+    "React to their reasoning the way a real engineering partner would",
+    "Question trade-offs and suggest edge cases",
+    "Check understanding out loud"
+  ],
+  "warmUpPrompts": [
+    "How would you start solving this kind of problem?",
+    "What's the first question you'd ask before writing any code?"
+  ],
+  "rolePlayPrompts": [
+    "Propose an approach to a problem and defend it when I push back.",
+    "Walk me through debugging a piece of code that isn't working."
+  ],
+  "challengePrompts": [
+    "Explain why you'd choose one data structure over another.",
+    "Disagree with my suggested approach and propose a better one."
+  ],
+  "successCriteria": [
+    "Learner explains their reasoning, not just the final answer",
+    "Learner considers at least one edge case unprompted",
+    "Learner responds constructively when their approach is questioned"
+  ],
+  "suggestedReviewItems": [
+    { "content": "edge case (noun) — an unusual input that could break the code", "type": "vocabulary" },
+    { "content": "First conditional for proposing technical approaches", "type": "grammar_pattern" }
+  ],
+  "focusPlaceholder": "e.g. a specific kind of problem (algorithms, debugging, design)"
+}
