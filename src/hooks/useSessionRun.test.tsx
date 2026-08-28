@@ -93,7 +93,7 @@ function SessionRunHarness({
     whatWentWell: ["Gave a clear update."],
     priorityIssues: ["past tense accuracy"],
     alternativePhrases: [],
-    reviewItems: ["past tense forms"],
+    reviewItems: [{ content: "past tense forms", type: "grammar_pattern" }],
     repairEvents: [],
   }),
   applySessionToLearnerProfile = vi
@@ -233,7 +233,7 @@ describe("useSessionRun", () => {
       whatWentWell: ["Gave a clear update."],
       priorityIssues: ["past tense accuracy"],
       alternativePhrases: [],
-      reviewItems: ["past tense forms"],
+      reviewItems: [{ content: "past tense forms", type: "grammar_pattern" }],
       repairEvents: [],
     });
     const applySessionToLearnerProfile = vi

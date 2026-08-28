@@ -26,7 +26,7 @@ describe("native session service", () => {
       whatWentWell: ["Gave a clear update."],
       priorityIssues: ["past tense accuracy"],
       alternativePhrases: [],
-      reviewItems: ["past tense forms"],
+      reviewItems: [{ content: "past tense forms", type: "grammar_pattern" }],
       repairEvents: [],
     };
     invokeMock.mockResolvedValue(summary);

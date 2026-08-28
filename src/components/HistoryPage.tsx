@@ -6,6 +6,7 @@ import {
   listRecentSessions,
   toHistoryError,
 } from "../native/history";
+import { listRecentReviewEvents } from "../native/review";
 import { historyKeys } from "../queryKeys/history";
 import { scenarioLabelFor } from "../sessions/catalog";
 import type {
@@ -14,6 +15,7 @@ import type {
   SessionSummary,
 } from "../types/history";
 import type { RepairOutcome, RepairPriority } from "../types/repair";
+import type { ReviewEventSummary, ReviewItemType, ReviewOutcome } from "../types/review";
 import { Badge } from "./ui/badge";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
@@ -41,19 +43,36 @@ const REPAIR_OUTCOME_LABELS: Record<RepairOutcome, string> = {
   skipped: "Skipped",
 };
 
+const REVIEW_TYPE_LABELS: Record<ReviewItemType, string> = {
+  grammar_pattern: "Grammar",
+  vocabulary: "Vocabulary",
+  phrase: "Phrase",
+  pronunciation_target: "Pronunciation",
+  conversation_strategy: "Conversation",
+};
+
+const REVIEW_OUTCOME_LABELS: Record<ReviewOutcome, string> = {
+  remembered: "Remembered",
+  partially_remembered: "Partially remembered",
+  missed: "Missed",
+  skipped: "Skipped",
+};
+
 type HistoryData = {
   sessions: SessionSummary[];
   categories: CategoryCount[];
   expressions: ExpressionSummary[];
+  reviewEvents: ReviewEventSummary[];
 };
 
 async function loadHistoryData(): Promise<HistoryData> {
-  const [sessions, categories, expressions] = await Promise.all([
+  const [sessions, categories, expressions, reviewEvents] = await Promise.all([
     listRecentSessions(10),
     listCorrectionCategoryCounts(),
     listRecentExpressions(10),
+    listRecentReviewEvents(10),
   ]);
-  return { sessions, categories, expressions };
+  return { sessions, categories, expressions, reviewEvents };
 }
 
 function formatSessionDate(startedAt: number): string {
@@ -109,7 +128,10 @@ function SessionSummaryDetail({ session }: { session: SessionSummary }) {
       <CollapsibleContent className="mt-2 flex flex-col gap-3">
         <SummaryList heading="What went well" items={summary.whatWentWell} />
         <SummaryList heading="Priorities" items={summary.priorityIssues} />
-        <SummaryList heading="Review later" items={summary.reviewItems} />
+        <SummaryList
+          heading="Review later"
+          items={summary.reviewItems.map((item) => item.content)}
+        />
         {summary.repairEvents.length > 0 && (
           <div className="flex flex-col gap-1">
             <h4 className="text-caption font-medium text-muted-foreground">
@@ -195,6 +217,26 @@ function CategoryList({ categories }: { categories: CategoryCount[] }) {
   );
 }
 
+function ReviewEventList({ events }: { events: ReviewEventSummary[] }) {
+  if (events.length === 0) {
+    return <p className="text-body text-muted-foreground">No review practice yet.</p>;
+  }
+
+  return (
+    <ul className="flex flex-col divide-y divide-border">
+      {events.map((event, index) => (
+        <li className="flex flex-wrap items-center gap-2 py-2 first:pt-0 last:pb-0" key={index}>
+          <Badge variant="outline">{REVIEW_TYPE_LABELS[event.itemType]}</Badge>
+          <span className="text-body text-foreground">{event.content}</span>
+          <span className="ml-auto text-caption text-muted-foreground">
+            {REVIEW_OUTCOME_LABELS[event.outcome]}
+          </span>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 function ExpressionList({ expressions }: { expressions: ExpressionSummary[] }) {
   if (expressions.length === 0) {
     return <p className="text-body text-muted-foreground">No saved expressions yet.</p>;
@@ -259,6 +301,9 @@ export function HistoryPage({ focusSessionId }: { focusSessionId?: number } = {}
           </HistorySection>
           <HistorySection title="Useful expressions">
             <ExpressionList expressions={query.data.expressions} />
+          </HistorySection>
+          <HistorySection title="Review practice">
+            <ReviewEventList events={query.data.reviewEvents} />
           </HistorySection>
         </div>
       )}

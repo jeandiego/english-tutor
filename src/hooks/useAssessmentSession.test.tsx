@@ -118,7 +118,7 @@ beforeEach(() => {
   vi.mocked(assessmentNative.completeAssessmentTaskRun).mockResolvedValue(undefined);
   vi.mocked(assessmentNative.completeAssessment).mockResolvedValue(undefined);
   vi.mocked(assessmentNative.synthesizeAssessmentSummary).mockResolvedValue({
-    priorities: ["Practice linking ideas."],
+    priorities: [{ content: "Practice linking ideas.", type: "conversation_strategy" }],
     recommendedSessions: ["storytelling"],
     notesForTutor: "Coverage was thin.",
   });
@@ -226,7 +226,8 @@ describe("useAssessmentSession", () => {
     expect(learnerProfileNative.applyAssessmentToLearnerProfile).toHaveBeenCalledWith({
       overallLevel: "B2",
       dimensionLevels: { fluency: "B2" },
-      priorities: ["Practice linking ideas."],
+      priorities: [{ content: "Practice linking ideas.", type: "conversation_strategy" }],
+      assessmentId: 1,
     });
     await waitFor(() =>
       expect(invalidateQueriesSpy).toHaveBeenCalledWith({

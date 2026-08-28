@@ -15,6 +15,7 @@ import type {
 import type { RecordingState } from "../hooks/usePushToTalk";
 import { TranscriptionError } from "../native/transcription";
 import type { ConversationRepairMeta, RepairOutcome, RepairPriority } from "../types/repair";
+import type { ConversationReviewMeta, ReviewItemType, ReviewOutcome } from "../types/review";
 import type { BetterExpression, TutorCorrection, TutorTurn } from "../types/tutor";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -33,6 +34,7 @@ type ConversationStageProps = {
   replayState?: ReplayState | null;
   showCoaching?: boolean;
   onSkipRepair?: () => void;
+  onSkipReview?: () => void;
 };
 
 function formatDuration(durationMs: number): string {
@@ -400,6 +402,67 @@ function RepairOutcomeBadge({ outcome }: { outcome: RepairOutcome }) {
   );
 }
 
+const REVIEW_TYPE_LABELS: Record<ReviewItemType, string> = {
+  grammar_pattern: "Grammar",
+  vocabulary: "Vocabulary",
+  phrase: "Phrase",
+  pronunciation_target: "Pronunciation",
+  conversation_strategy: "Conversation",
+};
+
+const REVIEW_OUTCOME_LABELS: Record<ReviewOutcome, string> = {
+  remembered: "Remembered",
+  partially_remembered: "Partially remembered",
+  missed: "Missed",
+  skipped: "Skipped",
+};
+
+function ReviewPrompt({
+  disabled,
+  onSkip,
+  review,
+}: {
+  disabled: boolean;
+  onSkip?: () => void;
+  review: ConversationReviewMeta;
+}) {
+  return (
+    <div className="flex items-center gap-2" role="status">
+      <Badge variant="warning">{REVIEW_TYPE_LABELS[review.itemType]} · Review</Badge>
+      {onSkip && (
+        <button
+          className="text-caption font-medium text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+          disabled={disabled}
+          onClick={onSkip}
+          type="button"
+        >
+          Skip
+        </button>
+      )}
+    </div>
+  );
+}
+
+function ReviewOutcomeBadge({ outcome }: { outcome: ReviewOutcome }) {
+  return (
+    <Badge
+      role="status"
+      variant={
+        outcome === "remembered"
+          ? "success"
+          : outcome === "partially_remembered"
+            ? "warning"
+            : outcome === "missed"
+              ? "destructive"
+              : "secondary"
+      }
+    >
+      {outcome === "remembered" && <IconCheck data-icon="inline-start" />}
+      {REVIEW_OUTCOME_LABELS[outcome]}
+    </Badge>
+  );
+}
+
 function ReplayButton({
   disabled,
   exchangeId,
@@ -507,6 +570,7 @@ function ConversationLog({
   loopState,
   onReplay,
   onSkipRepair,
+  onSkipReview,
   replayState,
   showCoaching = true,
   speaking = false,
@@ -518,6 +582,7 @@ function ConversationLog({
     | "loopState"
     | "onReplay"
     | "onSkipRepair"
+    | "onSkipReview"
     | "replayState"
     | "showCoaching"
     | "speaking"
@@ -619,6 +684,17 @@ function ConversationLog({
                 />
               ))}
 
+            {exchange.review &&
+              (exchange.review.outcome ? (
+                <ReviewOutcomeBadge outcome={exchange.review.outcome} />
+              ) : (
+                <ReviewPrompt
+                  disabled={thinking || speaking}
+                  onSkip={onSkipReview}
+                  review={exchange.review}
+                />
+              ))}
+
             <StorageWarning message={exchange.storageWarning} />
 
             {isLatest && thinking && !exchange.tutorTurn && !exchange.error && (
@@ -648,6 +724,7 @@ function ConversationStageContent({
   loopState,
   onReplay,
   onSkipRepair,
+  onSkipReview,
   replayState,
   showCoaching = true,
   speaking = false,
@@ -673,6 +750,7 @@ function ConversationStageContent({
               loopState={loopState}
               onReplay={onReplay}
               onSkipRepair={onSkipRepair}
+              onSkipReview={onSkipReview}
               replayState={replayState}
               showCoaching={showCoaching}
               speaking={speaking}

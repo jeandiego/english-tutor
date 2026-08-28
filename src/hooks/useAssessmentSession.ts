@@ -382,6 +382,7 @@ export function useAssessmentSession({
             : aggregated.overallLevel,
         dimensionLevels,
         priorities: summaryText?.priorities ?? [],
+        assessmentId: engine.assessmentId ?? undefined,
       });
       void queryClient.invalidateQueries({ queryKey: learnerProfileKeys.all });
     } catch {

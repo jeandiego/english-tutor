@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use tauri::AppHandle;
 
 use super::repair::{RepairMode, RepairOutcome, RepairPriority};
+use super::review::ReviewItemDraft;
 use super::tutor::{
     self, BetterExpression, OllamaRequestMessage, TutorCommandError, TutorCorrection,
     TutorMessage, TutorMessageRole, TutorPerformance,
@@ -35,7 +36,7 @@ Write:
 - whatWentWell: concrete things the learner communicated well, grounded in the transcript. Never generic praise.
 - priorityIssues: the 1 to 3 most important problems to work on next, chosen from the corrections and transcript. Never more than 3 entries, and never empty — if nothing significant stood out, include one concrete fluency-building suggestion instead.
 - alternativePhrases: natural, more idiomatic ways to phrase things the learner said, drawn from the better-expression suggestions and the transcript.
-- reviewItems: short, concrete items worth reviewing later, such as a grammar point, a vocabulary item, or a phrase.
+- reviewItems: short, concrete items worth reviewing later, such as a grammar point, a vocabulary item, or a phrase. Classify each with the type of item it is.
 
 Never write empty motivational filler. Ground every item in the actual conversation.
 
@@ -44,7 +45,7 @@ Always return exactly this JSON object shape, using these exact field names:
   "whatWentWell": ["..."],
   "priorityIssues": ["..."],
   "alternativePhrases": [{ "original": "optional original wording", "suggestion": "a natural alternative", "explanation": "optional short reason" }],
-  "reviewItems": ["..."]
+  "reviewItems": [{ "content": "the item worth reviewing", "type": "grammar_pattern | vocabulary | phrase | pronunciation_target | conversation_strategy" }]
 }"#;
 
 #[derive(Debug, Serialize, PartialEq)]
@@ -239,7 +240,7 @@ struct StructuredSessionSummary {
     what_went_well: Vec<String>,
     priority_issues: Vec<String>,
     alternative_phrases: Vec<BetterExpression>,
-    review_items: Vec<String>,
+    review_items: Vec<ReviewItemDraft>,
 }
 
 impl StructuredSessionSummary {
@@ -272,7 +273,10 @@ impl StructuredSessionSummary {
             )?;
         }
         for (index, item) in self.review_items.iter_mut().enumerate() {
-            *item = required_text(std::mem::take(item), &format!("reviewItems[{index}]"))?;
+            item.content = required_text(
+                std::mem::take(&mut item.content),
+                &format!("reviewItems[{index}].content"),
+            )?;
         }
 
         Ok(self)
@@ -285,7 +289,7 @@ pub struct SessionSummaryPayload {
     pub(crate) what_went_well: Vec<String>,
     pub(crate) priority_issues: Vec<String>,
     pub(crate) alternative_phrases: Vec<BetterExpression>,
-    pub(crate) review_items: Vec<String>,
+    pub(crate) review_items: Vec<ReviewItemDraft>,
     #[serde(default)]
     pub(crate) repair_events: Vec<RepairEventSummary>,
 }
@@ -332,7 +336,18 @@ fn summary_response_schema() -> Value {
             },
             "reviewItems": {
                 "type": "array",
-                "items": { "type": "string" }
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "content": { "type": "string", "minLength": 1 },
+                        "type": {
+                            "type": "string",
+                            "enum": ["grammar_pattern", "vocabulary", "phrase", "pronunciation_target", "conversation_strategy"]
+                        }
+                    },
+                    "required": ["content", "type"]
+                }
             }
         },
         "required": ["whatWentWell", "priorityIssues", "alternativePhrases", "reviewItems"]
@@ -653,7 +668,10 @@ mod tests {
                 suggestion: "  I agree.  ".into(),
                 explanation: None,
             }],
-            review_items: vec!["  past tense forms  ".into()],
+            review_items: vec![ReviewItemDraft {
+                content: "  past tense forms  ".into(),
+                item_type: crate::commands::review::ReviewItemType::GrammarPattern,
+            }],
         }
         .validated()
         .expect("summary must validate");
@@ -668,7 +686,7 @@ mod tests {
         assert_eq!(payload.what_went_well, vec!["Gave a clear update.".to_string()]);
         assert_eq!(payload.priority_issues, vec!["past tense accuracy".to_string()]);
         assert_eq!(payload.alternative_phrases[0].suggestion, "I agree.");
-        assert_eq!(payload.review_items, vec!["past tense forms".to_string()]);
+        assert_eq!(payload.review_items[0].content, "past tense forms".to_string());
         assert_eq!(payload.repair_events, repair_events);
     }
 

@@ -10,10 +10,11 @@ use tauri::{AppHandle, Manager};
 
 use super::assessment::{cefr_level_str, competency_label, AssessmentCompetency, CefrLevel};
 use super::repair::{RepairIntensity, RepairMode, RepairOutcome, RepairPriority};
+use super::review::{self, ReviewItemType, ReviewOutcome, ReviewSource};
 use super::tutor::{BetterExpression, CorrectionCategory, CorrectionSeverity, TutorCorrection};
 
 const DB_FILE_NAME: &str = "history.sqlite3";
-const SCHEMA_VERSION: i32 = 4;
+const SCHEMA_VERSION: i32 = 5;
 const ALL_TIME_CATEGORY_LIMIT: i64 = 100_000;
 const DEFAULT_LIST_LIMIT: i64 = 10;
 const MAX_LIST_LIMIT: i64 = 100;
@@ -114,6 +115,8 @@ pub struct SessionStart {
     session_id: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     learner_context: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    due_review_items: Vec<review::ReviewItem>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -207,6 +210,87 @@ fn repair_intensity_str(intensity: RepairIntensity) -> &'static str {
         RepairIntensity::Light => "light",
         RepairIntensity::Balanced => "balanced",
         RepairIntensity::Strict => "strict",
+    }
+}
+
+fn parse_repair_priority(value: &str) -> Result<RepairPriority, std::io::Error> {
+    match value {
+        "grammar" => Ok(RepairPriority::Grammar),
+        "vocabulary" => Ok(RepairPriority::Vocabulary),
+        "pronunciation" => Ok(RepairPriority::Pronunciation),
+        "fluency" => Ok(RepairPriority::Fluency),
+        "coherence" => Ok(RepairPriority::Coherence),
+        "pragmatics" => Ok(RepairPriority::Pragmatics),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown repair priority: {other}"),
+        )),
+    }
+}
+
+fn review_item_type_str(item_type: ReviewItemType) -> &'static str {
+    match item_type {
+        ReviewItemType::GrammarPattern => "grammar_pattern",
+        ReviewItemType::Vocabulary => "vocabulary",
+        ReviewItemType::Phrase => "phrase",
+        ReviewItemType::PronunciationTarget => "pronunciation_target",
+        ReviewItemType::ConversationStrategy => "conversation_strategy",
+    }
+}
+
+pub(crate) fn parse_review_item_type(value: &str) -> Result<ReviewItemType, std::io::Error> {
+    match value {
+        "grammar_pattern" => Ok(ReviewItemType::GrammarPattern),
+        "vocabulary" => Ok(ReviewItemType::Vocabulary),
+        "phrase" => Ok(ReviewItemType::Phrase),
+        "pronunciation_target" => Ok(ReviewItemType::PronunciationTarget),
+        "conversation_strategy" => Ok(ReviewItemType::ConversationStrategy),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown review item type: {other}"),
+        )),
+    }
+}
+
+fn review_source_str(source: ReviewSource) -> &'static str {
+    match source {
+        ReviewSource::RepairEvent => "repair_event",
+        ReviewSource::SessionSummary => "session_summary",
+        ReviewSource::AssessmentPriority => "assessment_priority",
+    }
+}
+
+fn parse_review_source(value: &str) -> Result<ReviewSource, std::io::Error> {
+    match value {
+        "repair_event" => Ok(ReviewSource::RepairEvent),
+        "session_summary" => Ok(ReviewSource::SessionSummary),
+        "assessment_priority" => Ok(ReviewSource::AssessmentPriority),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown review source: {other}"),
+        )),
+    }
+}
+
+fn review_outcome_str(outcome: ReviewOutcome) -> &'static str {
+    match outcome {
+        ReviewOutcome::Remembered => "remembered",
+        ReviewOutcome::PartiallyRemembered => "partially_remembered",
+        ReviewOutcome::Missed => "missed",
+        ReviewOutcome::Skipped => "skipped",
+    }
+}
+
+fn parse_review_outcome(value: &str) -> Result<ReviewOutcome, std::io::Error> {
+    match value {
+        "remembered" => Ok(ReviewOutcome::Remembered),
+        "partially_remembered" => Ok(ReviewOutcome::PartiallyRemembered),
+        "missed" => Ok(ReviewOutcome::Missed),
+        "skipped" => Ok(ReviewOutcome::Skipped),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown review outcome: {other}"),
+        )),
     }
 }
 
@@ -355,6 +439,41 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             );
             CREATE INDEX IF NOT EXISTS idx_repair_event_turn ON repair_event(turn_id);
             CREATE INDEX IF NOT EXISTS idx_repair_event_priority ON repair_event(priority);",
+        )?;
+    }
+
+    if current_version < 5 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS review_item (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL CHECK (type IN (
+                    'grammar_pattern', 'vocabulary', 'phrase', 'pronunciation_target', 'conversation_strategy'
+                )),
+                content TEXT NOT NULL,
+                source TEXT NOT NULL CHECK (source IN ('repair_event', 'session_summary', 'assessment_priority')),
+                source_repair_event_id INTEGER REFERENCES repair_event(id) ON DELETE SET NULL,
+                source_session_id INTEGER REFERENCES session(id) ON DELETE SET NULL,
+                source_assessment_id INTEGER REFERENCES assessment(id) ON DELETE SET NULL,
+                stage INTEGER NOT NULL DEFAULT 0 CHECK (stage BETWEEN 0 AND 5),
+                next_review_at INTEGER NOT NULL,
+                last_reviewed_at INTEGER,
+                review_count INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_review_item_next_review_at ON review_item(next_review_at);
+            CREATE INDEX IF NOT EXISTS idx_review_item_type ON review_item(type);
+
+            CREATE TABLE IF NOT EXISTS review_event (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                review_item_id INTEGER NOT NULL REFERENCES review_item(id) ON DELETE CASCADE,
+                session_id INTEGER REFERENCES session(id) ON DELETE SET NULL,
+                outcome TEXT NOT NULL CHECK (outcome IN ('remembered', 'partially_remembered', 'missed', 'skipped')),
+                previous_stage INTEGER NOT NULL,
+                new_stage INTEGER NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_review_event_review_item ON review_event(review_item_id);
+            CREATE INDEX IF NOT EXISTS idx_review_event_session ON review_event(session_id);",
         )?;
     }
 
@@ -563,6 +682,197 @@ pub(crate) fn repair_priority_counts(
     rows.collect()
 }
 
+pub(crate) fn get_repair_event_core(
+    conn: &Connection,
+    event_id: i64,
+) -> rusqlite::Result<Option<(RepairPriority, String, String, String)>> {
+    conn.query_row(
+        "SELECT priority, issue, original, suggested FROM repair_event WHERE id = ?1",
+        params![event_id],
+        |row| {
+            let priority: String = row.get(0)?;
+            let issue: String = row.get(1)?;
+            let original: String = row.get(2)?;
+            let suggested: String = row.get(3)?;
+            Ok((priority, issue, original, suggested))
+        },
+    )
+    .optional()?
+    .map(|(priority, issue, original, suggested)| {
+        parse_repair_priority(&priority)
+            .map(|priority| (priority, issue, original, suggested))
+            .map_err(|error| column_conversion_error(0, error))
+    })
+    .transpose()
+}
+
+// ---------------------------------------------------------------------
+// Review item persistence (spaced retrieval)
+// ---------------------------------------------------------------------
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn insert_review_item(
+    conn: &Connection,
+    item_type: ReviewItemType,
+    content: &str,
+    source: ReviewSource,
+    source_repair_event_id: Option<i64>,
+    source_session_id: Option<i64>,
+    source_assessment_id: Option<i64>,
+    now_ms: i64,
+) -> rusqlite::Result<i64> {
+    conn.execute(
+        "INSERT INTO review_item
+            (type, content, source, source_repair_event_id, source_session_id, source_assessment_id,
+             stage, next_review_at, last_reviewed_at, review_count, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, NULL, 0, ?7)",
+        params![
+            review_item_type_str(item_type),
+            content,
+            review_source_str(source),
+            source_repair_event_id,
+            source_session_id,
+            source_assessment_id,
+            now_ms,
+        ],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+fn review_item_from_row(row: &rusqlite::Row) -> rusqlite::Result<review::ReviewItem> {
+    let item_type: String = row.get(1)?;
+    let source: String = row.get(3)?;
+    Ok(review::ReviewItem {
+        id: row.get(0)?,
+        item_type: parse_review_item_type(&item_type)
+            .map_err(|error| column_conversion_error(1, error))?,
+        content: row.get(2)?,
+        source: parse_review_source(&source).map_err(|error| column_conversion_error(3, error))?,
+        stage: row.get(4)?,
+        next_review_at: row.get(5)?,
+        last_reviewed_at: row.get(6)?,
+        review_count: row.get(7)?,
+        created_at: row.get(8)?,
+    })
+}
+
+pub(crate) fn due_review_items(
+    conn: &Connection,
+    now_ms: i64,
+    limit: i64,
+) -> rusqlite::Result<Vec<review::ReviewItem>> {
+    let mut statement = conn.prepare(
+        "SELECT id, type, content, source, stage, next_review_at, last_reviewed_at, review_count, created_at
+         FROM review_item WHERE next_review_at <= ?1 ORDER BY next_review_at ASC LIMIT ?2",
+    )?;
+    let rows = statement.query_map(params![now_ms, limit], review_item_from_row)?;
+    rows.collect()
+}
+
+/// One transaction-shaped sequence (this connection has no concurrent
+/// writers, so plain sequential statements are sufficient — same principle
+/// as `update_repair_event_outcome`'s single-statement simplicity):
+/// read the item's current stage, run the pure scheduler, log an append-only
+/// `review_event` row, and — unless the outcome was a no-op skip — apply the
+/// reschedule to `review_item`.
+pub(crate) fn record_review_event_and_reschedule(
+    conn: &Connection,
+    review_item_id: i64,
+    session_id: Option<i64>,
+    outcome: ReviewOutcome,
+    now_ms: i64,
+) -> rusqlite::Result<()> {
+    let current_stage: i32 = conn.query_row(
+        "SELECT stage FROM review_item WHERE id = ?1",
+        params![review_item_id],
+        |row| row.get(0),
+    )?;
+
+    let rescheduled = review::apply_review_outcome(current_stage, outcome, now_ms);
+    let new_stage = rescheduled.map(|(stage, _)| stage).unwrap_or(current_stage);
+
+    conn.execute(
+        "INSERT INTO review_event (review_item_id, session_id, outcome, previous_stage, new_stage, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+        params![
+            review_item_id,
+            session_id,
+            review_outcome_str(outcome),
+            current_stage,
+            new_stage,
+            now_ms,
+        ],
+    )?;
+
+    if let Some((stage, next_review_at)) = rescheduled {
+        conn.execute(
+            "UPDATE review_item
+             SET stage = ?1, next_review_at = ?2, last_reviewed_at = ?3, review_count = review_count + 1
+             WHERE id = ?4",
+            params![stage, next_review_at, now_ms, review_item_id],
+        )?;
+    }
+
+    Ok(())
+}
+
+pub(crate) fn recent_review_events(
+    conn: &Connection,
+    limit: i64,
+) -> rusqlite::Result<Vec<review::ReviewEventSummary>> {
+    let mut statement = conn.prepare(
+        "SELECT re.review_item_id, ri.type, ri.content, re.outcome, re.session_id, re.created_at
+         FROM review_event re
+         JOIN review_item ri ON ri.id = re.review_item_id
+         ORDER BY re.created_at DESC
+         LIMIT ?1",
+    )?;
+    let rows = statement.query_map(params![limit], |row| {
+        let item_type: String = row.get(1)?;
+        let outcome: String = row.get(3)?;
+        Ok(review::ReviewEventSummary {
+            review_item_id: row.get(0)?,
+            item_type: parse_review_item_type(&item_type)
+                .map_err(|error| column_conversion_error(1, error))?,
+            content: row.get(2)?,
+            outcome: parse_review_outcome(&outcome)
+                .map_err(|error| column_conversion_error(3, error))?,
+            session_id: row.get(4)?,
+            created_at: row.get(5)?,
+        })
+    })?;
+    rows.collect()
+}
+
+/// Same recency-limited-window shape as `repair_priority_counts`, filtered
+/// to `missed` outcomes only — this is the learner-model "recurrence"
+/// signal review outcomes feed back in (see `learner_profile::recurring_issues`).
+/// Returns raw review-item-type strings; the caller maps them onto the
+/// existing issue-category space via `review::review_type_to_issue_category`.
+pub(crate) fn review_missed_counts(
+    conn: &Connection,
+    recent_limit: i64,
+) -> rusqlite::Result<Vec<CategoryCount>> {
+    let mut statement = conn.prepare(
+        "SELECT type, COUNT(*) as count FROM (
+            SELECT ri.type AS type FROM review_event re
+            JOIN review_item ri ON ri.id = re.review_item_id
+            WHERE re.outcome = 'missed'
+            ORDER BY re.created_at DESC
+            LIMIT ?1
+         )
+         GROUP BY type
+         ORDER BY count DESC, type ASC",
+    )?;
+    let rows = statement.query_map(params![recent_limit], |row| {
+        Ok(CategoryCount {
+            category: row.get(0)?,
+            count: row.get(1)?,
+        })
+    })?;
+    rows.collect()
+}
+
 fn session_summary_from_row(row: &rusqlite::Row) -> rusqlite::Result<SessionSummary> {
     let status: String = row.get(6)?;
     let difficulty: Option<String> = row.get(7)?;
@@ -719,11 +1029,11 @@ pub async fn start_session(
         )?)
     })
     .await?;
-    let learner_context =
-        super::learner_profile::build_tutor_summary_for_session(&app_handle).await?;
+    let context = super::learner_profile::build_session_context(&app_handle).await?;
     Ok(SessionStart {
         session_id,
-        learner_context,
+        learner_context: context.learner_context,
+        due_review_items: context.due_review_items,
     })
 }
 
@@ -739,7 +1049,8 @@ pub async fn complete_session(
         summary,
     } = request;
     let summary_json = summary
-        .map(|summary| serde_json::to_string(&summary))
+        .as_ref()
+        .map(serde_json::to_string)
         .transpose()
         .map_err(|error| {
             HistoryCommandError::new(
@@ -748,15 +1059,30 @@ pub async fn complete_session(
                 error.to_string(),
             )
         })?;
+    let review_drafts = summary.map(|summary| summary.review_items).unwrap_or_default();
     run_blocking(move || {
         let conn = open_connection(&path)?;
-        Ok(complete_session_run(
+        complete_session_run(
             &conn,
             session_id,
             status,
             summary_json.as_deref(),
             now_ms(),
-        )?)
+        )?;
+        let created_at = now_ms();
+        for draft in review_drafts {
+            insert_review_item(
+                &conn,
+                draft.item_type,
+                &draft.content,
+                ReviewSource::SessionSummary,
+                None,
+                Some(session_id),
+                None,
+                created_at,
+            )?;
+        }
+        Ok(())
     })
     .await
 }
@@ -1474,7 +1800,10 @@ mod tests {
             what_went_well: vec!["Ordered confidently.".to_string()],
             priority_issues: vec!["past tense accuracy".to_string()],
             alternative_phrases: vec![],
-            review_items: vec!["past tense forms".to_string()],
+            review_items: vec![review::ReviewItemDraft {
+                content: "past tense forms".to_string(),
+                item_type: ReviewItemType::GrammarPattern,
+            }],
             repair_events: vec![],
         };
         let summary_json = serde_json::to_string(&summary).expect("summary must serialize");

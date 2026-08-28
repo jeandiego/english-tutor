@@ -6,6 +6,7 @@ import {
   listRecentExpressions,
   listRecentSessions,
 } from "../native/history";
+import { listRecentReviewEvents } from "../native/review";
 import { renderWithQueryClient as render } from "../test/queryTestUtils";
 
 vi.mock("../native/history", async (importOriginal) => {
@@ -18,9 +19,18 @@ vi.mock("../native/history", async (importOriginal) => {
   };
 });
 
+vi.mock("../native/review", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../native/review")>();
+  return {
+    ...actual,
+    listRecentReviewEvents: vi.fn(),
+  };
+});
+
 const listRecentSessionsMock = vi.mocked(listRecentSessions);
 const listCorrectionCategoryCountsMock = vi.mocked(listCorrectionCategoryCounts);
 const listRecentExpressionsMock = vi.mocked(listRecentExpressions);
+const listRecentReviewEventsMock = vi.mocked(listRecentReviewEvents);
 
 afterEach(() => {
   cleanup();
@@ -41,7 +51,7 @@ describe("HistoryPage", () => {
           whatWentWell: ["Ordered confidently."],
           priorityIssues: ["past tense accuracy"],
           alternativePhrases: [],
-          reviewItems: ["past tense forms"],
+          reviewItems: [{ content: "past tense forms", type: "grammar_pattern" }],
           repairEvents: [],
         },
       },
@@ -51,6 +61,15 @@ describe("HistoryPage", () => {
     ]);
     listRecentExpressionsMock.mockResolvedValue([
       { original: "I am agree", suggestion: "I agree", timestamp: 1_700_000_500_000 },
+    ]);
+    listRecentReviewEventsMock.mockResolvedValue([
+      {
+        reviewItemId: 1,
+        itemType: "vocabulary",
+        content: "give up",
+        outcome: "remembered",
+        createdAt: 1_700_000_700_000,
+      },
     ]);
 
     render(<HistoryPage />);
@@ -78,6 +97,7 @@ describe("HistoryPage", () => {
     ]);
     listCorrectionCategoryCountsMock.mockResolvedValue([]);
     listRecentExpressionsMock.mockResolvedValue([]);
+    listRecentReviewEventsMock.mockResolvedValue([]);
 
     render(<HistoryPage />);
 
@@ -88,12 +108,14 @@ describe("HistoryPage", () => {
     listRecentSessionsMock.mockResolvedValue([]);
     listCorrectionCategoryCountsMock.mockResolvedValue([]);
     listRecentExpressionsMock.mockResolvedValue([]);
+    listRecentReviewEventsMock.mockResolvedValue([]);
 
     render(<HistoryPage />);
 
     expect(await screen.findByText("No sessions yet.")).toBeInTheDocument();
     expect(screen.getByText("No recurring patterns yet.")).toBeInTheDocument();
     expect(screen.getByText("No saved expressions yet.")).toBeInTheDocument();
+    expect(screen.getByText("No review practice yet.")).toBeInTheDocument();
   });
 
   it("shows a message when history cannot load", async () => {
@@ -103,6 +125,7 @@ describe("HistoryPage", () => {
     });
     listCorrectionCategoryCountsMock.mockResolvedValue([]);
     listRecentExpressionsMock.mockResolvedValue([]);
+    listRecentReviewEventsMock.mockResolvedValue([]);
 
     render(<HistoryPage />);
 

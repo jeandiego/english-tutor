@@ -1,4 +1,5 @@
 import type { AssessmentCompetency, CefrLevel } from "./assessment";
+import type { ReviewItemDraft } from "./review";
 
 export type LearnerIssue = {
   category: string;
@@ -47,5 +48,6 @@ export type SaveLearnerProfilePreferencesRequest = {
 export type ApplyAssessmentToLearnerProfileRequest = {
   overallLevel?: CefrLevel;
   dimensionLevels: Partial<Record<AssessmentCompetency, CefrLevel>>;
-  priorities: string[];
+  priorities: ReviewItemDraft[];
+  assessmentId?: number;
 };

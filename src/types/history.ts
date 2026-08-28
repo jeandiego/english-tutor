@@ -1,5 +1,6 @@
 import type { CefrLevel } from "./assessment";
 import type { SessionRunStatus, SessionSummaryPayload } from "./session";
+import type { ReviewItem } from "./review";
 
 export type StartSessionRequest = {
   scenarioId?: string;
@@ -11,6 +12,7 @@ export type StartSessionRequest = {
 export type SessionStart = {
   sessionId: number;
   learnerContext?: string;
+  dueReviewItems?: ReviewItem[];
 };
 
 export type SessionSummary = {

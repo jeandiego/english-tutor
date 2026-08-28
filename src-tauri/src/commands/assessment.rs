@@ -3,6 +3,7 @@ use serde_json::{json, Value};
 use tauri::AppHandle;
 
 use super::history;
+use super::review::ReviewItemDraft;
 use super::tutor::{self, OllamaRequestMessage, TutorCommandError, TutorPerformance};
 
 const FOLLOW_UP_SYSTEM_INSTRUCTION: &str = r#"You are the question-wording component of an English speaking assessment. You do not decide what is being measured — that has already been decided by a separate component. Your only job is to produce one natural, conversational follow-up question in English that pursues a specific communicative-function target, grounded in what the learner just said.
@@ -58,7 +59,7 @@ const SUMMARY_SYSTEM_INSTRUCTION: &str = r#"You are the recommendation-writing c
 You will be given the learner's overall estimated level and a per-competency profile, each with a level (or "insufficient evidence"), a confidence value, and short evidence quotes from their answers.
 
 Your only job is to write:
-- priorities: concrete, specific gaps to work on next, grounded in the evidence given (for example "past tense accuracy in narrated stories", "linking ideas across multi-sentence answers"). Never vague statements like "keep practicing" or "improve English."
+- priorities: concrete, specific gaps to work on next, grounded in the evidence given (for example "past tense accuracy in narrated stories", "linking ideas across multi-sentence answers"). Never vague statements like "keep practicing" or "improve English." Classify each with the type of item it is.
 - recommendedSessions: concrete next session types or topics grounded in the priorities you identified (for example "daily routine narration", "job interview roleplay", "storytelling with past tense").
 - notesForTutor: a short internal note for a future tutoring session, not shown to celebrate or shame the learner. State any confidence caveats plainly if coverage was thin, name the single biggest bottleneck, and suggest what listening/input level would suit this learner next.
 
@@ -66,7 +67,7 @@ Never write empty motivational praise. Ground every sentence in the evidence you
 
 Always return exactly this JSON object shape, using these exact field names:
 {
-  "priorities": ["..."],
+  "priorities": [{ "content": "the gap to work on next", "type": "grammar_pattern | vocabulary | phrase | pronunciation_target | conversation_strategy" }],
   "recommendedSessions": ["..."],
   "notesForTutor": "..."
 }"#;
@@ -646,7 +647,7 @@ pub struct SynthesizeSummaryRequest {
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct StructuredSummary {
-    priorities: Vec<String>,
+    priorities: Vec<ReviewItemDraft>,
     recommended_sessions: Vec<String>,
     notes_for_tutor: String,
 }
@@ -654,7 +655,10 @@ struct StructuredSummary {
 impl StructuredSummary {
     fn validated(mut self) -> Result<Self, AssessmentCommandError> {
         for (index, priority) in self.priorities.iter_mut().enumerate() {
-            *priority = required_text(std::mem::take(priority), &format!("priorities[{index}]"))?;
+            priority.content = required_text(
+                std::mem::take(&mut priority.content),
+                &format!("priorities[{index}].content"),
+            )?;
         }
         for (index, session) in self.recommended_sessions.iter_mut().enumerate() {
             *session = required_text(
@@ -670,7 +674,7 @@ impl StructuredSummary {
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AssessmentSummaryText {
-    priorities: Vec<String>,
+    priorities: Vec<ReviewItemDraft>,
     recommended_sessions: Vec<String>,
     notes_for_tutor: String,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -682,7 +686,21 @@ fn summary_response_schema() -> Value {
         "type": "object",
         "additionalProperties": false,
         "properties": {
-            "priorities": { "type": "array", "items": { "type": "string", "minLength": 1 } },
+            "priorities": {
+                "type": "array",
+                "items": {
+                    "type": "object",
+                    "additionalProperties": false,
+                    "properties": {
+                        "content": { "type": "string", "minLength": 1 },
+                        "type": {
+                            "type": "string",
+                            "enum": ["grammar_pattern", "vocabulary", "phrase", "pronunciation_target", "conversation_strategy"]
+                        }
+                    },
+                    "required": ["content", "type"]
+                }
+            },
             "recommendedSessions": { "type": "array", "items": { "type": "string", "minLength": 1 } },
             "notesForTutor": { "type": "string", "minLength": 1 }
         },
@@ -1430,7 +1448,9 @@ mod tests {
                 chat_fixture(
                     200,
                     &json!({
-                        "priorities": ["Practice linking ideas across longer answers."],
+                        "priorities": [
+                            { "content": "Practice linking ideas across longer answers.", "type": "conversation_strategy" }
+                        ],
                         "recommendedSessions": ["storytelling with past tense"],
                         "notesForTutor": "Coverage was strong for fluency; listening remains unassessed."
                     })

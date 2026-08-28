@@ -1,4 +1,5 @@
 import type { TutorPerformance } from "./tutor";
+import type { ReviewItemDraft } from "./review";
 
 export type CefrLevel = "A1" | "A2" | "B1" | "B2" | "C1" | "C2";
 
@@ -119,7 +120,7 @@ export type SynthesizeSummaryRequest = {
 };
 
 export type AssessmentSummaryText = {
-  priorities: string[];
+  priorities: ReviewItemDraft[];
   recommendedSessions: string[];
   notesForTutor: string;
   performance?: TutorPerformance;

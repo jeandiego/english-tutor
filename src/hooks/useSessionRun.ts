@@ -21,6 +21,10 @@ import {
   updateRepairEventOutcome as defaultUpdateRepairEventOutcome,
 } from "../native/repair";
 import {
+  evaluateReviewAttempt as defaultEvaluateReviewAttempt,
+  recordReviewOutcome as defaultRecordReviewOutcome,
+} from "../native/review";
+import {
   openGuidedSession as defaultOpenGuidedSession,
   synthesizeSessionSummary as defaultSynthesizeSessionSummary,
   toSessionError,
@@ -40,6 +44,12 @@ import type {
   RepairIntensity,
   UpdateRepairEventOutcomeRequest,
 } from "../types/repair";
+import type {
+  EvaluateReviewAttemptRequest,
+  RecordReviewOutcomeRequest,
+  ReviewAttemptEvaluation,
+  ReviewItem,
+} from "../types/review";
 import type { TranscriptionResult } from "../types/transcription";
 import type {
   BetterExpression,
@@ -79,6 +89,10 @@ type UseSessionRunOptions = {
   evaluateRepair?: (request: EvaluateRepairRequest) => Promise<RepairEvaluation>;
   recordRepairEvent?: (request: RecordRepairEventRequest) => Promise<number>;
   updateRepairEventOutcome?: (request: UpdateRepairEventOutcomeRequest) => Promise<void>;
+  evaluateReviewAttempt?: (
+    request: EvaluateReviewAttemptRequest,
+  ) => Promise<ReviewAttemptEvaluation>;
+  recordReviewOutcome?: (request: RecordReviewOutcomeRequest) => Promise<void>;
   startSession?: (request: {
     scenarioId: string;
     difficulty?: CefrLevel;
@@ -110,6 +124,8 @@ export function useSessionRun({
   evaluateRepair = defaultEvaluateRepair,
   recordRepairEvent = defaultRecordRepairEvent,
   updateRepairEventOutcome = defaultUpdateRepairEventOutcome,
+  evaluateReviewAttempt = defaultEvaluateReviewAttempt,
+  recordReviewOutcome = defaultRecordReviewOutcome,
   startSession = defaultStartSession,
   completeSession = defaultCompleteSession,
   openGuidedSession = defaultOpenGuidedSession,
@@ -127,6 +143,7 @@ export function useSessionRun({
     string | undefined
   >();
   const [openingReply, setOpeningReply] = useState<string | undefined>();
+  const [dueReviewItems, setDueReviewItems] = useState<ReviewItem[]>([]);
 
   const engineRef = useRef<Engine | null>(null);
   const statusRef = useRef(status);
@@ -149,6 +166,9 @@ export function useSessionRun({
     evaluateRepair,
     recordRepairEvent,
     updateRepairEventOutcome,
+    dueReviewItems,
+    evaluateReviewAttempt,
+    recordReviewOutcome,
   });
 
   const turnCount = conversation.exchanges.filter(
@@ -173,6 +193,7 @@ export function useSessionRun({
     setOpeningReply(undefined);
     setConversationSessionId(undefined);
     setConversationLearnerContext(undefined);
+    setDueReviewItems([]);
     setTemplate(chosenTemplate);
     setStatus("starting");
 
@@ -235,6 +256,7 @@ export function useSessionRun({
 
     setConversationSessionId(engine.sessionId);
     setConversationLearnerContext(mergedContext || undefined);
+    setDueReviewItems(started.dueReviewItems ?? []);
     setOpeningReply(opening);
     setStatus("active");
   }
@@ -346,6 +368,7 @@ export function useSessionRun({
     setError(undefined);
     setConversationSessionId(undefined);
     setConversationLearnerContext(undefined);
+    setDueReviewItems([]);
     setOpeningReply(undefined);
   }
 

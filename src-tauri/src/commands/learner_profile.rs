@@ -13,6 +13,7 @@ use tempfile::NamedTempFile;
 
 use super::assessment::{cefr_level_str, AssessmentCompetency, CefrLevel};
 use super::history::{self, HistoryCommandError};
+use super::review::{self, ReviewItemDraft};
 
 const CONFIG_FILE_NAME: &str = "learner_profile.json";
 const RECENT_CORRECTIONS_WINDOW: i64 = 50;
@@ -194,7 +195,9 @@ pub struct ApplyAssessmentToLearnerProfileRequest {
     #[serde(default)]
     dimension_levels: HashMap<AssessmentCompetency, CefrLevel>,
     #[serde(default)]
-    priorities: Vec<String>,
+    priorities: Vec<ReviewItemDraft>,
+    #[serde(default)]
+    assessment_id: Option<i64>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -324,10 +327,11 @@ fn category_label(category: &str) -> &str {
     }
 }
 
-/// Merges error signal from both the passive `correction` table and the
-/// interactive `repair_event` table into one recurring-issues view — both
-/// are error evidence for the same learner model, just gathered by
-/// different mechanisms (post-hoc note vs. in-conversation repair loop).
+/// Merges error signal from the passive `correction` table, the
+/// interactive `repair_event` table, and `missed` spaced-retrieval review
+/// outcomes into one recurring-issues view — all three are error evidence
+/// for the same learner model, just gathered by different mechanisms
+/// (post-hoc note, in-conversation repair loop, review-item recurrence).
 fn recurring_issues(conn: &Connection) -> rusqlite::Result<Vec<LearnerIssue>> {
     let mut counts_by_category: HashMap<String, i64> = HashMap::new();
     for entry in history::category_counts(conn, RECENT_CORRECTIONS_WINDOW)? {
@@ -335,6 +339,12 @@ fn recurring_issues(conn: &Connection) -> rusqlite::Result<Vec<LearnerIssue>> {
     }
     for entry in history::repair_priority_counts(conn, RECENT_CORRECTIONS_WINDOW)? {
         *counts_by_category.entry(entry.category).or_insert(0) += entry.count;
+    }
+    for entry in history::review_missed_counts(conn, RECENT_CORRECTIONS_WINDOW)? {
+        if let Ok(item_type) = history::parse_review_item_type(&entry.category) {
+            let category = review::review_type_to_issue_category(item_type).to_string();
+            *counts_by_category.entry(category).or_insert(0) += entry.count;
+        }
     }
 
     let mut issues: Vec<LearnerIssue> = counts_by_category
@@ -397,9 +407,16 @@ fn compose_tutor_summary(goals: &[String], issues: &[LearnerIssue]) -> Option<St
     }
 }
 
-pub(crate) async fn build_tutor_summary_for_session(
+const DUE_REVIEW_ITEMS_PER_SESSION: i64 = 3;
+
+pub(crate) struct SessionContext {
+    pub(crate) learner_context: Option<String>,
+    pub(crate) due_review_items: Vec<review::ReviewItem>,
+}
+
+pub(crate) async fn build_session_context(
     app_handle: &AppHandle,
-) -> Result<Option<String>, HistoryCommandError> {
+) -> Result<SessionContext, HistoryCommandError> {
     let db_path = history::db_path(app_handle)?;
     let profile_path = config_path(app_handle).map_err(HistoryCommandError::from)?;
 
@@ -407,7 +424,24 @@ pub(crate) async fn build_tutor_summary_for_session(
         let conn = history::open_connection(&db_path)?;
         let issues = recurring_issues(&conn).map_err(LearnerProfileCommandError::from)?;
         let profile = read_profile(&profile_path)?;
-        Ok::<_, LearnerProfileCommandError>(compose_tutor_summary(&profile.goals, &issues))
+        let due_review_items =
+            history::due_review_items(&conn, now_ms(), DUE_REVIEW_ITEMS_PER_SESSION)
+                .map_err(LearnerProfileCommandError::from)?;
+
+        let learner_context = [
+            compose_tutor_summary(&profile.goals, &issues),
+            review::compose_review_context(&due_review_items),
+        ]
+        .into_iter()
+        .flatten()
+        .collect::<Vec<_>>()
+        .join(" ");
+        let learner_context = (!learner_context.is_empty()).then_some(learner_context);
+
+        Ok::<_, LearnerProfileCommandError>(SessionContext {
+            learner_context,
+            due_review_items,
+        })
     })
     .await
     .map_err(|error| {
@@ -456,7 +490,7 @@ fn apply_assessment(
     mut profile: LearnerProfileData,
     overall_level: Option<CefrLevel>,
     dimension_levels: HashMap<AssessmentCompetency, CefrLevel>,
-    priorities: &[String],
+    priorities: &[ReviewItemDraft],
     now_ms: i64,
 ) -> LearnerProfileData {
     if let Some(level) = overall_level {
@@ -474,7 +508,12 @@ fn apply_assessment(
         None => "Assessment completed — evidence was insufficient for an overall level.".to_string(),
     };
     if !priorities.is_empty() {
-        text.push_str(&format!(" Priorities: {}.", priorities.join("; ")));
+        let joined = priorities
+            .iter()
+            .map(|priority| priority.content.as_str())
+            .collect::<Vec<_>>()
+            .join("; ");
+        text.push_str(&format!(" Priorities: {joined}."));
     }
 
     push_progress_note(
@@ -600,17 +639,41 @@ pub async fn apply_assessment_to_learner_profile(
 ) -> Result<LearnerProfileResponse, LearnerProfileCommandError> {
     let profile_path = config_path(&app_handle)?;
     let write_path = profile_path.clone();
+    let db_path = history::db_path(&app_handle)?;
+    let ApplyAssessmentToLearnerProfileRequest {
+        overall_level,
+        dimension_levels,
+        priorities,
+        assessment_id,
+    } = request;
 
-    tauri::async_runtime::spawn_blocking(move || {
+    tauri::async_runtime::spawn_blocking(move || -> Result<(), LearnerProfileCommandError> {
         let profile = read_profile(&write_path)?;
-        let updated = apply_assessment(
-            profile,
-            request.overall_level,
-            request.dimension_levels,
-            &request.priorities,
-            now_ms(),
-        );
-        write_profile(&write_path, &updated)
+        let updated = apply_assessment(profile, overall_level, dimension_levels, &priorities, now_ms());
+        write_profile(&write_path, &updated)?;
+
+        // The assessment's priorities become review items only when we know
+        // which assessment they came from — engine.assessmentId is set
+        // before this call fires in practice, so a missing id here is
+        // defensive, not an expected path.
+        if let Some(assessment_id) = assessment_id {
+            let conn = history::open_connection(&db_path)?;
+            let created_at = now_ms();
+            for priority in &priorities {
+                history::insert_review_item(
+                    &conn,
+                    priority.item_type,
+                    &priority.content,
+                    review::ReviewSource::AssessmentPriority,
+                    None,
+                    None,
+                    Some(assessment_id),
+                    created_at,
+                )?;
+            }
+        }
+
+        Ok(())
     })
     .await
     .map_err(|error| {
@@ -742,7 +805,10 @@ mod tests {
             profile,
             Some(CefrLevel::B2),
             HashMap::new(),
-            &["past tense accuracy".to_string()],
+            &[ReviewItemDraft {
+                content: "past tense accuracy".to_string(),
+                item_type: review::ReviewItemType::GrammarPattern,
+            }],
             2_000,
         );
 

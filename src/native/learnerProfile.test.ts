@@ -59,14 +59,16 @@ describe("native learner profile service", () => {
     await applyAssessmentToLearnerProfile({
       overallLevel: "B2",
       dimensionLevels: { fluency: "B2" },
-      priorities: ["past tense accuracy"],
+      priorities: [{ content: "past tense accuracy", type: "grammar_pattern" }],
+      assessmentId: 1,
     });
 
     expect(invokeMock).toHaveBeenCalledWith("apply_assessment_to_learner_profile", {
       request: {
         overallLevel: "B2",
         dimensionLevels: { fluency: "B2" },
-        priorities: ["past tense accuracy"],
+        priorities: [{ content: "past tense accuracy", type: "grammar_pattern" }],
+        assessmentId: 1,
       },
     });
   });

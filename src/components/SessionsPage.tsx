@@ -1,7 +1,10 @@
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { CefrLevel } from "../types/assessment";
 import { useSessionRun } from "../hooks/useSessionRun";
 import { getLearnerProfile } from "../native/learnerProfile";
+import { listDueReviewItems } from "../native/review";
+import { reviewKeys } from "../queryKeys/review";
 import {
   DURATION_PRESETS,
   SESSION_TEMPLATES,
@@ -71,6 +74,30 @@ function ProcessingStatus({ label, meta }: { label: string; meta?: string }) {
   );
 }
 
+function DueReviewItems() {
+  const query = useQuery({
+    queryKey: reviewKeys.due(),
+    queryFn: () => listDueReviewItems(3),
+  });
+
+  if (!query.data || query.data.length === 0) {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <h4 className="text-caption font-medium text-muted-foreground">Due for review</h4>
+      <ul className="flex flex-wrap gap-1.5">
+        {query.data.map((item) => (
+          <li key={item.id}>
+            <Badge variant="outline">{item.content}</Badge>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function SessionCatalog({
   defaultDifficulty,
   disabled,
@@ -104,6 +131,8 @@ function SessionCatalog({
         Pick a scenario for a short guided conversation with a clear objective and a
         closing summary.
       </p>
+
+      <DueReviewItems />
 
       <ul className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {SESSION_TEMPLATES.map((template) => (
@@ -241,7 +270,10 @@ function SessionSummaryView({
                 </ul>
               </div>
             )}
-            <SummarySection heading="Review later" items={summary.reviewItems} />
+            <SummarySection
+              heading="Review later"
+              items={summary.reviewItems.map((item) => item.content)}
+            />
             {summary.repairEvents.length > 0 && (
               <div className="flex flex-col gap-1">
                 <h4 className="text-caption font-medium text-muted-foreground">
@@ -337,6 +369,7 @@ export function SessionsPage({ disabled, disabledHint, repairIntensity }: Sessio
             exchanges={run.conversation.exchanges}
             loopState={run.conversation.loopState}
             onSkipRepair={run.conversation.skipRepair}
+            onSkipReview={run.conversation.skipReview}
             showCoaching={false}
             speaking={run.conversation.speaking}
             state={run.conversation.state}

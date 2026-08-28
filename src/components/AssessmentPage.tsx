@@ -108,7 +108,7 @@ function AssessmentResultView({
                 <h4 className="text-caption font-medium text-muted-foreground">Priorities</h4>
                 <ul className="flex flex-col gap-0.5 text-body text-foreground">
                   {summary.priorities.map((priority, index) => (
-                    <li key={index}>{priority}</li>
+                    <li key={index}>{priority.content}</li>
                   ))}
                 </ul>
               </div>

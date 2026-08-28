@@ -15,6 +15,7 @@ import {
   listRecentSessions,
   startSession,
 } from "./native/history";
+import { listDueReviewItems, listRecentReviewEvents } from "./native/review";
 import {
   loadTranscriptionSetup,
   saveTranscriptionSettings,
@@ -61,6 +62,15 @@ vi.mock("./native/history", async (importOriginal) => {
   };
 });
 
+vi.mock("./native/review", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./native/review")>();
+  return {
+    ...actual,
+    listDueReviewItems: vi.fn(),
+    listRecentReviewEvents: vi.fn(),
+  };
+});
+
 vi.mock("./native/transcription", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./native/transcription")>();
   return {
@@ -102,6 +112,8 @@ const startSessionMock = vi.mocked(startSession);
 const listRecentSessionsMock = vi.mocked(listRecentSessions);
 const listCorrectionCategoryCountsMock = vi.mocked(listCorrectionCategoryCounts);
 const listRecentExpressionsMock = vi.mocked(listRecentExpressions);
+const listDueReviewItemsMock = vi.mocked(listDueReviewItems);
+const listRecentReviewEventsMock = vi.mocked(listRecentReviewEvents);
 
 const readySetup: TranscriptionSetup = {
   settings: {
@@ -242,6 +254,8 @@ beforeEach(() => {
   listRecentSessionsMock.mockResolvedValue([]);
   listCorrectionCategoryCountsMock.mockResolvedValue([]);
   listRecentExpressionsMock.mockResolvedValue([]);
+  listDueReviewItemsMock.mockResolvedValue([]);
+  listRecentReviewEventsMock.mockResolvedValue([]);
   getLatestAssessmentMock.mockResolvedValue(null);
   listAssessmentsMock.mockResolvedValue([]);
 });

@@ -4,6 +4,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::AppHandle;
 
 use super::history::{self, HistoryCommandError};
+use super::review;
 use super::tutor::{
     self, OllamaRequestMessage, TutorCommandError, TutorMessage, TutorMessageRole,
     TutorPerformance,
@@ -549,6 +550,30 @@ pub async fn update_repair_event_outcome(
     tauri::async_runtime::spawn_blocking(move || -> Result<(), RepairCommandError> {
         let conn = history::open_connection(&path)?;
         history::update_repair_event_outcome(&conn, request.event_id, request.outcome)?;
+
+        // A repair that the learner still couldn't resolve (`Failed`) is the
+        // strongest "worth remembering later" signal this loop produces —
+        // `Improved` is already resolved in-session and `Skipped` carries no
+        // signal either way, so both are no-ops here.
+        if request.outcome == RepairOutcome::Failed {
+            if let Some((priority, issue, original, suggested)) =
+                history::get_repair_event_core(&conn, request.event_id)?
+            {
+                let item_type = review::review_type_from_repair_priority(priority);
+                let content = review::compose_review_content_from_repair(&issue, &original, &suggested);
+                history::insert_review_item(
+                    &conn,
+                    item_type,
+                    &content,
+                    review::ReviewSource::RepairEvent,
+                    Some(request.event_id),
+                    None,
+                    None,
+                    now_ms(),
+                )?;
+            }
+        }
+
         Ok(())
     })
     .await
