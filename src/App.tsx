@@ -7,6 +7,7 @@ import { ProgressPage } from "./components/ProgressPage";
 import { AppSidebar, type AppPage } from "./components/sidebar/AppSidebar";
 import { SessionsPage } from "./components/SessionsPage";
 import { SettingsPage } from "./components/SettingsPage";
+import { StoragePage } from "./components/StoragePage";
 import type {
   TranscriptionDiagnostic,
   TutorDiagnostic,
@@ -27,6 +28,7 @@ const PAGE_HEADER: Record<AppPage, { eyebrow: string; title: string }> = {
   assessment: { eyebrow: "Assessment", title: "Level check" },
   history: { eyebrow: "History", title: "Past conversations" },
   progress: { eyebrow: "My Progress", title: "Learning trends" },
+  storage: { eyebrow: "Storage", title: "Local database" },
   settings: { eyebrow: "Settings", title: "Runtime & voice" },
 };
 
@@ -253,6 +255,8 @@ function App() {
         <HistoryPage focusSessionId={focusSessionId} />
       ) : activePage === "progress" ? (
         <ProgressPage />
+      ) : activePage === "storage" ? (
+        <StoragePage />
       ) : (
         <SettingsPage
           onTranscriptionDraftChange={setSettingsDraft}

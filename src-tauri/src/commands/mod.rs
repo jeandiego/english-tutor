@@ -6,6 +6,7 @@ pub(crate) mod repair;
 pub(crate) mod review;
 pub(crate) mod scenario_packs;
 pub(crate) mod session;
+pub(crate) mod storage;
 pub(crate) mod transcription;
 pub(crate) mod tts;
 pub(crate) mod tutor;

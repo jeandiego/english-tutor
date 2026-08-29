@@ -28,3 +28,4 @@ serde_json = "1"
 tempfile = "3"
 reqwest = { version = "0.13", default-features = false, features = ["json", "rustls"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
+tauri-plugin-dialog = "2.7.2"

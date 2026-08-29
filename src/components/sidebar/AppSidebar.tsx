@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import {
   IconChartBar,
   IconClipboardCheck,
+  IconDatabase,
   IconHistory,
   IconListDetails,
   IconMessage,
@@ -43,6 +44,7 @@ export type AppPage =
   | "assessment"
   | "history"
   | "progress"
+  | "storage"
   | "settings";
 
 const NAV_ITEMS: {
@@ -56,6 +58,7 @@ const NAV_ITEMS: {
   { page: "assessment", label: "Assessment", icon: IconClipboardCheck },
   { page: "history", label: "History", icon: IconHistory },
   { page: "progress", label: "My Progress", icon: IconChartBar },
+  { page: "storage", label: "Storage", icon: IconDatabase },
   { page: "settings", label: "Settings", icon: IconSettings },
 ];
 
