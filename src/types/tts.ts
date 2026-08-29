@@ -33,6 +33,9 @@ export type TtsSettings = {
   voiceId: string;
   rate?: number;
   volume?: number;
+  kokoroExecutablePath: string;
+  kokoroModelPath: string;
+  kokoroVoicesPath: string;
 };
 
 export type TtsSetup = {

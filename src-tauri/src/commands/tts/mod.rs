@@ -46,6 +46,12 @@ pub struct TtsSettings {
     rate: Option<f32>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     volume: Option<f32>,
+    #[serde(default)]
+    kokoro_executable_path: String,
+    #[serde(default)]
+    kokoro_model_path: String,
+    #[serde(default)]
+    kokoro_voices_path: String,
 }
 
 impl Default for TtsSettings {
@@ -55,6 +61,9 @@ impl Default for TtsSettings {
             voice_id: String::new(),
             rate: None,
             volume: None,
+            kokoro_executable_path: String::new(),
+            kokoro_model_path: String::new(),
+            kokoro_voices_path: String::new(),
         }
     }
 }
@@ -67,6 +76,9 @@ impl TtsSettings {
             .volume
             .map(|value| value.clamp(0.0, 1.0))
             .filter(|value| value.is_finite());
+        self.kokoro_executable_path = self.kokoro_executable_path.trim().to_string();
+        self.kokoro_model_path = self.kokoro_model_path.trim().to_string();
+        self.kokoro_voices_path = self.kokoro_voices_path.trim().to_string();
         self
     }
 }
@@ -352,7 +364,7 @@ async fn load_settings(path: PathBuf) -> Result<TtsSettings, TtsCommandError> {
 async fn build_setup(settings: TtsSettings) -> TtsSetup {
     let providers = vec![
         macos_say::provider_info().await,
-        kokoro_local::provider_info().await,
+        kokoro_local::provider_info(&settings).await,
         elevenlabs::provider_info().await,
     ];
     TtsSetup {
@@ -437,6 +449,9 @@ mod tests {
             voice_id: String::new(),
             rate: None,
             volume: None,
+            kokoro_executable_path: String::new(),
+            kokoro_model_path: String::new(),
+            kokoro_voices_path: String::new(),
         }
     }
 
@@ -454,11 +469,23 @@ mod tests {
             voice_id: "  Rachel  ".into(),
             rate: Some(-5.0),
             volume: Some(2.0),
+            kokoro_executable_path: "  /path/to/koko  ".into(),
+            kokoro_model_path: "  /path/to/kokoro-v1.0.onnx  ".into(),
+            kokoro_voices_path: "  /path/to/voices-v1.0.bin  ".into(),
         }
         .normalized();
         assert_eq!(normalized.voice_id, "Rachel");
         assert_eq!(normalized.rate, None);
         assert_eq!(normalized.volume, Some(1.0));
+        assert_eq!(normalized.kokoro_executable_path, "/path/to/koko");
+        assert_eq!(
+            normalized.kokoro_model_path,
+            "/path/to/kokoro-v1.0.onnx"
+        );
+        assert_eq!(
+            normalized.kokoro_voices_path,
+            "/path/to/voices-v1.0.bin"
+        );
 
         write_settings(&path, &normalized).expect("settings must write");
         assert_eq!(

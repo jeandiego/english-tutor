@@ -47,6 +47,9 @@ const DEFAULT_TUTOR_SETTINGS: TutorSettings = {
 const DEFAULT_TTS_SETTINGS: TtsSettings = {
   provider: "macos_say",
   voiceId: "",
+  kokoroExecutablePath: "",
+  kokoroModelPath: "",
+  kokoroVoicesPath: "",
 };
 
 function settingsEqual(
@@ -74,7 +77,10 @@ function ttsSettingsEqual(left: TtsSettings, right: TtsSettings) {
     left.provider === right.provider &&
     left.voiceId === right.voiceId &&
     left.rate === right.rate &&
-    left.volume === right.volume
+    left.volume === right.volume &&
+    left.kokoroExecutablePath === right.kokoroExecutablePath &&
+    left.kokoroModelPath === right.kokoroModelPath &&
+    left.kokoroVoicesPath === right.kokoroVoicesPath
   );
 }
 

@@ -12,6 +12,9 @@ const setup: TtsSetup = {
     provider: "macos_say",
     voiceId: "Daniel",
     rate: 200,
+    kokoroExecutablePath: "",
+    kokoroModelPath: "",
+    kokoroVoicesPath: "",
   },
   providers: [
     {

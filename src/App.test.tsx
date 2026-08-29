@@ -204,6 +204,9 @@ const readyTtsSetup: TtsSetup = {
   settings: {
     provider: "macos_say",
     voiceId: "",
+    kokoroExecutablePath: "",
+    kokoroModelPath: "",
+    kokoroVoicesPath: "",
   },
   providers: [
     {

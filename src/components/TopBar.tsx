@@ -26,7 +26,7 @@ export function TopBar({ eyebrow, title, onNewSession, newSessionDisabled }: Top
   return (
     <header
       className="fixed inset-x-0 top-0 z-30 flex shrink-0 items-center border-b border-border bg-sidebar"
-      data-tauri-drag-region
+      data-tauri-drag-region="deep"
       style={{ height: TITLEBAR_HEIGHT_PX }}
     >
       <div

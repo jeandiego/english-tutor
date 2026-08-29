@@ -749,6 +749,79 @@ export function SettingsPage({
                 </FieldContent>
               </Field>
 
+              {ttsDraft.provider === "kokoro_local" && (
+                <>
+                  <Field orientation="responsive">
+                    <FieldLabel htmlFor="kokoro-executable-path">Koko executable</FieldLabel>
+                    <FieldContent>
+                      <Input
+                        autoComplete="off"
+                        disabled={ttsSaving}
+                        id="kokoro-executable-path"
+                        onChange={(event) =>
+                          onTtsDraftChange({
+                            ...ttsDraft,
+                            kokoroExecutablePath: event.target.value,
+                          })
+                        }
+                        placeholder="~/kokoros/target/release/koko"
+                        spellCheck={false}
+                        value={ttsDraft.kokoroExecutablePath}
+                      />
+                      <FieldDescription className="text-xs text-muted-foreground/62">
+                        The locally built kokoros CLI binary.
+                      </FieldDescription>
+                    </FieldContent>
+                  </Field>
+
+                  <Field orientation="responsive">
+                    <FieldLabel htmlFor="kokoro-model-path">Kokoro model</FieldLabel>
+                    <FieldContent>
+                      <Input
+                        autoComplete="off"
+                        disabled={ttsSaving}
+                        id="kokoro-model-path"
+                        onChange={(event) =>
+                          onTtsDraftChange({
+                            ...ttsDraft,
+                            kokoroModelPath: event.target.value,
+                          })
+                        }
+                        placeholder="~/kokoros/checkpoints/kokoro-v1.0.onnx"
+                        spellCheck={false}
+                        value={ttsDraft.kokoroModelPath}
+                      />
+                      <FieldDescription className="text-xs text-muted-foreground/62">
+                        The Kokoro-82M ONNX model file.
+                      </FieldDescription>
+                    </FieldContent>
+                  </Field>
+
+                  <Field orientation="responsive">
+                    <FieldLabel htmlFor="kokoro-voices-path">Kokoro voices data</FieldLabel>
+                    <FieldContent>
+                      <Input
+                        autoComplete="off"
+                        disabled={ttsSaving}
+                        id="kokoro-voices-path"
+                        onChange={(event) =>
+                          onTtsDraftChange({
+                            ...ttsDraft,
+                            kokoroVoicesPath: event.target.value,
+                          })
+                        }
+                        placeholder="~/kokoros/data/voices-v1.0.bin"
+                        spellCheck={false}
+                        value={ttsDraft.kokoroVoicesPath}
+                      />
+                      <FieldDescription className="text-xs text-muted-foreground/62">
+                        The voice embeddings file that pairs with the model.
+                      </FieldDescription>
+                    </FieldContent>
+                  </Field>
+                </>
+              )}
+
               {selectedProvider?.supportsRate && (
                 <Field orientation="responsive">
                   <FieldLabel htmlFor="tts-rate">Speed</FieldLabel>
