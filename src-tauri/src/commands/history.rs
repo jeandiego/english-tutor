@@ -13,10 +13,13 @@ use super::listening::ListeningCheckType;
 use super::pronunciation::{self, PronunciationProblemCategory, PronunciationTargetSource};
 use super::repair::{RepairIntensity, RepairMode, RepairOutcome, RepairPriority};
 use super::review::{self, ReviewItemType, ReviewOutcome, ReviewSource};
-use super::tutor::{BetterExpression, CorrectionCategory, CorrectionSeverity, TutorCorrection};
+use super::tutor::{
+    BetterExpression, CorrectionCategory, CorrectionSeverity, TutorCorrection, TutorMessage,
+    TutorMessageRole,
+};
 
 const DB_FILE_NAME: &str = "history.sqlite3";
-const SCHEMA_VERSION: i32 = 7;
+const SCHEMA_VERSION: i32 = 8;
 const ALL_TIME_CATEGORY_LIMIT: i64 = 100_000;
 const DEFAULT_LIST_LIMIT: i64 = 10;
 const MAX_LIST_LIMIT: i64 = 100;
@@ -109,6 +112,26 @@ pub struct CompleteSessionRequest {
     status: SessionRunStatus,
     #[serde(default)]
     summary: Option<super::session::SessionSummaryPayload>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ContinueSessionRequest {
+    session_id: i64,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ConversationResumeContext {
+    source_session_id: i64,
+    continuation_session_id: i64,
+    recent_messages: Vec<TutorMessage>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    prior_summary: Option<super::session::SessionSummaryPayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    learner_context: Option<String>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    due_review_items: Vec<review::ReviewItem>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -604,6 +627,13 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    if current_version < 8 {
+        conn.execute_batch(
+            "ALTER TABLE session ADD COLUMN continued_from_session_id INTEGER
+                REFERENCES session(id) ON DELETE SET NULL;",
+        )?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
 }
@@ -678,6 +708,108 @@ pub(crate) fn complete_session_run(
         ],
     )?;
     Ok(())
+}
+
+/// One-sentence nudge folded into `learnerContext` only when resuming a
+/// `completed` conversation's linked continuation. Pure and testable like
+/// `compose_tutor_summary` / `compose_review_context`.
+fn compose_resume_priority_issues(
+    prior_summary: Option<&super::session::SessionSummaryPayload>,
+) -> Option<String> {
+    let issues = prior_summary.map(|summary| summary.priority_issues.as_slice())?;
+    if issues.is_empty() {
+        return None;
+    }
+    let joined = issues
+        .iter()
+        .take(3)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(" and ");
+    Some(format!(
+        "The learner is continuing a previous conversation where {joined} came up. \
+         Don't drill these explicitly. When natural, create conversation opportunities \
+         where these may come up again."
+    ))
+}
+
+pub(crate) struct SessionContinuation {
+    pub(crate) continuation_session_id: i64,
+    pub(crate) prior_summary: Option<super::session::SessionSummaryPayload>,
+    pub(crate) recent_messages: Vec<TutorMessage>,
+}
+
+/// Implements the active/abandoned/completed resume policy: active and
+/// abandoned sessions are continued in place (abandoned flips back to
+/// active); completed sessions are never reopened or mutated — a new linked
+/// session is created instead, so a finished session's summary/status/
+/// metrics stay intact.
+#[allow(clippy::type_complexity)]
+pub(crate) fn continue_session_run(
+    conn: &Connection,
+    source_session_id: i64,
+    now_ms: i64,
+) -> rusqlite::Result<Option<SessionContinuation>> {
+    let row: Option<(String, Option<String>, Option<String>, Option<String>, Option<i64>, Option<String>)> =
+        conn.query_row(
+            "SELECT status, mode, topic, difficulty, target_turns, summary_json FROM session WHERE id = ?1",
+            params![source_session_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                ))
+            },
+        )
+        .optional()?;
+
+    let Some((status_str, mode, topic, difficulty, target_turns, summary_json)) = row else {
+        return Ok(None);
+    };
+    let status = parse_session_run_status(&status_str).map_err(|error| column_conversion_error(0, error))?;
+
+    let turn_rows = turns_for_session(conn, source_session_id)?;
+    let recent_messages = recent_tutor_messages(&turn_rows, RESUME_RECENT_MESSAGE_LIMIT);
+
+    match status {
+        SessionRunStatus::Active | SessionRunStatus::Abandoned => {
+            if status == SessionRunStatus::Abandoned {
+                conn.execute(
+                    "UPDATE session SET status = 'active' WHERE id = ?1",
+                    params![source_session_id],
+                )?;
+            }
+            Ok(Some(SessionContinuation {
+                continuation_session_id: source_session_id,
+                prior_summary: None,
+                recent_messages,
+            }))
+        }
+        SessionRunStatus::Completed => {
+            let prior_summary = summary_json
+                .map(|value| serde_json::from_str(&value))
+                .transpose()
+                .map_err(|error| {
+                    column_conversion_error(5, std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+                })?;
+
+            conn.execute(
+                "INSERT INTO session (started_at, ended_at, mode, topic, difficulty, target_turns, status, continued_from_session_id)
+                 VALUES (?1, ?1, ?2, ?3, ?4, ?5, 'active', ?6)",
+                params![now_ms, mode, topic, difficulty, target_turns, source_session_id],
+            )?;
+
+            Ok(Some(SessionContinuation {
+                continuation_session_id: conn.last_insert_rowid(),
+                prior_summary,
+                recent_messages,
+            }))
+        }
+    }
 }
 
 pub(crate) fn record_turn_pair(
@@ -1408,11 +1540,8 @@ pub struct SessionTurnDetail {
     role: String,
     text: String,
     timestamp: i64,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     corrections: Vec<TutorCorrection>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     expressions: Vec<BetterExpression>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     repair_events: Vec<SessionRepairEventDetail>,
 }
 
@@ -1431,8 +1560,9 @@ pub struct SessionDetail {
     difficulty: Option<CefrLevel>,
     #[serde(skip_serializing_if = "Option::is_none")]
     target_turns: Option<i64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    continued_from_session_id: Option<i64>,
     turns: Vec<SessionTurnDetail>,
-    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     review_events: Vec<review::ReviewEventSummary>,
     #[serde(skip_serializing_if = "Option::is_none")]
     summary: Option<super::session::SessionSummaryPayload>,
@@ -1456,6 +1586,32 @@ fn turns_for_session(
         ))
     })?;
     rows.collect()
+}
+
+/// Deliberately tighter than tutor.rs's MAX_HISTORY_MESSAGES (24): a resume
+/// re-injects a short recap, not the full rolling window of an
+/// already-flowing conversation. Pure and testable independent of the DB.
+const RESUME_RECENT_MESSAGE_LIMIT: usize = 12; // last 6 turn pairs
+
+fn recent_tutor_messages(
+    turns: &[(i64, String, String, i64)],
+    limit: usize,
+) -> Vec<TutorMessage> {
+    let start = turns.len().saturating_sub(limit);
+    turns[start..]
+        .iter()
+        .filter_map(|(_, role, text, _)| {
+            let role = match role.as_str() {
+                "user" => Some(TutorMessageRole::User),
+                "assistant" => Some(TutorMessageRole::Assistant),
+                _ => None,
+            }?;
+            Some(TutorMessage {
+                role,
+                content: text.clone(),
+            })
+        })
+        .collect()
 }
 
 fn corrections_for_session(
@@ -1594,9 +1750,10 @@ fn session_detail(conn: &Connection, session_id: i64) -> rusqlite::Result<Option
         Option<String>,
         Option<i64>,
         Option<String>,
+        Option<i64>,
     )> = conn
         .query_row(
-            "SELECT id, started_at, ended_at, mode, topic, status, difficulty, target_turns, summary_json
+            "SELECT id, started_at, ended_at, mode, topic, status, difficulty, target_turns, summary_json, continued_from_session_id
              FROM session WHERE id = ?1",
             params![session_id],
             |row| {
@@ -1610,13 +1767,24 @@ fn session_detail(conn: &Connection, session_id: i64) -> rusqlite::Result<Option
                     row.get(6)?,
                     row.get(7)?,
                     row.get(8)?,
+                    row.get(9)?,
                 ))
             },
         )
         .optional()?;
 
-    let Some((id, started_at, ended_at, mode, topic, status_str, difficulty_str, target_turns, summary_json)) =
-        session_row
+    let Some((
+        id,
+        started_at,
+        ended_at,
+        mode,
+        topic,
+        status_str,
+        difficulty_str,
+        target_turns,
+        summary_json,
+        continued_from_session_id,
+    )) = session_row
     else {
         return Ok(None);
     };
@@ -1674,6 +1842,7 @@ fn session_detail(conn: &Connection, session_id: i64) -> rusqlite::Result<Option
         status,
         difficulty,
         target_turns,
+        continued_from_session_id,
         turns,
         review_events,
         summary,
@@ -1821,6 +1990,46 @@ pub async fn complete_session(
         Ok(())
     })
     .await
+}
+
+#[tauri::command]
+pub async fn continue_session(
+    app_handle: AppHandle,
+    request: ContinueSessionRequest,
+) -> Result<Option<ConversationResumeContext>, HistoryCommandError> {
+    let path = db_path(&app_handle)?;
+    let source_session_id = request.session_id;
+    let now = now_ms();
+
+    let continuation = run_blocking(move || {
+        let conn = open_connection(&path)?;
+        Ok(continue_session_run(&conn, source_session_id, now)?)
+    })
+    .await?;
+
+    let Some(continuation) = continuation else {
+        return Ok(None);
+    };
+
+    let context = super::learner_profile::build_session_context(&app_handle).await?;
+    let learner_context = [
+        compose_resume_priority_issues(continuation.prior_summary.as_ref()),
+        context.learner_context,
+    ]
+    .into_iter()
+    .flatten()
+    .collect::<Vec<_>>()
+    .join(" ");
+    let learner_context = (!learner_context.is_empty()).then_some(learner_context);
+
+    Ok(Some(ConversationResumeContext {
+        source_session_id,
+        continuation_session_id: continuation.continuation_session_id,
+        recent_messages: continuation.recent_messages,
+        prior_summary: continuation.prior_summary,
+        learner_context,
+        due_review_items: context.due_review_items,
+    }))
 }
 
 #[tauri::command]
@@ -2588,6 +2797,49 @@ mod tests {
     }
 
     #[test]
+    fn migration_from_version_7_adds_continued_from_session_id_column_without_touching_existing_data() {
+        let (_directory, path) = scratch_db();
+
+        let session_id = {
+            let conn = Connection::open(&path).expect("connection must open");
+            conn.execute_batch(
+                "CREATE TABLE session (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at INTEGER NOT NULL,
+                    ended_at INTEGER NOT NULL,
+                    mode TEXT,
+                    topic TEXT,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    difficulty TEXT,
+                    target_turns INTEGER,
+                    summary_json TEXT
+                );
+                INSERT INTO session (started_at, ended_at) VALUES (1000, 2000);",
+            )
+            .expect("v7 session table must create");
+            let session_id = conn.last_insert_rowid();
+            conn.pragma_update(None, "user_version", 7)
+                .expect("version must set");
+            session_id
+        };
+
+        let conn = open_connection(&path).expect("connection must upgrade");
+        let version: i32 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version must read");
+        assert_eq!(version, SCHEMA_VERSION);
+
+        let continued_from_session_id: Option<i64> = conn
+            .query_row(
+                "SELECT continued_from_session_id FROM session WHERE id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .expect("pre-existing session row must survive migration");
+        assert_eq!(continued_from_session_id, None);
+    }
+
+    #[test]
     fn create_session_persists_scenario_metadata() {
         let (_directory, path) = scratch_db();
         let conn = open_connection(&path).expect("connection must open");
@@ -2643,6 +2895,189 @@ mod tests {
         assert_eq!(session.ended_at, 5_000);
         let persisted_summary = session.summary.as_ref().expect("summary must persist");
         assert_eq!(persisted_summary.priority_issues, vec!["past tense accuracy".to_string()]);
+    }
+
+    #[test]
+    fn continue_session_run_reuses_active_session_in_place() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+        let session_id = create_session(&conn, 1_000, Some("restaurant"), None, None, None)
+            .expect("session must create");
+
+        let continuation = continue_session_run(&conn, session_id, 5_000)
+            .expect("continue must succeed")
+            .expect("session must be found");
+
+        assert_eq!(continuation.continuation_session_id, session_id);
+        assert!(continuation.prior_summary.is_none());
+        assert!(continuation.recent_messages.is_empty());
+
+        let sessions = recent_sessions(&conn, 10).expect("sessions must list");
+        let session = sessions.iter().find(|s| s.id == session_id).expect("session must exist");
+        assert_eq!(session.status, SessionRunStatus::Active);
+    }
+
+    #[test]
+    fn continue_session_run_reactivates_abandoned_session_without_creating_a_new_row() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+        let session_id =
+            create_session(&conn, 1_000, None, None, None, None).expect("session must create");
+        complete_session_run(&conn, session_id, SessionRunStatus::Abandoned, None, 2_000)
+            .expect("session must abandon");
+
+        let continuation = continue_session_run(&conn, session_id, 5_000)
+            .expect("continue must succeed")
+            .expect("session must be found");
+
+        assert_eq!(continuation.continuation_session_id, session_id);
+        assert!(continuation.prior_summary.is_none());
+
+        let status: String = conn
+            .query_row(
+                "SELECT status FROM session WHERE id = ?1",
+                params![session_id],
+                |row| row.get(0),
+            )
+            .expect("status must read");
+        assert_eq!(status, "active");
+    }
+
+    #[test]
+    fn continue_session_run_creates_linked_session_for_completed_source_and_preserves_original_summary() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+        let session_id = create_session(
+            &conn,
+            1_000,
+            Some("restaurant"),
+            Some("focus on past tense"),
+            Some(CefrLevel::B1),
+            Some(5),
+        )
+        .expect("session must create");
+
+        let summary = super::super::session::SessionSummaryPayload {
+            what_went_well: vec!["Ordered confidently.".to_string()],
+            priority_issues: vec!["past tense accuracy".to_string()],
+            alternative_phrases: vec![],
+            review_items: vec![],
+            repair_events: vec![],
+        };
+        let summary_json = serde_json::to_string(&summary).expect("summary must serialize");
+        complete_session_run(
+            &conn,
+            session_id,
+            SessionRunStatus::Completed,
+            Some(&summary_json),
+            3_000,
+        )
+        .expect("session must complete");
+
+        let before = session_detail(&conn, session_id)
+            .expect("detail must query")
+            .expect("session must be found");
+
+        let continuation = continue_session_run(&conn, session_id, 9_000)
+            .expect("continue must succeed")
+            .expect("session must be found");
+
+        assert_ne!(continuation.continuation_session_id, session_id);
+        assert_eq!(continuation.prior_summary, Some(summary));
+
+        let after = session_detail(&conn, session_id)
+            .expect("detail must query")
+            .expect("session must be found");
+        assert_eq!(after.status, before.status);
+        assert_eq!(after.ended_at, before.ended_at);
+        assert_eq!(after.summary, before.summary);
+
+        let new_detail = session_detail(&conn, continuation.continuation_session_id)
+            .expect("detail must query")
+            .expect("new session must be found");
+        assert_eq!(new_detail.status, SessionRunStatus::Active);
+        assert_eq!(new_detail.mode.as_deref(), Some("restaurant"));
+        assert_eq!(new_detail.topic.as_deref(), Some("focus on past tense"));
+        assert_eq!(new_detail.difficulty, Some(CefrLevel::B1));
+        assert_eq!(new_detail.target_turns, Some(5));
+        assert_eq!(new_detail.continued_from_session_id, Some(session_id));
+    }
+
+    #[test]
+    fn continue_session_run_returns_none_for_missing_session() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+
+        let continuation =
+            continue_session_run(&conn, 999, 5_000).expect("continue must not error");
+        assert!(continuation.is_none());
+    }
+
+    #[test]
+    fn continue_session_run_trims_recent_messages_to_last_six_pairs() {
+        let (_directory, path) = scratch_db();
+        let mut conn = open_connection(&path).expect("connection must open");
+        let session_id =
+            create_session(&conn, 1_000, None, None, None, None).expect("session must create");
+
+        for index in 0..8 {
+            record_turn_pair(
+                &mut conn,
+                session_id,
+                &format!("user turn {index}"),
+                &format!("assistant turn {index}"),
+                &[],
+                &[],
+                2_000 + index,
+            )
+            .expect("turn pair must record");
+        }
+
+        let continuation = continue_session_run(&conn, session_id, 9_000)
+            .expect("continue must succeed")
+            .expect("session must be found");
+
+        assert_eq!(continuation.recent_messages.len(), 12);
+        assert_eq!(continuation.recent_messages[0].content, "user turn 2");
+        assert_eq!(continuation.recent_messages[1].content, "assistant turn 2");
+        assert_eq!(
+            continuation.recent_messages[11].content,
+            "assistant turn 7"
+        );
+    }
+
+    #[test]
+    fn compose_resume_priority_issues_is_none_when_prior_summary_absent() {
+        assert_eq!(compose_resume_priority_issues(None), None);
+    }
+
+    #[test]
+    fn compose_resume_priority_issues_is_none_when_priority_issues_empty() {
+        let summary = super::super::session::SessionSummaryPayload {
+            what_went_well: vec![],
+            priority_issues: vec![],
+            alternative_phrases: vec![],
+            review_items: vec![],
+            repair_events: vec![],
+        };
+        assert_eq!(compose_resume_priority_issues(Some(&summary)), None);
+    }
+
+    #[test]
+    fn compose_resume_priority_issues_joins_up_to_three_issues() {
+        let summary = super::super::session::SessionSummaryPayload {
+            what_went_well: vec![],
+            priority_issues: vec![
+                "past tense accuracy".to_string(),
+                "article usage".to_string(),
+            ],
+            alternative_phrases: vec![],
+            review_items: vec![],
+            repair_events: vec![],
+        };
+        let blurb = compose_resume_priority_issues(Some(&summary)).expect("blurb must be present");
+        assert!(blurb.contains("past tense accuracy"));
+        assert!(blurb.contains("article usage"));
     }
 
     #[test]
@@ -3021,6 +3456,15 @@ mod tests {
         assert!(detail.turns.is_empty());
         assert!(detail.review_events.is_empty());
         assert_eq!(detail.summary, None);
+
+        // The frontend's SessionDetail type declares `turns` and
+        // `reviewEvents` as required (non-optional) arrays — serde must
+        // never omit these keys just because they're empty, or the
+        // frontend receives `undefined` instead of `[]` and crashes on
+        // `.length`.
+        let json = serde_json::to_value(&detail).expect("detail must serialize");
+        assert!(json.get("turns").is_some_and(|value| value.is_array()));
+        assert!(json.get("reviewEvents").is_some_and(|value| value.is_array()));
     }
 
     #[test]
@@ -3088,6 +3532,15 @@ mod tests {
         assert_eq!(detail.turns[0].repair_events[0].issue, "issue");
         assert_eq!(detail.turns[0].repair_events[0].outcome, None);
         assert!(detail.turns[2].repair_events.is_empty());
+
+        // A turn with no corrections/expressions/repair events must still
+        // serialize those keys as `[]`, not omit them — the frontend's
+        // SessionTurnDetail type declares all three as required arrays.
+        let json = serde_json::to_value(&detail).expect("detail must serialize");
+        let second_user_turn = &json["turns"][2];
+        assert!(second_user_turn["corrections"].is_array());
+        assert!(second_user_turn["expressions"].is_array());
+        assert!(second_user_turn["repairEvents"].is_array());
     }
 
     #[test]

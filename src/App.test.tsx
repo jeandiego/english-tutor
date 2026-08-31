@@ -10,6 +10,7 @@ import { renderWithQueryClient as render } from "./test/queryTestUtils";
 import { getLatestAssessment, listAssessments } from "./native/assessment";
 import { getRuntimeHealth } from "./native/health";
 import {
+  getSessionDetail,
   listCorrectionCategoryCounts,
   listRecentExpressions,
   listRecentSessions,
@@ -59,6 +60,7 @@ vi.mock("./native/history", async (importOriginal) => {
     listRecentSessions: vi.fn(),
     listCorrectionCategoryCounts: vi.fn(),
     listRecentExpressions: vi.fn(),
+    getSessionDetail: vi.fn(),
   };
 });
 
@@ -112,6 +114,7 @@ const startSessionMock = vi.mocked(startSession);
 const listRecentSessionsMock = vi.mocked(listRecentSessions);
 const listCorrectionCategoryCountsMock = vi.mocked(listCorrectionCategoryCounts);
 const listRecentExpressionsMock = vi.mocked(listRecentExpressions);
+const getSessionDetailMock = vi.mocked(getSessionDetail);
 const listDueReviewItemsMock = vi.mocked(listDueReviewItems);
 const listRecentReviewEventsMock = vi.mocked(listRecentReviewEvents);
 
@@ -546,5 +549,44 @@ describe("Pako shell", () => {
       await screen.findByText("The learning history could not be saved."),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
+  });
+
+  it("contains a crashing page inside an error boundary, keeps navigation usable, and recovers on navigation", async () => {
+    getRuntimeHealthMock.mockResolvedValue(readyHealth());
+    loadTranscriptionSetupMock.mockResolvedValue(readySetup);
+    listRecentSessionsMock.mockResolvedValue([
+      {
+        id: 1,
+        startedAt: 1_700_000_000_000,
+        endedAt: 1_700_000_600_000,
+        turnCount: 3,
+        status: "active",
+        topic: "ordering food",
+      },
+    ]);
+    // Simulates a malformed native response (a required array field
+    // missing from the payload) to prove the page-scoped boundary in
+    // App.tsx contains the crash instead of the whole shell going blank.
+    getSessionDetailMock.mockResolvedValue({
+      id: 1,
+      startedAt: 1_700_000_000_000,
+      endedAt: 1_700_000_600_000,
+      status: "active",
+      turns: [],
+    } as never);
+
+    render(<App />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "History" }));
+    fireEvent.click(await screen.findByRole("button", { name: /ordering food/i }));
+
+    expect(await screen.findByText("This page couldn't load")).toBeInTheDocument();
+    const conversationNav = screen.getByRole("button", { name: "Conversation" });
+    expect(conversationNav).toBeEnabled();
+
+    fireEvent.click(conversationNav);
+
+    expect(screen.queryByText("This page couldn't load")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeInTheDocument();
   });
 });

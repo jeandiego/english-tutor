@@ -33,6 +33,7 @@ type ConversationStageProps = {
   speaking?: boolean;
   thinking?: boolean;
   historyWarning?: string;
+  resumeBanner?: { title: string; startedAt: number };
   onReplay?: (exchangeId: number) => void;
   replayState?: ReplayState | null;
   showCoaching?: boolean;
@@ -664,6 +665,38 @@ function HistoryWarningBanner({ message }: { message?: string }) {
   );
 }
 
+function ResumeBanner({ banner }: { banner?: { title: string; startedAt: number } }) {
+  const [dismissed, setDismissed] = useState(false);
+
+  if (!banner || dismissed) {
+    return null;
+  }
+
+  const date = new Date(banner.startedAt).toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+  });
+
+  return (
+    <div
+      className="flex items-center justify-between gap-3 rounded-lg bg-muted px-3 py-2"
+      role="status"
+    >
+      <p className="text-body text-muted-foreground">
+        Continued from: {banner.title}, {date}
+      </p>
+      <button
+        aria-label="Dismiss"
+        className="rounded-[4px] p-1 text-muted-foreground hover:bg-muted-foreground/10"
+        onClick={() => setDismissed(true)}
+        type="button"
+      >
+        <IconX className="size-4" />
+      </button>
+    </div>
+  );
+}
+
 function TutorFailure({ exchange }: { exchange: ConversationExchange }) {
   if (!exchange.error) {
     return null;
@@ -853,6 +886,7 @@ function ConversationStageContent({
   exchanges = [],
   thinking = false,
   historyWarning,
+  resumeBanner,
 }: ConversationStageProps) {
   return (
     <section
@@ -862,6 +896,7 @@ function ConversationStageContent({
       <h2 className="sr-only" id="conversation-title">
         Conversation
       </h2>
+      <ResumeBanner banner={resumeBanner} />
       <HistoryWarningBanner message={historyWarning} />
       {exchanges.length > 0 ? (
         <Card className="flex min-h-0 flex-1 flex-col overflow-hidden">

@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   CategoryCount,
   CompleteSessionRequest,
+  ConversationResumeContext,
   ExpressionSummary,
   SessionDetail,
   SessionStart,
@@ -88,6 +89,25 @@ export async function getSessionDetail(
     return await invoke<SessionDetail | null>("get_session_detail", {
       sessionId,
     });
+  } catch (error) {
+    throw toHistoryError(error);
+  }
+}
+
+export async function continueSession(
+  sessionId: number,
+): Promise<ConversationResumeContext> {
+  try {
+    const result = await invoke<ConversationResumeContext | null>("continue_session", {
+      request: { sessionId },
+    });
+    if (result === null) {
+      throw new HistoryError(
+        "history-not-found",
+        "This conversation could not be found.",
+      );
+    }
+    return result;
   } catch (error) {
     throw toHistoryError(error);
   }

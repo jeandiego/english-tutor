@@ -2,7 +2,7 @@ import type { CefrLevel } from "./assessment";
 import type { ListeningProfile } from "./listening";
 import type { SessionRunStatus, SessionSummaryPayload } from "./session";
 import type { ReviewItem, ReviewEventSummary } from "./review";
-import type { BetterExpression, TutorCorrection } from "./tutor";
+import type { BetterExpression, TutorCorrection, TutorMessage } from "./tutor";
 import type { RepairIntensity, RepairMode, RepairOutcome, RepairPriority } from "./repair";
 
 export type StartSessionRequest = {
@@ -83,7 +83,23 @@ export type SessionDetail = {
   status: SessionRunStatus;
   difficulty?: CefrLevel;
   targetTurns?: number;
+  continuedFromSessionId?: number;
   turns: SessionTurnDetail[];
   reviewEvents: ReviewEventSummary[];
   summary?: SessionSummaryPayload;
+};
+
+export type ConversationResumeContext = {
+  sourceSessionId: number;
+  continuationSessionId: number;
+  recentMessages: TutorMessage[];
+  priorSummary?: SessionSummaryPayload;
+  learnerContext?: string;
+  dueReviewItems?: ReviewItem[];
+};
+
+export type ConversationContinuePayload = {
+  resume: ConversationResumeContext;
+  sourceTitle: string;
+  sourceStartedAt: number;
 };

@@ -1,5 +1,7 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
 import type { AudioRecorder, RecordedAudio } from "../audio/recorder";
+import { historyKeys } from "../queryKeys/history";
 import {
   evaluateRepairOpportunity,
   recordRepairEvent as nativeRecordRepairEvent,
@@ -101,6 +103,7 @@ type UseTutorConversationOptions = {
   now?: () => number;
   sessionId?: number;
   learnerContext?: string;
+  seedMessages?: TutorMessage[];
   openingReply?: string;
   repairIntensity?: RepairIntensity;
   evaluateRepair?: (request: EvaluateRepairRequest) => Promise<RepairEvaluation>;
@@ -130,6 +133,26 @@ function conversationHistory(
   );
 }
 
+function seedExchangesFromMessages(
+  messages: TutorMessage[],
+  nextId: () => number,
+): ConversationExchange[] {
+  const seeded: ConversationExchange[] = [];
+  for (let index = 0; index + 1 < messages.length; index += 2) {
+    const userMessage = messages[index];
+    const assistantMessage = messages[index + 1];
+    if (userMessage.role !== "user" || assistantMessage.role !== "assistant") {
+      continue;
+    }
+    seeded.push({
+      id: nextId(),
+      transcript: userMessage.content,
+      tutorTurn: { reply: assistantMessage.content, corrections: [], betterExpressions: [] },
+    });
+  }
+  return seeded;
+}
+
 export function useTutorConversation({
   enabled,
   recorder,
@@ -139,6 +162,7 @@ export function useTutorConversation({
   now = monotonicNow,
   sessionId,
   learnerContext,
+  seedMessages,
   openingReply,
   repairIntensity = "balanced",
   evaluateRepair = evaluateRepairOpportunity,
@@ -148,12 +172,14 @@ export function useTutorConversation({
   evaluateReviewAttempt = nativeEvaluateReviewAttempt,
   recordReviewOutcome = nativeRecordReviewOutcome,
 }: UseTutorConversationOptions) {
+  const queryClient = useQueryClient();
   const [exchanges, setExchanges] = useState<ConversationExchange[]>([]);
   const [thinking, setThinking] = useState(false);
   const [speaking, setSpeaking] = useState(false);
   const [replayState, setReplayState] = useState<ReplayState | null>(null);
   const [pendingRepair, setPendingRepair] = useState<PendingRepairState | null>(null);
   const [pendingReview, setPendingReview] = useState<PendingReviewState | null>(null);
+  const [liveTurnCount, setLiveTurnCount] = useState(0);
   const exchangesRef = useRef(exchanges);
   const mountedRef = useRef(true);
   const nextExchangeIdRef = useRef(1);
@@ -165,7 +191,9 @@ export function useTutorConversation({
   const speakRef = useRef(speak);
   const nowRef = useRef(now);
   const sessionIdRef = useRef(sessionId);
+  const previousSessionIdRef = useRef(sessionId);
   const learnerContextRef = useRef(learnerContext);
+  const seedMessagesRef = useRef(seedMessages);
   const repairIntensityRef = useRef(repairIntensity);
   const evaluateRepairRef = useRef(evaluateRepair);
   const recordRepairEventRef = useRef(recordRepairEvent);
@@ -185,6 +213,7 @@ export function useTutorConversation({
   nowRef.current = now;
   sessionIdRef.current = sessionId;
   learnerContextRef.current = learnerContext;
+  seedMessagesRef.current = seedMessages;
   repairIntensityRef.current = repairIntensity;
   evaluateRepairRef.current = evaluateRepair;
   recordRepairEventRef.current = recordRepairEvent;
@@ -258,6 +287,7 @@ export function useTutorConversation({
       ...current,
       { id: exchangeId, transcript },
     ]);
+    setLiveTurnCount((count) => count + 1);
     setThinking(true);
 
     void respondRef
@@ -487,6 +517,9 @@ export function useTutorConversation({
             )
             .slice(-MAX_EXCHANGES),
         );
+        if (tutorTurn.turnId !== undefined) {
+          void queryClient.invalidateQueries({ queryKey: historyKeys.all });
+        }
         setThinking(false);
         setSpeaking(true);
 
@@ -540,6 +573,33 @@ export function useTutorConversation({
         setThinking(false);
       });
   }, [recording.state]);
+
+  useEffect(() => {
+    const previous = previousSessionIdRef.current;
+    previousSessionIdRef.current = sessionId;
+
+    if (previous === undefined || sessionId === undefined || previous === sessionId) {
+      return;
+    }
+
+    requestIdRef.current += 1;
+    processedRecordingRef.current = null;
+    openingSeededRef.current = false;
+    firstLearnerTurnRef.current = true;
+    seenIssueKeysRef.current = new Set();
+    turnsSinceInterventionRef.current = Number.POSITIVE_INFINITY;
+    pendingRepairRef.current = null;
+    pendingReviewRef.current = null;
+    setPendingRepair(null);
+    setPendingReview(null);
+    setThinking(false);
+    setSpeaking(false);
+    setReplayState(null);
+    setLiveTurnCount(0);
+    setExchanges(
+      seedExchangesFromMessages(seedMessagesRef.current ?? [], () => nextExchangeIdRef.current++),
+    );
+  }, [sessionId]);
 
   useEffect(() => {
     mountedRef.current = true;
@@ -635,5 +695,6 @@ export function useTutorConversation({
     skipRepair,
     pendingReview,
     skipReview,
+    liveTurnCount,
   };
 }

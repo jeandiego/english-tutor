@@ -11,6 +11,7 @@ import { conversationTitleFor } from "../sessions/conversationTitle";
 import { scenarioLabelFor } from "../sessions/loadPacks";
 import type {
   CategoryCount,
+  ConversationContinuePayload,
   ExpressionSummary,
   SessionSummary,
 } from "../types/history";
@@ -193,9 +194,11 @@ function ExpressionList({ expressions }: { expressions: ExpressionSummary[] }) {
 
 export function HistoryPage({
   focusSessionId,
+  onContinue = () => {},
   onSelectSession = () => {},
 }: {
   focusSessionId?: number;
+  onContinue?: (payload: ConversationContinuePayload) => void;
   onSelectSession?: (sessionId: number | undefined) => void;
 } = {}) {
   const query = useQuery({
@@ -207,6 +210,7 @@ export function HistoryPage({
     return (
       <ConversationDetail
         onBack={() => onSelectSession(undefined)}
+        onContinue={onContinue}
         sessionId={focusSessionId}
       />
     );

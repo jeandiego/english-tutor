@@ -19,6 +19,7 @@ pub fn run() {
             commands::health::health_check,
             commands::history::start_session,
             commands::history::complete_session,
+            commands::history::continue_session,
             commands::history::list_recent_sessions,
             commands::history::get_session_detail,
             commands::history::list_correction_category_counts,

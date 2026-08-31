@@ -1,19 +1,21 @@
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ConversationDetail } from "./ConversationDetail";
-import { getSessionDetail } from "../native/history";
+import { continueSession, getSessionDetail } from "../native/history";
 import { renderWithQueryClient as render } from "../test/queryTestUtils";
-import type { SessionDetail } from "../types/history";
+import type { ConversationResumeContext, SessionDetail } from "../types/history";
 
 vi.mock("../native/history", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../native/history")>();
   return {
     ...actual,
+    continueSession: vi.fn(),
     getSessionDetail: vi.fn(),
   };
 });
 
 const getSessionDetailMock = vi.mocked(getSessionDetail);
+const continueSessionMock = vi.mocked(continueSession);
 
 afterEach(() => {
   cleanup();
@@ -117,5 +119,77 @@ describe("ConversationDetail", () => {
 
     (await screen.findByText("Back to history")).click();
     expect(onBack).toHaveBeenCalledOnce();
+  });
+
+  it.each(["active", "abandoned", "completed"] as const)(
+    "shows a Continue button for a %s conversation",
+    async (status) => {
+      getSessionDetailMock.mockResolvedValue({ ...baseDetail, status });
+
+      render(<ConversationDetail onBack={vi.fn()} sessionId={1} />);
+
+      expect(await screen.findByRole("button", { name: "Continue" })).toBeInTheDocument();
+    },
+  );
+
+  it("calls onContinue with the resume payload, source title, and source startedAt after a successful continue", async () => {
+    const onContinue = vi.fn();
+    getSessionDetailMock.mockResolvedValue({ ...baseDetail, topic: "ordering food" });
+    const resume: ConversationResumeContext = {
+      sourceSessionId: 1,
+      continuationSessionId: 1,
+      recentMessages: [],
+    };
+    continueSessionMock.mockResolvedValue(resume);
+
+    render(<ConversationDetail onBack={vi.fn()} onContinue={onContinue} sessionId={1} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+
+    await waitFor(() =>
+      expect(onContinue).toHaveBeenCalledWith({
+        resume,
+        sourceTitle: "ordering food",
+        sourceStartedAt: baseDetail.startedAt,
+      }),
+    );
+  });
+
+  it("shows an inline error and does not call onContinue when continueSession rejects", async () => {
+    const onContinue = vi.fn();
+    getSessionDetailMock.mockResolvedValue(baseDetail);
+    continueSessionMock.mockRejectedValue({
+      code: "history-not-found",
+      message: "This conversation could not be found.",
+    });
+
+    render(<ConversationDetail onBack={vi.fn()} onContinue={onContinue} sessionId={1} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByText("This conversation could not be found.")).toBeInTheDocument();
+    expect(onContinue).not.toHaveBeenCalled();
+  });
+
+  it("disables the Continue button while the mutation is pending", async () => {
+    getSessionDetailMock.mockResolvedValue(baseDetail);
+    let resolveContinue: ((value: ConversationResumeContext) => void) | undefined;
+    continueSessionMock.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveContinue = resolve;
+        }),
+    );
+
+    render(<ConversationDetail onBack={vi.fn()} sessionId={1} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+
+    expect(await screen.findByRole("button", { name: "Continuing…" })).toBeDisabled();
+
+    resolveContinue?.({ sourceSessionId: 1, continuationSessionId: 1, recentMessages: [] });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Continue" })).not.toBeDisabled(),
+    );
   });
 });

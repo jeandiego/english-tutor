@@ -1,8 +1,10 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AudioRecorder, RecordedAudio } from "../audio/recorder";
 import { ConversationStage } from "../components/ConversationStage";
 import { TalkControl } from "../components/TalkControl";
+import { historyKeys } from "../queryKeys/history";
+import { renderWithQueryClient } from "../test/queryTestUtils";
 import type {
   EvaluateRepairRequest,
   RecordRepairEventRequest,
@@ -10,7 +12,7 @@ import type {
   RepairIntensity,
   UpdateRepairEventOutcomeRequest,
 } from "../types/repair";
-import type { TutorTurn, TutorTurnRequest } from "../types/tutor";
+import type { TutorMessage, TutorTurn, TutorTurnRequest } from "../types/tutor";
 import { useTutorConversation } from "./useTutorConversation";
 
 function createRecording(index: number): RecordedAudio {
@@ -57,6 +59,8 @@ function ConversationHarness({
   recorder,
   repairIntensity,
   respond,
+  seedMessages,
+  sessionId,
   speak = async () => undefined,
   transcribe,
   updateRepairEventOutcome = vi.fn().mockResolvedValue(undefined),
@@ -67,6 +71,8 @@ function ConversationHarness({
   recorder: AudioRecorder;
   repairIntensity?: RepairIntensity;
   respond: (request: TutorTurnRequest) => Promise<TutorTurn>;
+  seedMessages?: TutorMessage[];
+  sessionId?: number;
   speak?: (reply: string) => Promise<void>;
   transcribe: () => Promise<{ text: string }>;
   updateRepairEventOutcome?: (request: UpdateRepairEventOutcomeRequest) => Promise<void>;
@@ -79,6 +85,8 @@ function ConversationHarness({
     recorder,
     repairIntensity,
     respond,
+    seedMessages,
+    sessionId,
     speak,
     transcribe,
     updateRepairEventOutcome,
@@ -86,6 +94,9 @@ function ConversationHarness({
 
   return (
     <>
+      <span data-testid="live-turn-count">{conversation.liveTurnCount}</span>
+      <span data-testid="pending-repair">{conversation.pendingRepair ? "yes" : "no"}</span>
+      <span data-testid="pending-review">{conversation.pendingReview ? "yes" : "no"}</span>
       <ConversationStage
         exchanges={conversation.exchanges}
         loopState={conversation.loopState}
@@ -143,7 +154,7 @@ describe("useTutorConversation", () => {
       };
     });
 
-    render(
+    renderWithQueryClient(
       <ConversationHarness
         now={() => clock}
         recorder={recorder}
@@ -181,7 +192,7 @@ describe("useTutorConversation", () => {
       )
       .mockResolvedValueOnce(turn("Rust is a useful complement. What are you building?"));
 
-    render(
+    renderWithQueryClient(
       <ConversationHarness
         recorder={recorder}
         respond={respond}
@@ -238,7 +249,7 @@ describe("useTutorConversation", () => {
       technicalMessage: "connection refused",
     });
 
-    render(
+    renderWithQueryClient(
       <ConversationHarness
         recorder={recorder}
         respond={respond}
@@ -264,7 +275,7 @@ describe("useTutorConversation", () => {
       turn("That opening is clear. What kinds of international roles interest you?"),
     );
 
-    render(
+    renderWithQueryClient(
       <ConversationHarness
         recorder={recorder}
         respond={respond}
@@ -306,7 +317,7 @@ describe("useTutorConversation", () => {
       technicalMessage: "exit status: 1",
     });
 
-    render(
+    renderWithQueryClient(
       <ConversationHarness
         recorder={recorder}
         respond={async () => turn("APIs are a strong topic for interviews.")}
@@ -326,6 +337,180 @@ describe("useTutorConversation", () => {
     expect(screen.getByText("Speech unavailable")).toBeInTheDocument();
     expect(screen.getByText("exit status: 1")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
+  });
+
+  describe("session switching", () => {
+    function plainTurn(reply: string, turnId?: number): TutorTurn {
+      return { reply, corrections: [], betterExpressions: [], turnId };
+    }
+
+    it("resets exchanges, pending state, and liveTurnCount when sessionId switches to a different defined session", async () => {
+      const recorder = createRecorder();
+      const respond = vi.fn().mockResolvedValue(plainTurn("Reply for session one.", 1));
+
+      const { rerender } = renderWithQueryClient(
+        <ConversationHarness
+          recorder={recorder}
+          respond={respond}
+          sessionId={1}
+          transcribe={async () => ({ text: "Turn in session one." })}
+        />,
+      );
+
+      await recordOneTurn();
+      expect(await screen.findByText("Reply for session one.")).toBeInTheDocument();
+      expect(screen.getByTestId("live-turn-count")).toHaveTextContent("1");
+
+      rerender(
+        <ConversationHarness
+          recorder={recorder}
+          respond={respond}
+          sessionId={2}
+          transcribe={async () => ({ text: "Turn in session two." })}
+        />,
+      );
+
+      expect(screen.queryByText("Reply for session one.")).not.toBeInTheDocument();
+      expect(screen.getByTestId("live-turn-count")).toHaveTextContent("0");
+      expect(screen.getByTestId("pending-repair")).toHaveTextContent("no");
+      expect(screen.getByTestId("pending-review")).toHaveTextContent("no");
+    });
+
+    it("seeds exchanges from seedMessages on a genuine session switch, pairing user/assistant messages", async () => {
+      const recorder = createRecorder();
+      const respond = vi.fn().mockResolvedValue(plainTurn("New reply.", 2));
+      const transcribe = vi.fn().mockResolvedValue({ text: "New learner turn." });
+      const seedMessages: TutorMessage[] = [
+        { role: "user", content: "Earlier learner turn." },
+        { role: "assistant", content: "Earlier tutor reply." },
+      ];
+
+      const { rerender } = renderWithQueryClient(
+        <ConversationHarness
+          recorder={recorder}
+          respond={respond}
+          sessionId={1}
+          transcribe={transcribe}
+        />,
+      );
+
+      rerender(
+        <ConversationHarness
+          recorder={recorder}
+          respond={respond}
+          seedMessages={seedMessages}
+          sessionId={2}
+          transcribe={transcribe}
+        />,
+      );
+
+      expect(await screen.findByText("Earlier learner turn.")).toBeInTheDocument();
+      expect(screen.getByText("Earlier tutor reply.")).toBeInTheDocument();
+
+      await recordOneTurn();
+      await waitFor(() => expect(respond).toHaveBeenLastCalledWith({
+        transcript: "New learner turn.",
+        history: [
+          { role: "user", content: "Earlier learner turn." },
+          { role: "assistant", content: "Earlier tutor reply." },
+        ],
+        sessionId: 2,
+        learnerContext: undefined,
+      }));
+    });
+
+    it("does not reset state when sessionId goes from undefined to its first value", async () => {
+      const recorder = createRecorder();
+      const respond = vi.fn().mockResolvedValue(plainTurn("First reply.", undefined));
+
+      const { rerender } = renderWithQueryClient(
+        <ConversationHarness
+          recorder={recorder}
+          respond={respond}
+          transcribe={async () => ({ text: "First turn." })}
+        />,
+      );
+
+      await recordOneTurn();
+      expect(await screen.findByText("First reply.")).toBeInTheDocument();
+      expect(screen.getByTestId("live-turn-count")).toHaveTextContent("1");
+
+      rerender(
+        <ConversationHarness
+          recorder={recorder}
+          respond={respond}
+          seedMessages={[{ role: "user", content: "Should not appear." }, { role: "assistant", content: "Should not appear either." }]}
+          sessionId={42}
+          transcribe={async () => ({ text: "unused" })}
+        />,
+      );
+
+      expect(screen.getByText("First reply.")).toBeInTheDocument();
+      expect(screen.getByTestId("live-turn-count")).toHaveTextContent("1");
+      expect(screen.queryByText("Should not appear.")).not.toBeInTheDocument();
+    });
+
+    it("invalidates history queries after a turn persists with a turnId, and does not when persistence fails", async () => {
+      const recorder = createRecorder();
+      const respond = vi
+        .fn<(request: TutorTurnRequest) => Promise<TutorTurn>>()
+        .mockResolvedValueOnce(plainTurn("Not persisted.", undefined))
+        .mockResolvedValueOnce(plainTurn("Persisted.", 99));
+
+      const { client } = renderWithQueryClient(
+        <ConversationHarness
+          recorder={recorder}
+          respond={respond}
+          sessionId={1}
+          transcribe={async () => ({ text: "turn" })}
+        />,
+      );
+      const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+
+      await recordOneTurn();
+      expect(await screen.findByText("Not persisted.")).toBeInTheDocument();
+      expect(invalidateSpy).not.toHaveBeenCalledWith({ queryKey: historyKeys.all });
+
+      await recordOneTurn();
+      expect(await screen.findByText("Persisted.")).toBeInTheDocument();
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: historyKeys.all });
+    });
+
+    it("increments liveTurnCount only for genuinely new recorded turns, not seeded ones", async () => {
+      const recorder = createRecorder();
+      const respond = vi.fn().mockResolvedValue(plainTurn("New reply.", 5));
+      const transcribe = vi.fn().mockResolvedValue({ text: "New learner turn." });
+      const seedMessages: TutorMessage[] = [
+        { role: "user", content: "Seed learner turn." },
+        { role: "assistant", content: "Seed tutor reply." },
+      ];
+
+      const { rerender } = renderWithQueryClient(
+        <ConversationHarness
+          recorder={recorder}
+          respond={respond}
+          sessionId={1}
+          transcribe={transcribe}
+        />,
+      );
+
+      rerender(
+        <ConversationHarness
+          recorder={recorder}
+          respond={respond}
+          seedMessages={seedMessages}
+          sessionId={2}
+          transcribe={transcribe}
+        />,
+      );
+
+      expect(await screen.findByText("Seed learner turn.")).toBeInTheDocument();
+      expect(screen.getByTestId("live-turn-count")).toHaveTextContent("0");
+
+      await recordOneTurn();
+      expect(await screen.findByText("New reply.")).toBeInTheDocument();
+      expect(screen.getByTestId("live-turn-count")).toHaveTextContent("1");
+    });
   });
 
   describe("repair loop", () => {
@@ -350,7 +535,7 @@ describe("useTutorConversation", () => {
         });
       const recordRepairEvent = vi.fn().mockResolvedValue(5);
 
-      render(
+      renderWithQueryClient(
         <ConversationHarness
           evaluateRepair={evaluateRepair}
           recordRepairEvent={recordRepairEvent}
@@ -408,7 +593,7 @@ describe("useTutorConversation", () => {
       const recordRepairEvent = vi.fn().mockResolvedValue(9);
       const updateRepairEventOutcome = vi.fn().mockResolvedValue(undefined);
 
-      render(
+      renderWithQueryClient(
         <ConversationHarness
           evaluateRepair={evaluateRepair}
           recordRepairEvent={recordRepairEvent}
@@ -455,7 +640,7 @@ describe("useTutorConversation", () => {
       const recordRepairEvent = vi.fn().mockResolvedValue(11);
       const updateRepairEventOutcome = vi.fn().mockResolvedValue(undefined);
 
-      render(
+      renderWithQueryClient(
         <ConversationHarness
           evaluateRepair={evaluateRepair}
           recordRepairEvent={recordRepairEvent}
@@ -494,7 +679,7 @@ describe("useTutorConversation", () => {
         });
       const recordRepairEvent = vi.fn().mockResolvedValue(13);
 
-      render(
+      renderWithQueryClient(
         <ConversationHarness
           evaluateRepair={evaluateRepair}
           recordRepairEvent={recordRepairEvent}

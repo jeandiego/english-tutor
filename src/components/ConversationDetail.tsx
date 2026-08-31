@@ -1,13 +1,18 @@
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { IconArrowLeft } from "@tabler/icons-react";
-import { getSessionDetail, toHistoryError } from "../native/history";
+import { continueSession, getSessionDetail, toHistoryError } from "../native/history";
 import { historyKeys } from "../queryKeys/history";
 import { conversationTitleFor } from "../sessions/conversationTitle";
 import { scenarioLabelFor } from "../sessions/loadPacks";
-import type { SessionRepairEventDetail, SessionTurnDetail } from "../types/history";
+import type {
+  ConversationContinuePayload,
+  SessionRepairEventDetail,
+  SessionTurnDetail,
+} from "../types/history";
 import type { RepairOutcome, RepairPriority } from "../types/repair";
 import type { ReviewItemType, ReviewOutcome } from "../types/review";
 import { Badge } from "./ui/badge";
+import { Button } from "./ui/button";
 import { BetterExpressions, Corrections } from "./ConversationStage";
 import { SessionSummaryDetail } from "./SessionSummaryDetail";
 import { cn } from "../lib/utils";
@@ -119,11 +124,13 @@ function TurnBubble({ turn }: { turn: SessionTurnDetail }) {
 }
 
 export function ConversationDetail({
-  sessionId,
   onBack,
+  onContinue = () => {},
+  sessionId,
 }: {
-  sessionId: number;
   onBack: () => void;
+  onContinue?: (payload: ConversationContinuePayload) => void;
+  sessionId: number;
 }) {
   const query = useQuery({
     queryKey: historyKeys.detail(sessionId),
@@ -133,6 +140,21 @@ export function ConversationDetail({
   const detail = query.data;
   const conversationDetailTitle = detail ? conversationTitleFor(detail) : "";
   const scenarioLabel = detail ? scenarioLabelFor(detail.mode) : "";
+
+  const continueMutation = useMutation({
+    mutationFn: () => continueSession(sessionId),
+  });
+
+  function handleContinue() {
+    continueMutation.mutate(undefined, {
+      onSuccess: (resume) => {
+        if (!detail) {
+          return;
+        }
+        onContinue({ resume, sourceTitle: conversationDetailTitle, sourceStartedAt: detail.startedAt });
+      },
+    });
+  }
 
   return (
     <section
@@ -174,7 +196,21 @@ export function ConversationDetail({
                 {detail.status !== "active" && (
                   <Badge variant="outline">{detail.status}</Badge>
                 )}
+                <Button
+                  className="ml-auto"
+                  disabled={continueMutation.isPending}
+                  onClick={handleContinue}
+                  size="sm"
+                  variant="outline"
+                >
+                  {continueMutation.isPending ? "Continuing…" : "Continue"}
+                </Button>
               </div>
+              {continueMutation.isError && (
+                <p className="text-caption text-destructive" role="alert">
+                  {toHistoryError(continueMutation.error).message}
+                </p>
+              )}
             </div>
 
             {detail.turns.length === 0 ? (

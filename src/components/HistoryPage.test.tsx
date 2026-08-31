@@ -1,18 +1,23 @@
-import { cleanup, screen } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { HistoryPage } from "./HistoryPage";
 import {
+  continueSession,
+  getSessionDetail,
   listCorrectionCategoryCounts,
   listRecentExpressions,
   listRecentSessions,
 } from "../native/history";
 import { listRecentReviewEvents } from "../native/review";
 import { renderWithQueryClient as render } from "../test/queryTestUtils";
+import type { ConversationResumeContext, SessionDetail } from "../types/history";
 
 vi.mock("../native/history", async (importOriginal) => {
   const actual = await importOriginal<typeof import("../native/history")>();
   return {
     ...actual,
+    continueSession: vi.fn(),
+    getSessionDetail: vi.fn(),
     listRecentSessions: vi.fn(),
     listCorrectionCategoryCounts: vi.fn(),
     listRecentExpressions: vi.fn(),
@@ -31,6 +36,8 @@ const listRecentSessionsMock = vi.mocked(listRecentSessions);
 const listCorrectionCategoryCountsMock = vi.mocked(listCorrectionCategoryCounts);
 const listRecentExpressionsMock = vi.mocked(listRecentExpressions);
 const listRecentReviewEventsMock = vi.mocked(listRecentReviewEvents);
+const getSessionDetailMock = vi.mocked(getSessionDetail);
+const continueSessionMock = vi.mocked(continueSession);
 
 afterEach(() => {
   cleanup();
@@ -132,5 +139,34 @@ describe("HistoryPage", () => {
     expect(
       await screen.findByText("The learning history is unavailable."),
     ).toBeInTheDocument();
+  });
+
+  it("forwards onContinue to ConversationDetail when focusSessionId is set", async () => {
+    const onContinue = vi.fn();
+    const baseDetail: SessionDetail = {
+      id: 5,
+      startedAt: 1_700_000_000_000,
+      endedAt: 1_700_000_600_000,
+      status: "active",
+      turns: [],
+      reviewEvents: [],
+    };
+    getSessionDetailMock.mockResolvedValue(baseDetail);
+    const resume: ConversationResumeContext = {
+      sourceSessionId: 5,
+      continuationSessionId: 5,
+      recentMessages: [],
+    };
+    continueSessionMock.mockResolvedValue(resume);
+
+    render(<HistoryPage focusSessionId={5} onContinue={onContinue} />);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+
+    await waitFor(() =>
+      expect(onContinue).toHaveBeenCalledWith(
+        expect.objectContaining({ resume, sourceStartedAt: baseDetail.startedAt }),
+      ),
+    );
   });
 });

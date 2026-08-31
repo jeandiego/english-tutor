@@ -1,5 +1,6 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type CSSProperties } from "react";
+import { ErrorBoundary, getErrorMessage, type FallbackProps } from "react-error-boundary";
 import { AssessmentPage } from "./components/AssessmentPage";
 import { ConversationStage } from "./components/ConversationStage";
 import { HistoryPage } from "./components/HistoryPage";
@@ -15,13 +16,50 @@ import type {
 } from "./components/SystemDiagnostics";
 import { TalkControl } from "./components/TalkControl";
 import { TopBar } from "./components/TopBar";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "./components/ui/alert-dialog";
+import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
+import { Button } from "./components/ui/button";
 import { SidebarInset, SidebarProvider } from "./components/ui/sidebar";
+import { useLiveConversation } from "./hooks/useLiveConversation";
 import { useRuntimeSetup } from "./hooks/useRuntimeSetup";
-import { useSessionHistory } from "./hooks/useSessionHistory";
 import { useTutorConversation } from "./hooks/useTutorConversation";
 import { SIDEBAR_WIDTH_PX } from "./lib/layout";
 import { getLatestAssessment } from "./native/assessment";
 import { assessmentKeys } from "./queryKeys/assessment";
+import type { ConversationContinuePayload } from "./types/history";
+
+function PageErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
+  const message = getErrorMessage(error);
+
+  return (
+    <section className="mx-auto flex w-full max-w-2xl flex-col gap-4 p-6">
+      <Alert variant="destructive">
+        <AlertTitle>This page couldn&apos;t load</AlertTitle>
+        <AlertDescription className="flex flex-col gap-2">
+          <p>{message}</p>
+          <details>
+            <summary className="cursor-pointer">Technical details</summary>
+            <code className="block whitespace-pre-wrap">{error instanceof Error ? error.stack : message}</code>
+          </details>
+        </AlertDescription>
+      </Alert>
+      <div className="flex gap-2">
+        <Button onClick={resetErrorBoundary} variant="outline">
+          Try again
+        </Button>
+      </div>
+    </section>
+  );
+}
 
 const PAGE_HEADER: Record<AppPage, { eyebrow: string; title: string }> = {
   conversation: { eyebrow: "Conversation", title: "Live practice" },
@@ -70,7 +108,7 @@ function App() {
     tutorSettingsDraft,
     tutorState,
   } = useRuntimeSetup();
-  const sessionHistory = useSessionHistory();
+  const liveConversation = useLiveConversation();
   const repairIntensity =
     tutorState.status === "loaded" ? tutorState.setup.settings.repairIntensity : undefined;
   const conversation = useTutorConversation({
@@ -79,8 +117,10 @@ function App() {
       healthState.status === "ready" &&
       transcriptionReady &&
       tutorReady,
-    sessionId: sessionHistory.sessionId,
-    learnerContext: sessionHistory.learnerContext,
+    sessionId: liveConversation.sessionId,
+    learnerContext: liveConversation.learnerContext,
+    seedMessages: liveConversation.seedMessages,
+    dueReviewItems: liveConversation.dueReviewItems,
     repairIntensity,
   });
   const voiceBusy =
@@ -172,6 +212,18 @@ function App() {
     setActivePage(page);
   };
 
+  const handleContinue = (payload: ConversationContinuePayload) => {
+    const result = liveConversation.requestSwitch(
+      payload.resume,
+      payload.sourceTitle,
+      payload.sourceStartedAt,
+      conversation.liveTurnCount > 0,
+    );
+    if (result === "switched") {
+      navigate("conversation");
+    }
+  };
+
   return (
     <SidebarProvider
       className="h-svh"
@@ -203,15 +255,21 @@ function App() {
           title={PAGE_HEADER[activePage].title}
         />
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-10">
+          <ErrorBoundary
+            FallbackComponent={PageErrorFallback}
+            onError={(error) => console.error("Page content crashed:", error)}
+            resetKeys={[activePage, focusSessionId]}
+          >
           {activePage === "conversation" ? (
         <>
           <ConversationStage
             exchanges={conversation.exchanges}
-            historyWarning={sessionHistory.startError?.message}
+            historyWarning={liveConversation.startError?.message}
             loopState={conversation.loopState}
             onReplay={conversation.replay}
             onSkipRepair={conversation.skipRepair}
             replayState={conversation.replayState}
+            resumeBanner={liveConversation.resumeBanner}
             speaking={conversation.speaking}
             state={conversation.state}
             thinking={conversation.thinking}
@@ -254,7 +312,11 @@ function App() {
           }
         />
       ) : activePage === "history" ? (
-        <HistoryPage focusSessionId={focusSessionId} onSelectSession={setFocusSessionId} />
+        <HistoryPage
+          focusSessionId={focusSessionId}
+          onContinue={handleContinue}
+          onSelectSession={setFocusSessionId}
+        />
       ) : activePage === "progress" ? (
         <ProgressPage />
       ) : activePage === "pronunciation" ? (
@@ -289,8 +351,41 @@ function App() {
           tutorState={tutorState}
         />
       )}
+          </ErrorBoundary>
         </div>
       </SidebarInset>
+      <AlertDialog
+        onOpenChange={(open) => {
+          if (!open) {
+            liveConversation.cancelPendingSwitch();
+          }
+        }}
+        open={liveConversation.pendingResume !== undefined}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Switch your active conversation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              You have an ongoing conversation. Continuing &quot;
+              {liveConversation.pendingResume?.sourceTitle}&quot; will make it your active
+              conversation instead.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel onClick={() => liveConversation.cancelPendingSwitch()}>
+              Cancel
+            </AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => {
+                liveConversation.confirmPendingSwitch();
+                navigate("conversation");
+              }}
+            >
+              Switch conversation
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </SidebarProvider>
   );
 }
