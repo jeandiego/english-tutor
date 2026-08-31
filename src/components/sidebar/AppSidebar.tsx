@@ -7,6 +7,7 @@ import {
   IconListDetails,
   IconMessage,
   IconMessageCircle2,
+  IconMicrophone,
   IconPlus,
   IconSettings,
 } from "@tabler/icons-react";
@@ -44,6 +45,7 @@ export type AppPage =
   | "assessment"
   | "history"
   | "progress"
+  | "pronunciation"
   | "storage"
   | "settings";
 
@@ -58,6 +60,7 @@ const NAV_ITEMS: {
   { page: "assessment", label: "Assessment", icon: IconClipboardCheck },
   { page: "history", label: "History", icon: IconHistory },
   { page: "progress", label: "My Progress", icon: IconChartBar },
+  { page: "pronunciation", label: "Pronunciation", icon: IconMicrophone },
   { page: "storage", label: "Storage", icon: IconDatabase },
   { page: "settings", label: "Settings", icon: IconSettings },
 ];

@@ -4,6 +4,7 @@ import { AssessmentPage } from "./components/AssessmentPage";
 import { ConversationStage } from "./components/ConversationStage";
 import { HistoryPage } from "./components/HistoryPage";
 import { ProgressPage } from "./components/ProgressPage";
+import { PronunciationPracticePage } from "./components/PronunciationPracticePage";
 import { AppSidebar, type AppPage } from "./components/sidebar/AppSidebar";
 import { SessionsPage } from "./components/SessionsPage";
 import { SettingsPage } from "./components/SettingsPage";
@@ -28,6 +29,7 @@ const PAGE_HEADER: Record<AppPage, { eyebrow: string; title: string }> = {
   assessment: { eyebrow: "Assessment", title: "Level check" },
   history: { eyebrow: "History", title: "Past conversations" },
   progress: { eyebrow: "My Progress", title: "Learning trends" },
+  pronunciation: { eyebrow: "Pronunciation", title: "Practice a phrase" },
   storage: { eyebrow: "Storage", title: "Local database" },
   settings: { eyebrow: "Settings", title: "Runtime & voice" },
 };
@@ -255,6 +257,11 @@ function App() {
         <HistoryPage focusSessionId={focusSessionId} />
       ) : activePage === "progress" ? (
         <ProgressPage />
+      ) : activePage === "pronunciation" ? (
+        <PronunciationPracticePage
+          disabled={healthState.status !== "ready" || !transcriptionReady}
+          disabledHint={voiceDisabledHint}
+        />
       ) : activePage === "storage" ? (
         <StoragePage />
       ) : (

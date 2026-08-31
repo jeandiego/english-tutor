@@ -20,6 +20,7 @@ const RECENT_CORRECTIONS_WINDOW: i64 = 50;
 const RECURRING_MIN_COUNT: i64 = 2;
 const SUMMARY_MAX_CATEGORIES: usize = 2;
 const RECENT_VOCABULARY_LIMIT: i64 = 8;
+const RECENT_PRONUNCIATION_TARGET_LIMIT: i64 = 5;
 const MAX_PROGRESS_NOTES: usize = 20;
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -571,6 +572,13 @@ async fn compose_profile_response(
             .filter(|issue| issue.category == "grammar")
             .cloned()
             .collect();
+        let pronunciation_targets = history::recent_unresolved_pronunciation_targets(
+            &conn,
+            RECENT_PRONUNCIATION_TARGET_LIMIT,
+        )?
+        .into_iter()
+        .map(|phrase| PronunciationTarget { label: phrase })
+        .collect();
 
         Ok(LearnerProfileResponse {
             current_level: profile.current_level,
@@ -581,7 +589,7 @@ async fn compose_profile_response(
             recurring_issues: issues,
             active_vocabulary: vocabulary,
             active_grammar_targets: grammar_targets,
-            active_pronunciation_targets: Vec::new(),
+            active_pronunciation_targets: pronunciation_targets,
             progress_notes: profile.progress_notes,
         })
     })
@@ -668,6 +676,7 @@ pub async fn apply_assessment_to_learner_profile(
                     None,
                     None,
                     Some(assessment_id),
+                    None,
                     created_at,
                 )?;
             }

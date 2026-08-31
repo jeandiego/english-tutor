@@ -559,18 +559,31 @@ pub async fn update_repair_event_outcome(
             if let Some((priority, issue, original, suggested)) =
                 history::get_repair_event_core(&conn, request.event_id)?
             {
-                let item_type = review::review_type_from_repair_priority(priority);
-                let content = review::compose_review_content_from_repair(&issue, &original, &suggested);
-                history::insert_review_item(
-                    &conn,
-                    item_type,
-                    &content,
-                    review::ReviewSource::RepairEvent,
-                    Some(request.event_id),
-                    None,
-                    None,
-                    now_ms(),
-                )?;
+                if priority == RepairPriority::Pronunciation {
+                    history::insert_pronunciation_target(
+                        &conn,
+                        &suggested,
+                        super::pronunciation::PronunciationTargetSource::RepairEvent,
+                        Some(request.event_id),
+                        None,
+                        now_ms(),
+                    )?;
+                } else {
+                    let item_type = review::review_type_from_repair_priority(priority);
+                    let content =
+                        review::compose_review_content_from_repair(&issue, &original, &suggested);
+                    history::insert_review_item(
+                        &conn,
+                        item_type,
+                        &content,
+                        review::ReviewSource::RepairEvent,
+                        Some(request.event_id),
+                        None,
+                        None,
+                        None,
+                        now_ms(),
+                    )?;
+                }
             }
         }
 

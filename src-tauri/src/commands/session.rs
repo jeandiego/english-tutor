@@ -36,7 +36,7 @@ Write:
 - whatWentWell: concrete things the learner communicated well, grounded in the transcript. Never generic praise.
 - priorityIssues: the 1 to 3 most important problems to work on next, chosen from the corrections and transcript. Never more than 3 entries, and never empty — if nothing significant stood out, include one concrete fluency-building suggestion instead.
 - alternativePhrases: natural, more idiomatic ways to phrase things the learner said, drawn from the better-expression suggestions and the transcript.
-- reviewItems: short, concrete items worth reviewing later, such as a grammar point, a vocabulary item, or a phrase. Classify each with the type of item it is.
+- reviewItems: short, concrete items worth reviewing later, such as a grammar point, a vocabulary item, or a phrase. Classify each with the type of item it is. For a pronunciation_target item, content must be the literal phrase to practice saying — taken verbatim or near-verbatim from the transcript — never a description of the problem.
 
 Never write empty motivational filler. Ground every item in the actual conversation.
 

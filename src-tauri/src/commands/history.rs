@@ -9,12 +9,13 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 use super::assessment::{cefr_level_str, competency_label, AssessmentCompetency, CefrLevel};
+use super::pronunciation::{self, PronunciationProblemCategory, PronunciationTargetSource};
 use super::repair::{RepairIntensity, RepairMode, RepairOutcome, RepairPriority};
 use super::review::{self, ReviewItemType, ReviewOutcome, ReviewSource};
 use super::tutor::{BetterExpression, CorrectionCategory, CorrectionSeverity, TutorCorrection};
 
 const DB_FILE_NAME: &str = "history.sqlite3";
-const SCHEMA_VERSION: i32 = 5;
+const SCHEMA_VERSION: i32 = 6;
 const ALL_TIME_CATEGORY_LIMIT: i64 = 100_000;
 const DEFAULT_LIST_LIMIT: i64 = 10;
 const MAX_LIST_LIMIT: i64 = 100;
@@ -477,6 +478,38 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    if current_version < 6 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS pronunciation_target (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                phrase TEXT NOT NULL,
+                source TEXT NOT NULL CHECK (source IN ('repair_event', 'session_summary')),
+                source_repair_event_id INTEGER REFERENCES repair_event(id) ON DELETE SET NULL,
+                source_session_id INTEGER REFERENCES session(id) ON DELETE SET NULL,
+                review_item_id INTEGER REFERENCES review_item(id) ON DELETE SET NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_pronunciation_target_created_at ON pronunciation_target(created_at);
+
+            CREATE TABLE IF NOT EXISTS pronunciation_attempt (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                pronunciation_target_id INTEGER NOT NULL REFERENCES pronunciation_target(id) ON DELETE CASCADE,
+                session_id INTEGER REFERENCES session(id) ON DELETE SET NULL,
+                transcript TEXT NOT NULL,
+                is_match INTEGER NOT NULL CHECK (is_match IN (0, 1)),
+                problem_category TEXT CHECK (problem_category IN (
+                    'word_stress', 'final_consonants', 'vowel_contrast', 'connected_speech', 'rhythm', 'specific_word'
+                )),
+                diff_json TEXT NOT NULL,
+                hint TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_pronunciation_attempt_target ON pronunciation_attempt(pronunciation_target_id, created_at);
+
+            ALTER TABLE review_item ADD COLUMN source_pronunciation_target_id INTEGER REFERENCES pronunciation_target(id) ON DELETE SET NULL;",
+        )?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
 }
@@ -719,13 +752,14 @@ pub(crate) fn insert_review_item(
     source_repair_event_id: Option<i64>,
     source_session_id: Option<i64>,
     source_assessment_id: Option<i64>,
+    source_pronunciation_target_id: Option<i64>,
     now_ms: i64,
 ) -> rusqlite::Result<i64> {
     conn.execute(
         "INSERT INTO review_item
             (type, content, source, source_repair_event_id, source_session_id, source_assessment_id,
-             stage, next_review_at, last_reviewed_at, review_count, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, 0, ?7, NULL, 0, ?7)",
+             source_pronunciation_target_id, stage, next_review_at, last_reviewed_at, review_count, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, NULL, 0, ?8)",
         params![
             review_item_type_str(item_type),
             content,
@@ -733,10 +767,192 @@ pub(crate) fn insert_review_item(
             source_repair_event_id,
             source_session_id,
             source_assessment_id,
+            source_pronunciation_target_id,
             now_ms,
         ],
     )?;
     Ok(conn.last_insert_rowid())
+}
+
+// ---------------------------------------------------------------------
+// Pronunciation target / attempt persistence
+// ---------------------------------------------------------------------
+
+fn pronunciation_target_source_str(source: PronunciationTargetSource) -> &'static str {
+    match source {
+        PronunciationTargetSource::RepairEvent => "repair_event",
+        PronunciationTargetSource::SessionSummary => "session_summary",
+    }
+}
+
+fn parse_pronunciation_target_source(
+    value: &str,
+) -> Result<PronunciationTargetSource, std::io::Error> {
+    match value {
+        "repair_event" => Ok(PronunciationTargetSource::RepairEvent),
+        "session_summary" => Ok(PronunciationTargetSource::SessionSummary),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown pronunciation target source: {other}"),
+        )),
+    }
+}
+
+fn pronunciation_problem_category_str(category: PronunciationProblemCategory) -> &'static str {
+    match category {
+        PronunciationProblemCategory::WordStress => "word_stress",
+        PronunciationProblemCategory::FinalConsonants => "final_consonants",
+        PronunciationProblemCategory::VowelContrast => "vowel_contrast",
+        PronunciationProblemCategory::ConnectedSpeech => "connected_speech",
+        PronunciationProblemCategory::Rhythm => "rhythm",
+        PronunciationProblemCategory::SpecificWord => "specific_word",
+    }
+}
+
+pub(crate) fn insert_pronunciation_target(
+    conn: &Connection,
+    phrase: &str,
+    source: PronunciationTargetSource,
+    source_repair_event_id: Option<i64>,
+    source_session_id: Option<i64>,
+    now_ms: i64,
+) -> rusqlite::Result<i64> {
+    conn.execute(
+        "INSERT INTO pronunciation_target
+            (phrase, source, source_repair_event_id, source_session_id, review_item_id, created_at)
+         VALUES (?1, ?2, ?3, ?4, NULL, ?5)",
+        params![
+            phrase,
+            pronunciation_target_source_str(source),
+            source_repair_event_id,
+            source_session_id,
+            now_ms,
+        ],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub(crate) struct PronunciationTargetCore {
+    pub(crate) phrase: String,
+    pub(crate) source: PronunciationTargetSource,
+    pub(crate) source_repair_event_id: Option<i64>,
+    pub(crate) source_session_id: Option<i64>,
+    pub(crate) review_item_id: Option<i64>,
+}
+
+pub(crate) fn pronunciation_target_core(
+    conn: &Connection,
+    id: i64,
+) -> rusqlite::Result<Option<PronunciationTargetCore>> {
+    conn.query_row(
+        "SELECT phrase, source, source_repair_event_id, source_session_id, review_item_id
+         FROM pronunciation_target WHERE id = ?1",
+        params![id],
+        |row| {
+            let source: String = row.get(1)?;
+            Ok(PronunciationTargetCore {
+                phrase: row.get(0)?,
+                source: parse_pronunciation_target_source(&source)
+                    .map_err(|error| column_conversion_error(1, error))?,
+                source_repair_event_id: row.get(2)?,
+                source_session_id: row.get(3)?,
+                review_item_id: row.get(4)?,
+            })
+        },
+    )
+    .optional()
+}
+
+pub(crate) fn set_pronunciation_target_review_item(
+    conn: &Connection,
+    target_id: i64,
+    review_item_id: i64,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE pronunciation_target SET review_item_id = ?1 WHERE id = ?2",
+        params![review_item_id, target_id],
+    )?;
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn insert_pronunciation_attempt(
+    conn: &Connection,
+    target_id: i64,
+    session_id: Option<i64>,
+    transcript: &str,
+    is_match: bool,
+    category: Option<PronunciationProblemCategory>,
+    diff_json: &str,
+    hint: &str,
+    now_ms: i64,
+) -> rusqlite::Result<i64> {
+    conn.execute(
+        "INSERT INTO pronunciation_attempt
+            (pronunciation_target_id, session_id, transcript, is_match, problem_category, diff_json, hint, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+        params![
+            target_id,
+            session_id,
+            transcript,
+            is_match as i64,
+            category.map(pronunciation_problem_category_str),
+            diff_json,
+            hint,
+            now_ms,
+        ],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub(crate) fn list_pronunciation_targets_with_stats(
+    conn: &Connection,
+    limit: i64,
+) -> rusqlite::Result<Vec<pronunciation::PronunciationTarget>> {
+    let mut statement = conn.prepare(
+        "SELECT pt.id, pt.phrase, pt.source, pt.created_at, pt.review_item_id,
+                COUNT(pa.id) AS attempt_count, MAX(pa.created_at) AS last_attempt_at
+         FROM pronunciation_target pt
+         LEFT JOIN pronunciation_attempt pa ON pa.pronunciation_target_id = pt.id
+         GROUP BY pt.id
+         ORDER BY pt.created_at DESC
+         LIMIT ?1",
+    )?;
+    let rows = statement.query_map(params![limit], |row| {
+        let source: String = row.get(2)?;
+        let review_item_id: Option<i64> = row.get(4)?;
+        Ok(pronunciation::PronunciationTarget {
+            id: row.get(0)?,
+            phrase: row.get(1)?,
+            source: parse_pronunciation_target_source(&source)
+                .map_err(|error| column_conversion_error(2, error))?,
+            created_at: row.get(3)?,
+            attempt_count: row.get(5)?,
+            last_attempt_at: row.get(6)?,
+            is_promoted: review_item_id.is_some(),
+        })
+    })?;
+    rows.collect()
+}
+
+/// "Active" pronunciation targets for the learner profile: ones that have
+/// never yet been said correctly (no attempt with `is_match = 1`) — mirrors
+/// how `active_vocabulary`/`active_grammar_targets` surface unresolved work.
+pub(crate) fn recent_unresolved_pronunciation_targets(
+    conn: &Connection,
+    limit: i64,
+) -> rusqlite::Result<Vec<String>> {
+    let mut statement = conn.prepare(
+        "SELECT phrase FROM pronunciation_target pt
+         WHERE NOT EXISTS (
+             SELECT 1 FROM pronunciation_attempt pa
+             WHERE pa.pronunciation_target_id = pt.id AND pa.is_match = 1
+         )
+         ORDER BY pt.created_at DESC
+         LIMIT ?1",
+    )?;
+    let rows = statement.query_map(params![limit], |row| row.get::<_, String>(0))?;
+    rows.collect()
 }
 
 fn review_item_from_row(row: &rusqlite::Row) -> rusqlite::Result<review::ReviewItem> {
@@ -1071,16 +1287,28 @@ pub async fn complete_session(
         )?;
         let created_at = now_ms();
         for draft in review_drafts {
-            insert_review_item(
-                &conn,
-                draft.item_type,
-                &draft.content,
-                ReviewSource::SessionSummary,
-                None,
-                Some(session_id),
-                None,
-                created_at,
-            )?;
+            if draft.item_type == ReviewItemType::PronunciationTarget {
+                insert_pronunciation_target(
+                    &conn,
+                    &draft.content,
+                    PronunciationTargetSource::SessionSummary,
+                    None,
+                    Some(session_id),
+                    created_at,
+                )?;
+            } else {
+                insert_review_item(
+                    &conn,
+                    draft.item_type,
+                    &draft.content,
+                    ReviewSource::SessionSummary,
+                    None,
+                    Some(session_id),
+                    None,
+                    None,
+                    created_at,
+                )?;
+            }
         }
         Ok(())
     })
@@ -1723,6 +1951,81 @@ mod tests {
     }
 
     #[test]
+    fn migration_from_version_5_adds_pronunciation_tables_without_touching_existing_data() {
+        let (_directory, path) = scratch_db();
+
+        {
+            let conn = Connection::open(&path).expect("connection must open");
+            conn.execute_batch(
+                "CREATE TABLE session (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at INTEGER NOT NULL,
+                    ended_at INTEGER NOT NULL,
+                    mode TEXT,
+                    topic TEXT
+                );
+                CREATE TABLE repair_event (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    turn_id INTEGER NOT NULL,
+                    priority TEXT NOT NULL,
+                    issue TEXT NOT NULL,
+                    original TEXT NOT NULL,
+                    suggested TEXT NOT NULL,
+                    micro_explanation TEXT NOT NULL,
+                    repair_prompt TEXT,
+                    mode TEXT NOT NULL,
+                    outcome TEXT,
+                    intensity TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE TABLE review_item (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    source_repair_event_id INTEGER,
+                    source_session_id INTEGER,
+                    source_assessment_id INTEGER,
+                    stage INTEGER NOT NULL DEFAULT 0,
+                    next_review_at INTEGER NOT NULL,
+                    last_reviewed_at INTEGER,
+                    review_count INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL
+                );
+                INSERT INTO review_item (type, content, source, stage, next_review_at, review_count, created_at)
+                    VALUES ('grammar_pattern', 'past tense', 'session_summary', 0, 1000, 0, 1000);",
+            )
+            .expect("v5 review_item table must create");
+            conn.pragma_update(None, "user_version", 5)
+                .expect("version must set");
+        }
+
+        let conn = open_connection(&path).expect("connection must upgrade");
+        let version: i32 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version must read");
+        assert_eq!(version, SCHEMA_VERSION);
+
+        let content: String = conn
+            .query_row("SELECT content FROM review_item WHERE id = 1", [], |row| {
+                row.get(0)
+            })
+            .expect("pre-existing review_item row must survive migration");
+        assert_eq!(content, "past tense");
+
+        let target_id = insert_pronunciation_target(
+            &conn,
+            "I walked to the store",
+            PronunciationTargetSource::SessionSummary,
+            None,
+            None,
+            2_000,
+        )
+        .expect("pronunciation_target must insert after migration");
+        assert!(target_id > 0);
+    }
+
+    #[test]
     fn migration_from_version_2_adds_session_run_columns_without_touching_existing_data() {
         let (_directory, path) = scratch_db();
 
@@ -1940,6 +2243,84 @@ mod tests {
         assert_eq!(counts.len(), 1);
         assert_eq!(counts[0].category, "grammar");
         assert_eq!(counts[0].count, 1);
+    }
+
+    #[test]
+    fn pronunciation_target_attempt_and_promotion_round_trip() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+
+        let target_id = insert_pronunciation_target(
+            &conn,
+            "I walked to the store",
+            PronunciationTargetSource::SessionSummary,
+            None,
+            None,
+            1_000,
+        )
+        .expect("target must insert");
+
+        let core = pronunciation_target_core(&conn, target_id)
+            .expect("query must succeed")
+            .expect("target must exist");
+        assert_eq!(core.phrase, "I walked to the store");
+        assert_eq!(core.review_item_id, None);
+
+        insert_pronunciation_attempt(
+            &conn,
+            target_id,
+            None,
+            "I walk to the store",
+            false,
+            Some(PronunciationProblemCategory::FinalConsonants),
+            "[]",
+            "Try fully pronouncing the ending of \"walked\".",
+            1_500,
+        )
+        .expect("attempt must insert");
+
+        // First mismatch is the "real problem" signal that promotes the
+        // target into spaced retrieval — mirrors what submit_pronunciation_attempt does.
+        let review_item_id = insert_review_item(
+            &conn,
+            ReviewItemType::PronunciationTarget,
+            &core.phrase,
+            ReviewSource::SessionSummary,
+            None,
+            None,
+            None,
+            Some(target_id),
+            1_500,
+        )
+        .expect("review item must insert");
+        set_pronunciation_target_review_item(&conn, target_id, review_item_id)
+            .expect("target must link to review item");
+
+        let targets = list_pronunciation_targets_with_stats(&conn, 10).expect("targets must list");
+        assert_eq!(targets.len(), 1);
+        assert_eq!(targets[0].attempt_count, 1);
+        assert!(targets[0].is_promoted);
+
+        let unresolved =
+            recent_unresolved_pronunciation_targets(&conn, 10).expect("unresolved must list");
+        assert_eq!(unresolved, vec!["I walked to the store".to_string()]);
+
+        insert_pronunciation_attempt(
+            &conn,
+            target_id,
+            None,
+            "I walked to the store",
+            true,
+            None,
+            "[]",
+            "Nice and clear.",
+            2_000,
+        )
+        .expect("second attempt must insert");
+
+        let unresolved_after_success =
+            recent_unresolved_pronunciation_targets(&conn, 10).expect("unresolved must list");
+        assert!(unresolved_after_success.is_empty());
     }
 
     #[test]

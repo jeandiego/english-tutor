@@ -2,6 +2,7 @@ pub(crate) mod assessment;
 pub(crate) mod health;
 pub(crate) mod history;
 pub(crate) mod learner_profile;
+pub(crate) mod pronunciation;
 pub(crate) mod repair;
 pub(crate) mod review;
 pub(crate) mod scenario_packs;
