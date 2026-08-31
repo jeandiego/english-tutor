@@ -23,6 +23,7 @@ const BASE_PROFILE = {
   activeGrammarTargets: [],
   activePronunciationTargets: [],
   progressNotes: [],
+  listening: { voiceGenderPref: "any" as const, stage: 0 },
 };
 
 function Harness() {
@@ -101,6 +102,9 @@ describe("useLearnerProfile", () => {
       goals: ["prepare for interviews", "new goal"],
       preferredScenarios: [],
       targetAccents: [],
+      accentFocus: undefined,
+      voiceGenderPref: "any",
+      listeningStage: 0,
     });
     await waitFor(() =>
       expect(screen.getByTestId("goals")).toHaveTextContent("prepare for interviews,new goal"),

@@ -100,6 +100,45 @@ pub struct ProgressNote {
     created_at: i64,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum ListeningAccentFocus {
+    American,
+    British,
+    Mixed,
+    SoftwareWorkplace,
+    TravelEveryday,
+}
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum VoiceGenderPreference {
+    #[default]
+    Any,
+    Female,
+    Male,
+}
+
+/// Listening progression state. `stage` (0..=4) is the single axis that
+/// stands in for the doc's speed/naturalness/difficulty knobs — see the
+/// implementation plan's "collapse into one stage" decision. It mostly
+/// moves itself via `apply_listening_check_outcome`, but stays editable in
+/// Settings.
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct ListeningProfile {
+    #[serde(default)]
+    pub(crate) accent_focus: Option<ListeningAccentFocus>,
+    #[serde(default)]
+    pub(crate) voice_gender_pref: VoiceGenderPreference,
+    #[serde(default)]
+    pub(crate) stage: i32,
+    #[serde(default)]
+    consecutive_correct: i64,
+    #[serde(default)]
+    consecutive_missed: i64,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct LearnerProfileData {
@@ -115,6 +154,8 @@ pub struct LearnerProfileData {
     target_accents: Vec<String>,
     #[serde(default)]
     progress_notes: Vec<ProgressNote>,
+    #[serde(default)]
+    listening: ListeningProfile,
 }
 
 impl Default for LearnerProfileData {
@@ -126,6 +167,7 @@ impl Default for LearnerProfileData {
             preferred_scenarios: Vec::new(),
             target_accents: Vec::new(),
             progress_notes: Vec::new(),
+            listening: ListeningProfile::default(),
         }
     }
 }
@@ -174,6 +216,7 @@ pub struct LearnerProfileResponse {
     active_grammar_targets: Vec<LearnerIssue>,
     active_pronunciation_targets: Vec<PronunciationTarget>,
     progress_notes: Vec<ProgressNote>,
+    listening: ListeningProfile,
 }
 
 // ---------------------------------------------------------------------
@@ -186,6 +229,12 @@ pub struct SaveLearnerProfilePreferencesRequest {
     goals: Vec<String>,
     preferred_scenarios: Vec<String>,
     target_accents: Vec<String>,
+    #[serde(default)]
+    accent_focus: Option<ListeningAccentFocus>,
+    #[serde(default)]
+    voice_gender_pref: VoiceGenderPreference,
+    #[serde(default)]
+    listening_stage: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -413,6 +462,7 @@ const DUE_REVIEW_ITEMS_PER_SESSION: i64 = 3;
 pub(crate) struct SessionContext {
     pub(crate) learner_context: Option<String>,
     pub(crate) due_review_items: Vec<review::ReviewItem>,
+    pub(crate) listening: ListeningProfile,
 }
 
 pub(crate) async fn build_session_context(
@@ -442,6 +492,7 @@ pub(crate) async fn build_session_context(
         Ok::<_, LearnerProfileCommandError>(SessionContext {
             learner_context,
             due_review_items,
+            listening: profile.listening,
         })
     })
     .await
@@ -467,15 +518,24 @@ fn normalize_list(values: Vec<String>) -> Vec<String> {
         .collect()
 }
 
+#[allow(clippy::too_many_arguments)]
 fn apply_preferences(
     mut profile: LearnerProfileData,
     goals: Vec<String>,
     preferred_scenarios: Vec<String>,
     target_accents: Vec<String>,
+    accent_focus: Option<ListeningAccentFocus>,
+    voice_gender_pref: VoiceGenderPreference,
+    listening_stage: Option<i32>,
 ) -> LearnerProfileData {
     profile.goals = normalize_list(goals);
     profile.preferred_scenarios = normalize_list(preferred_scenarios);
     profile.target_accents = normalize_list(target_accents);
+    profile.listening.accent_focus = accent_focus;
+    profile.listening.voice_gender_pref = voice_gender_pref;
+    if let Some(stage) = listening_stage {
+        profile.listening.stage = stage.clamp(0, 4);
+    }
     profile
 }
 
@@ -552,6 +612,59 @@ fn apply_session(
     profile
 }
 
+const ADVANCE_AFTER_CORRECT: i64 = 3;
+const REGRESS_AFTER_MISSED: i64 = 2;
+
+fn apply_listening_check_outcome(
+    mut profile: LearnerProfileData,
+    is_correct: bool,
+) -> LearnerProfileData {
+    let listening = &mut profile.listening;
+    if is_correct {
+        listening.consecutive_correct += 1;
+        listening.consecutive_missed = 0;
+        if listening.consecutive_correct >= ADVANCE_AFTER_CORRECT {
+            listening.stage = (listening.stage + 1).min(4);
+            listening.consecutive_correct = 0;
+        }
+    } else {
+        listening.consecutive_missed += 1;
+        listening.consecutive_correct = 0;
+        if listening.consecutive_missed >= REGRESS_AFTER_MISSED {
+            listening.stage = (listening.stage - 1).max(0);
+            listening.consecutive_missed = 0;
+        }
+    }
+    profile
+}
+
+/// Records a comprehension-check outcome and returns the updated listening
+/// profile. Called by `listening::submit_listening_check_attempt` after it
+/// persists the attempt — mirrors `apply_session_to_learner_profile`'s
+/// read/modify/write shape, but only touches the `listening` slice.
+pub(crate) async fn adjust_listening_progress(
+    app_handle: &AppHandle,
+    is_correct: bool,
+) -> Result<ListeningProfile, LearnerProfileCommandError> {
+    let profile_path = config_path(app_handle)?;
+    let write_path = profile_path.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let profile = read_profile(&write_path)?;
+        let updated = apply_listening_check_outcome(profile, is_correct);
+        write_profile(&write_path, &updated)?;
+        Ok::<_, LearnerProfileCommandError>(updated.listening)
+    })
+    .await
+    .map_err(|error| {
+        LearnerProfileCommandError::new(
+            "learner-profile-task-failed",
+            "The learner profile could not be updated.",
+            error.to_string(),
+        )
+    })?
+}
+
 // ---------------------------------------------------------------------
 // Tauri commands
 // ---------------------------------------------------------------------
@@ -591,6 +704,7 @@ async fn compose_profile_response(
             active_grammar_targets: grammar_targets,
             active_pronunciation_targets: pronunciation_targets,
             progress_notes: profile.progress_notes,
+            listening: profile.listening,
         })
     })
     .await
@@ -625,6 +739,9 @@ pub async fn save_learner_profile_preferences(
             request.goals,
             request.preferred_scenarios,
             request.target_accents,
+            request.accent_focus,
+            request.voice_gender_pref,
+            request.listening_stage,
         );
         write_profile(&write_path, &updated)
     })
@@ -894,6 +1011,9 @@ mod tests {
             vec!["  prepare for interviews  ".to_string(), "   ".to_string()],
             vec!["software engineering".to_string()],
             vec!["".to_string()],
+            Some(ListeningAccentFocus::British),
+            VoiceGenderPreference::Female,
+            Some(2),
         );
 
         assert_eq!(updated.goals, vec!["prepare for interviews".to_string()]);
@@ -902,6 +1022,58 @@ mod tests {
             vec!["software engineering".to_string()]
         );
         assert!(updated.target_accents.is_empty());
+        assert_eq!(updated.listening.accent_focus, Some(ListeningAccentFocus::British));
+        assert_eq!(updated.listening.voice_gender_pref, VoiceGenderPreference::Female);
+        assert_eq!(updated.listening.stage, 2);
+    }
+
+    #[test]
+    fn apply_listening_check_outcome_advances_after_three_consecutive_correct() {
+        let mut profile = LearnerProfileData::default();
+        for _ in 0..2 {
+            profile = apply_listening_check_outcome(profile, true);
+            assert_eq!(profile.listening.stage, 0);
+        }
+        profile = apply_listening_check_outcome(profile, true);
+        assert_eq!(profile.listening.stage, 1);
+        assert_eq!(profile.listening.consecutive_correct, 0);
+    }
+
+    #[test]
+    fn apply_listening_check_outcome_regresses_after_two_consecutive_missed() {
+        let mut profile = LearnerProfileData::default();
+        profile.listening.stage = 2;
+        profile = apply_listening_check_outcome(profile, false);
+        assert_eq!(profile.listening.stage, 2);
+        profile = apply_listening_check_outcome(profile, false);
+        assert_eq!(profile.listening.stage, 1);
+        assert_eq!(profile.listening.consecutive_missed, 0);
+    }
+
+    #[test]
+    fn apply_listening_check_outcome_clamps_stage_at_bounds() {
+        let mut profile = LearnerProfileData::default();
+        profile = apply_listening_check_outcome(profile, false);
+        profile = apply_listening_check_outcome(profile, false);
+        assert_eq!(profile.listening.stage, 0);
+
+        let mut profile = LearnerProfileData::default();
+        profile.listening.stage = 4;
+        for _ in 0..3 {
+            profile = apply_listening_check_outcome(profile, true);
+        }
+        assert_eq!(profile.listening.stage, 4);
+    }
+
+    #[test]
+    fn apply_listening_check_outcome_resets_opposite_counter() {
+        let mut profile = LearnerProfileData::default();
+        profile = apply_listening_check_outcome(profile, true);
+        profile = apply_listening_check_outcome(profile, true);
+        assert_eq!(profile.listening.consecutive_correct, 2);
+        profile = apply_listening_check_outcome(profile, false);
+        assert_eq!(profile.listening.consecutive_correct, 0);
+        assert_eq!(profile.listening.consecutive_missed, 1);
     }
 
     #[test]

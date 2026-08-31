@@ -1,6 +1,9 @@
 mod elevenlabs;
 mod kokoro_local;
 mod macos_say;
+mod voice_metadata;
+
+pub use voice_metadata::{AccentRegion, VoiceGender};
 
 use serde::{Deserialize, Serialize};
 use std::{
@@ -92,6 +95,12 @@ pub struct TtsVoice {
     locale: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     preview_url: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    accent_region: Option<AccentRegion>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    gender: Option<VoiceGender>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    naturalness: Option<u8>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -125,6 +134,15 @@ pub struct TtsSetup {
 #[serde(rename_all = "camelCase")]
 pub struct SpeechRequest {
     reply: String,
+    /// Per-call overrides for listening-progression voice/rate selection —
+    /// merged onto the loaded settings for this call only. The learner's
+    /// saved TTS defaults are never overwritten by them.
+    #[serde(default)]
+    provider: Option<TtsProviderId>,
+    #[serde(default)]
+    voice_id: Option<String>,
+    #[serde(default)]
+    rate: Option<f32>,
 }
 
 #[derive(Debug, Serialize, PartialEq, Eq)]
@@ -413,9 +431,18 @@ pub async fn speak_tutor_reply(
         ));
     }
 
-    let settings = load_settings(config_path(&app_handle)?)
+    let mut settings = load_settings(config_path(&app_handle)?)
         .await
         .unwrap_or_default();
+    if let Some(provider) = request.provider {
+        settings.provider = provider;
+    }
+    if let Some(voice_id) = request.voice_id {
+        settings.voice_id = voice_id;
+    }
+    if let Some(rate) = request.rate {
+        settings.rate = Some(rate);
+    }
 
     dispatch_speech(
         macos_say::say_executable(),

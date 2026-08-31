@@ -6,11 +6,18 @@ export const TTS_PROVIDER_LABELS: Record<TtsProviderId, string> = {
   elevenlabs: "ElevenLabs",
 };
 
+export type AccentRegion = "american" | "british" | "irish" | "australian";
+
+export type VoiceGender = "female" | "male";
+
 export type TtsVoice = {
   id: string;
   label: string;
   locale?: string;
   previewUrl?: string;
+  accentRegion?: AccentRegion;
+  gender?: VoiceGender;
+  naturalness?: number;
 };
 
 export type TtsAvailability = {

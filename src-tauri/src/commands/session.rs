@@ -112,6 +112,8 @@ pub struct OpenSessionRequest {
     scenario_system_prompt: String,
     #[serde(default)]
     learner_context: Option<String>,
+    #[serde(default)]
+    listening_stage: Option<i32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -147,6 +149,21 @@ fn opening_response_schema() -> Value {
     })
 }
 
+/// Short pacing/naturalness directive for the tutor's opening line, matched
+/// to the learner's current listening-progression stage (0..=4). This is
+/// the only lever available for providers without TTS rate control — see
+/// `src/sessions/listeningVoice.ts` for the rate-based lever used when the
+/// provider supports it.
+fn listening_stage_directive(stage: i32) -> &'static str {
+    match stage {
+        0 => "Speak at a clear, deliberately slower pace with simple vocabulary.",
+        1 => "Speak at a clear, natural pace with straightforward vocabulary.",
+        2 => "Speak at a natural pace, using contractions and everyday phrasing.",
+        3 => "Speak naturally, and feel free to let some regional flavor come through in word choice.",
+        _ => "Speak at natural, authentic conversational speed with contractions and casual phrasing.",
+    }
+}
+
 fn opening_messages(request: &OpenSessionRequest) -> Vec<OllamaRequestMessage> {
     let mut messages = vec![
         OllamaRequestMessage {
@@ -161,6 +178,13 @@ fn opening_messages(request: &OpenSessionRequest) -> Vec<OllamaRequestMessage> {
             ),
         },
     ];
+
+    if let Some(stage) = request.listening_stage {
+        messages.push(OllamaRequestMessage {
+            role: "system",
+            content: listening_stage_directive(stage).to_string(),
+        });
+    }
 
     if let Some(context) = request
         .learner_context
@@ -576,6 +600,7 @@ mod tests {
         let without_context = opening_messages(&OpenSessionRequest {
             scenario_system_prompt: "Play the role of a barista.".into(),
             learner_context: None,
+            listening_stage: None,
         });
         assert_eq!(without_context.len(), 3);
         assert!(without_context[1].content.contains("barista"));
@@ -583,9 +608,21 @@ mod tests {
         let with_context = opening_messages(&OpenSessionRequest {
             scenario_system_prompt: "Play the role of a barista.".into(),
             learner_context: Some("The learner recently struggled with past tense.".into()),
+            listening_stage: None,
         });
         assert_eq!(with_context.len(), 4);
         assert!(with_context[2].content.contains("past tense"));
+    }
+
+    #[test]
+    fn opening_messages_include_listening_stage_directive_when_present() {
+        let messages = opening_messages(&OpenSessionRequest {
+            scenario_system_prompt: "Play the role of a barista.".into(),
+            learner_context: None,
+            listening_stage: Some(0),
+        });
+        assert_eq!(messages.len(), 4);
+        assert!(messages[2].content.contains("slower pace"));
     }
 
     #[test]
@@ -608,6 +645,7 @@ mod tests {
             let messages = opening_messages(&OpenSessionRequest {
                 scenario_system_prompt: "Daily standup.".into(),
                 learner_context: None,
+                listening_stage: None,
             });
             let (content, _performance) = tutor::perform_structured_chat(
                 &settings,

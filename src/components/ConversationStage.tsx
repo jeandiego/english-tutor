@@ -7,6 +7,7 @@ import {
 } from "@tabler/icons-react";
 import { useEffect, useRef, useState } from "react";
 import type { RecordedAudio } from "../audio/recorder";
+import type { ListeningCheckState } from "../hooks/useListeningChecks";
 import type {
   ConversationExchange,
   ConversationLoopState,
@@ -16,11 +17,13 @@ import type { RecordingState } from "../hooks/usePushToTalk";
 import { TranscriptionError } from "../native/transcription";
 import type { ConversationRepairMeta, RepairOutcome, RepairPriority } from "../types/repair";
 import type { ConversationReviewMeta, ReviewItemType, ReviewOutcome } from "../types/review";
+import type { ListeningCheckType } from "../types/listening";
 import type { BetterExpression, TutorCorrection, TutorTurn } from "../types/tutor";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
+import { Input } from "./ui/input";
 import { cn } from "../lib/utils";
 
 type ConversationStageProps = {
@@ -466,6 +469,117 @@ function ReviewOutcomeBadge({ outcome }: { outcome: ReviewOutcome }) {
       {outcome === "remembered" && <IconCheck data-icon="inline-start" />}
       {REVIEW_OUTCOME_LABELS[outcome]}
     </Badge>
+  );
+}
+
+const LISTENING_CHECK_TYPE_LABELS: Record<ListeningCheckType, string> = {
+  detail_question: "Listening check",
+  summary_choice: "Which is accurate?",
+  repeat_own_words: "In your own words",
+  detail_followup: "Follow-up question",
+};
+
+export function ListeningCheckCard({
+  onDismiss,
+  onSkip,
+  onSubmit,
+  state,
+}: {
+  onDismiss: () => void;
+  onSkip: () => void;
+  onSubmit: (answer: string) => void;
+  state: ListeningCheckState;
+}) {
+  const [answer, setAnswer] = useState("");
+
+  if (state.status === "idle") {
+    return null;
+  }
+
+  const check = state.check;
+  const isSubmitting = state.status === "submitting";
+  const options = check.checkType === "summary_choice" ? check.options : undefined;
+
+  return (
+    <div
+      className="flex flex-col gap-3 rounded-[var(--radius-cards)] bg-card p-4 shadow-[0_1px_2px_rgba(0,0,0,0.08)]"
+      role="status"
+    >
+      <Badge variant="warning">{LISTENING_CHECK_TYPE_LABELS[check.checkType]}</Badge>
+      <p className="text-body text-foreground">{check.question}</p>
+
+      {state.status === "result" ? (
+        <div className="flex flex-col items-start gap-2">
+          <Badge variant={state.result.isCorrect ? "success" : "destructive"}>
+            {state.result.isCorrect ? "Correct" : "Not quite"}
+          </Badge>
+          <p className="text-caption text-muted-foreground">{state.result.feedback}</p>
+          <Button onClick={onDismiss} size="sm" type="button" variant="outline">
+            Continue
+          </Button>
+        </div>
+      ) : state.status === "error" ? (
+        <div className="flex flex-col items-start gap-2">
+          <p className="text-body text-destructive">{state.error.message}</p>
+          <Button onClick={onDismiss} size="sm" type="button" variant="outline">
+            Continue
+          </Button>
+        </div>
+      ) : options ? (
+        <div className="flex flex-col items-start gap-2">
+          {options.map((option) => (
+            <Button
+              disabled={isSubmitting}
+              key={option}
+              onClick={() => onSubmit(option)}
+              type="button"
+              variant="outline"
+            >
+              {option}
+            </Button>
+          ))}
+          <button
+            className="text-caption font-medium text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+            disabled={isSubmitting}
+            onClick={onSkip}
+            type="button"
+          >
+            Skip
+          </button>
+        </div>
+      ) : (
+        <form
+          className="flex flex-col gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            const trimmed = answer.trim();
+            if (trimmed) {
+              onSubmit(trimmed);
+            }
+          }}
+        >
+          <Input
+            disabled={isSubmitting}
+            onChange={(event) => setAnswer(event.target.value)}
+            placeholder="Type your answer"
+            value={answer}
+          />
+          <div className="flex items-center gap-3">
+            <Button disabled={isSubmitting || !answer.trim()} size="sm" type="submit">
+              {isSubmitting ? "Checking…" : "Submit"}
+            </Button>
+            <button
+              className="text-caption font-medium text-muted-foreground hover:text-foreground disabled:pointer-events-none disabled:opacity-50"
+              disabled={isSubmitting}
+              onClick={onSkip}
+              type="button"
+            >
+              Skip
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
   );
 }
 

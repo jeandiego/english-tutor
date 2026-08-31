@@ -1,4 +1,5 @@
 import type { AssessmentCompetency, CefrLevel } from "./assessment";
+import type { ListeningAccentFocus, ListeningProfile, VoiceGenderPreference } from "./listening";
 import type { ReviewItemDraft } from "./review";
 
 export type LearnerIssue = {
@@ -37,12 +38,16 @@ export type LearnerProfile = {
   activeGrammarTargets: LearnerIssue[];
   activePronunciationTargets: PronunciationTarget[];
   progressNotes: ProgressNote[];
+  listening: ListeningProfile;
 };
 
 export type SaveLearnerProfilePreferencesRequest = {
   goals: string[];
   preferredScenarios: string[];
   targetAccents: string[];
+  accentFocus?: ListeningAccentFocus;
+  voiceGenderPref?: VoiceGenderPreference;
+  listeningStage?: number;
 };
 
 export type ApplyAssessmentToLearnerProfileRequest = {

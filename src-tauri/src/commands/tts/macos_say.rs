@@ -1,12 +1,13 @@
 use super::{
-    output_details, play_audio_file, truncate, TtsAvailability, TtsCommandError, TtsProviderId,
-    TtsProviderInfo, TtsSettings, TtsVoice,
+    output_details, play_audio_file, truncate, voice_metadata, TtsAvailability, TtsCommandError,
+    TtsProviderId, TtsProviderInfo, TtsSettings, TtsVoice,
 };
 use std::{env, ffi::OsStr, process::Command};
 use tempfile::NamedTempFile;
 
 const DEFAULT_SAY_EXECUTABLE: &str = "say";
 const SAY_EXECUTABLE_ENV: &str = "ENGLISHER_SAY_EXECUTABLE";
+const MACOS_NATURALNESS: u8 = 3;
 
 pub(super) fn say_executable() -> String {
     env::var(SAY_EXECUTABLE_ENV)
@@ -49,11 +50,16 @@ fn parse_voice_line(line: &str) -> Option<TtsVoice> {
     }
 
     let name = tokens.join(" ");
+    let accent_region = voice_metadata::accent_region_from_locale(&locale);
+    let gender = voice_metadata::macos_gender(&name);
     Some(TtsVoice {
         id: name.clone(),
         label: name,
         locale: Some(locale),
         preview_url: None,
+        accent_region,
+        gender,
+        naturalness: Some(MACOS_NATURALNESS),
     })
 }
 
@@ -275,6 +281,8 @@ mod tests {
         .expect("line must parse");
         assert_eq!(voice.label, "Alex");
         assert_eq!(voice.locale.as_deref(), Some("en_US"));
+        assert_eq!(voice.accent_region, Some(voice_metadata::AccentRegion::American));
+        assert_eq!(voice.gender, Some(voice_metadata::VoiceGender::Male));
     }
 
     #[test]

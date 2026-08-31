@@ -20,6 +20,7 @@ import type {
   UpdateRepairEventOutcomeRequest,
 } from "../types/repair";
 import type { TutorTurn, TutorTurnRequest } from "../types/tutor";
+import type { TtsSetup } from "../types/tts";
 import { useSessionRun } from "./useSessionRun";
 
 type StartSessionFn = (request: {
@@ -49,6 +50,7 @@ type ApplySessionToLearnerProfileFn = (request: {
 type EvaluateRepairFn = (request: EvaluateRepairRequest) => Promise<RepairEvaluation>;
 type RecordRepairEventFn = (request: RecordRepairEventRequest) => Promise<number>;
 type UpdateRepairEventOutcomeFn = (request: UpdateRepairEventOutcomeRequest) => Promise<void>;
+type LoadTtsSetupFn = () => Promise<TtsSetup>;
 
 function createRecording(index: number): RecordedAudio {
   const blob = new Blob([`audio-${index}`], { type: "audio/webm" });
@@ -89,6 +91,7 @@ function SessionRunHarness({
   startSession = vi.fn<StartSessionFn>().mockResolvedValue({
     sessionId: 42,
     learnerContext: "B1 learner.",
+    listeningProfile: { voiceGenderPref: "any", stage: 0 },
   }),
   completeSession = vi.fn<CompleteSessionFn>().mockResolvedValue(undefined),
   openGuidedSession = vi
@@ -111,6 +114,16 @@ function SessionRunHarness({
   updateRepairEventOutcome = vi
     .fn<UpdateRepairEventOutcomeFn>()
     .mockResolvedValue(undefined),
+  loadTtsSetup = vi.fn<LoadTtsSetupFn>().mockResolvedValue({
+    settings: {
+      provider: "macos_say",
+      voiceId: "",
+      kokoroExecutablePath: "",
+      kokoroModelPath: "",
+      kokoroVoicesPath: "",
+    },
+    providers: [],
+  }),
 }: {
   recorder: AudioRecorder;
   transcribe: () => Promise<{ text: string }>;
@@ -123,6 +136,7 @@ function SessionRunHarness({
   evaluateRepair?: EvaluateRepairFn;
   recordRepairEvent?: RecordRepairEventFn;
   updateRepairEventOutcome?: UpdateRepairEventOutcomeFn;
+  loadTtsSetup?: LoadTtsSetupFn;
 }) {
   const run = useSessionRun({
     enabled: true,
@@ -138,6 +152,7 @@ function SessionRunHarness({
     evaluateRepair,
     recordRepairEvent,
     updateRepairEventOutcome,
+    loadTtsSetup,
   });
 
   return (
@@ -183,9 +198,11 @@ afterEach(() => {
 
 describe("useSessionRun", () => {
   it("starts a session, fetches an opener, and reaches the active status", async () => {
-    const startSession = vi
-      .fn<StartSessionFn>()
-      .mockResolvedValue({ sessionId: 42, learnerContext: "B1 learner." });
+    const startSession = vi.fn<StartSessionFn>().mockResolvedValue({
+      sessionId: 42,
+      learnerContext: "B1 learner.",
+      listeningProfile: { voiceGenderPref: "any", stage: 0 },
+    });
     const openGuidedSession = vi
       .fn<OpenGuidedSessionFn>()
       .mockResolvedValue({ opening: "Let's start the standup." });

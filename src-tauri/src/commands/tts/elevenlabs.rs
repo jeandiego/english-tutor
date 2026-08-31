@@ -1,6 +1,6 @@
 use super::{
-    play_audio_file, truncate, TtsAvailability, TtsCommandError, TtsProviderId, TtsProviderInfo,
-    TtsSettings, TtsVoice,
+    play_audio_file, truncate, voice_metadata, TtsAvailability, TtsCommandError, TtsProviderId,
+    TtsProviderInfo, TtsSettings, TtsVoice,
 };
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
@@ -12,6 +12,7 @@ const API_KEY_ENV: &str = "ENGLISHER_ELEVENLABS_API_KEY";
 const API_BASE_URL: &str = "https://api.elevenlabs.io/v1";
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const DEFAULT_MODEL_ID: &str = "eleven_multilingual_v2";
+const ELEVENLABS_NATURALNESS: u8 = 5;
 
 fn api_key() -> Option<String> {
     env::var(API_KEY_ENV)
@@ -53,6 +54,8 @@ struct VoiceEntry {
 struct VoiceLabels {
     #[serde(default)]
     accent: Option<String>,
+    #[serde(default)]
+    gender: Option<String>,
 }
 
 async fn fetch_voices(client: &Client, key: &str) -> Result<Vec<TtsVoice>, TtsCommandError> {
@@ -97,11 +100,30 @@ async fn fetch_voices(client: &Client, key: &str) -> Result<Vec<TtsVoice>, TtsCo
     Ok(parsed
         .voices
         .into_iter()
-        .map(|voice| TtsVoice {
-            id: voice.voice_id,
-            label: voice.name,
-            locale: voice.labels.and_then(|labels| labels.accent),
-            preview_url: voice.preview_url,
+        .map(|voice| {
+            let accent_region = voice
+                .labels
+                .as_ref()
+                .and_then(|labels| labels.accent.as_deref())
+                .and_then(voice_metadata::accent_region_from_label);
+            let gender = voice
+                .labels
+                .as_ref()
+                .and_then(|labels| labels.gender.as_deref())
+                .and_then(|gender| match gender.trim().to_ascii_lowercase().as_str() {
+                    "female" => Some(voice_metadata::VoiceGender::Female),
+                    "male" => Some(voice_metadata::VoiceGender::Male),
+                    _ => None,
+                });
+            TtsVoice {
+                id: voice.voice_id,
+                label: voice.name,
+                locale: voice.labels.and_then(|labels| labels.accent),
+                preview_url: voice.preview_url,
+                accent_region,
+                gender,
+                naturalness: Some(ELEVENLABS_NATURALNESS),
+            }
         })
         .collect())
 }

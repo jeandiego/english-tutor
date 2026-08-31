@@ -1,4 +1,5 @@
 import type { CefrLevel } from "./assessment";
+import type { ListeningProfile } from "./listening";
 import type { SessionRunStatus, SessionSummaryPayload } from "./session";
 import type { ReviewItem } from "./review";
 
@@ -13,6 +14,7 @@ export type SessionStart = {
   sessionId: number;
   learnerContext?: string;
   dueReviewItems?: ReviewItem[];
+  listeningProfile: ListeningProfile;
 };
 
 export type SessionSummary = {

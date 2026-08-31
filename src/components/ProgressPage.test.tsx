@@ -33,6 +33,7 @@ const BASE_PROFILE = {
       createdAt: 1_700_000_000_000,
     },
   ],
+  listening: { voiceGenderPref: "any" as const, stage: 0 },
 };
 
 afterEach(() => {
@@ -67,6 +68,7 @@ describe("ProgressPage", () => {
       activeGrammarTargets: [],
       activePronunciationTargets: [],
       progressNotes: [],
+      listening: { voiceGenderPref: "any", stage: 0 },
     });
 
     render(<ProgressPage />);
@@ -109,6 +111,9 @@ describe("ProgressPage", () => {
       goals: ["prepare for interviews", "small talk about hobbies"],
       preferredScenarios: [],
       targetAccents: [],
+      accentFocus: undefined,
+      voiceGenderPref: "any",
+      listeningStage: 0,
     });
   });
 

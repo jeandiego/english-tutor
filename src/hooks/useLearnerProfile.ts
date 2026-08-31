@@ -6,6 +6,7 @@ import {
   toLearnerProfileError,
 } from "../native/learnerProfile";
 import { learnerProfileKeys } from "../queryKeys/learnerProfile";
+import type { ListeningAccentFocus, VoiceGenderPreference } from "../types/listening";
 import type { LearnerProfile } from "../types/learnerProfile";
 
 export type LearnerProfileState =
@@ -22,6 +23,9 @@ type PreferencesDraft = {
   goals: string[];
   preferredScenarios: string[];
   targetAccents: string[];
+  accentFocus?: ListeningAccentFocus;
+  voiceGenderPref: VoiceGenderPreference;
+  listeningStage: number;
 };
 
 function draftFromProfile(profile: LearnerProfile): PreferencesDraft {
@@ -29,6 +33,9 @@ function draftFromProfile(profile: LearnerProfile): PreferencesDraft {
     goals: profile.goals,
     preferredScenarios: profile.preferredScenarios,
     targetAccents: profile.targetAccents,
+    accentFocus: profile.listening.accentFocus,
+    voiceGenderPref: profile.listening.voiceGenderPref,
+    listeningStage: profile.listening.stage,
   };
 }
 
@@ -42,7 +49,10 @@ function draftsEqual(left: PreferencesDraft, right: PreferencesDraft): boolean {
   return (
     arraysEqual(left.goals, right.goals) &&
     arraysEqual(left.preferredScenarios, right.preferredScenarios) &&
-    arraysEqual(left.targetAccents, right.targetAccents)
+    arraysEqual(left.targetAccents, right.targetAccents) &&
+    left.accentFocus === right.accentFocus &&
+    left.voiceGenderPref === right.voiceGenderPref &&
+    left.listeningStage === right.listeningStage
   );
 }
 
@@ -50,6 +60,9 @@ const EMPTY_DRAFT: PreferencesDraft = {
   goals: [],
   preferredScenarios: [],
   targetAccents: [],
+  accentFocus: undefined,
+  voiceGenderPref: "any",
+  listeningStage: 0,
 };
 
 export function useLearnerProfile() {

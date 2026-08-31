@@ -19,7 +19,7 @@ import { Field, FieldContent, FieldLabel } from "./ui/field";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { cn } from "../lib/utils";
-import { ConversationStage } from "./ConversationStage";
+import { ConversationStage, ListeningCheckCard } from "./ConversationStage";
 import { TalkControl } from "./TalkControl";
 
 type SessionsPageProps = {
@@ -400,7 +400,8 @@ export function SessionsPage({ disabled, disabledHint, repairIntensity }: Sessio
       .catch(() => setDefaultDifficulty(undefined));
   }, []);
 
-  const talkControlDisabled = disabled || run.status !== "active";
+  const talkControlDisabled =
+    disabled || run.status !== "active" || run.listeningChecks.state.status !== "idle";
 
   return (
     <section aria-labelledby="sessions-title" className="min-h-0 flex-1 overflow-y-auto">
@@ -462,6 +463,15 @@ export function SessionsPage({ disabled, disabledHint, repairIntensity }: Sessio
             state={run.conversation.state}
             thinking={run.conversation.thinking}
           />
+
+          {run.listeningChecks.state.status !== "idle" && (
+            <ListeningCheckCard
+              onDismiss={run.listeningChecks.dismissResult}
+              onSkip={run.listeningChecks.skipCheck}
+              onSubmit={run.listeningChecks.submitAnswer}
+              state={run.listeningChecks.state}
+            />
+          )}
 
           {run.status === "finishing" ? (
             <ProcessingStatus label="Writing your session summary…" />

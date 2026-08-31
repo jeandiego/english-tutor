@@ -1,4 +1,11 @@
 import { invoke } from "@tauri-apps/api/core";
+import type { TtsProviderId } from "../types/tts";
+
+export type SpeechOverrides = {
+  provider?: TtsProviderId;
+  voiceId?: string;
+  rate?: number;
+};
 
 export class SpeechError extends Error {
   readonly code: string;
@@ -42,9 +49,19 @@ export function toSpeechError(error: unknown): SpeechError {
   );
 }
 
-export async function speakTutorReply(reply: string): Promise<void> {
+export async function speakTutorReply(
+  reply: string,
+  overrides?: SpeechOverrides,
+): Promise<void> {
   try {
-    await invoke("speak_tutor_reply", { request: { reply } });
+    await invoke("speak_tutor_reply", {
+      request: {
+        reply,
+        provider: overrides?.provider,
+        voiceId: overrides?.voiceId,
+        rate: overrides?.rate,
+      },
+    });
   } catch (error) {
     throw toSpeechError(error);
   }

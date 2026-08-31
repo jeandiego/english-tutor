@@ -26,6 +26,8 @@ pub fn run() {
             commands::learner_profile::save_learner_profile_preferences,
             commands::learner_profile::apply_assessment_to_learner_profile,
             commands::learner_profile::apply_session_to_learner_profile,
+            commands::listening::generate_comprehension_check,
+            commands::listening::submit_listening_check_attempt,
             commands::pronunciation::list_pronunciation_targets,
             commands::pronunciation::submit_pronunciation_attempt,
             commands::repair::evaluate_repair_opportunity,

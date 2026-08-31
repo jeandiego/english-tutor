@@ -1,18 +1,23 @@
 use super::{
-    output_details, play_audio_file, TtsAvailability, TtsCommandError, TtsProviderId,
-    TtsProviderInfo, TtsSettings, TtsVoice,
+    output_details, play_audio_file, voice_metadata, TtsAvailability, TtsCommandError,
+    TtsProviderId, TtsProviderInfo, TtsSettings, TtsVoice,
 };
 use std::{ffi::OsStr, path::Path, process::Command};
 use tempfile::NamedTempFile;
 
 const DEFAULT_STYLE: &str = "af_sarah";
+const KOKORO_NATURALNESS: u8 = 4;
 
 fn voice(id: &str, label: &str, locale: &str) -> TtsVoice {
+    let (accent_region, gender) = voice_metadata::kokoro_prefix_metadata(id);
     TtsVoice {
         id: id.to_string(),
         label: label.to_string(),
         locale: Some(locale.to_string()),
         preview_url: None,
+        accent_region,
+        gender,
+        naturalness: Some(KOKORO_NATURALNESS),
     }
 }
 

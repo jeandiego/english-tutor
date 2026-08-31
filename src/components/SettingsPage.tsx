@@ -20,6 +20,7 @@ import {
 import { Slider } from "./ui/slider";
 import { Switch } from "./ui/switch";
 import { cn } from "../lib/utils";
+import { useLearnerProfile } from "../hooks/useLearnerProfile";
 import type {
   DependencyCheck,
   TranscriptionSettings,
@@ -27,6 +28,7 @@ import type {
 } from "../types/transcription";
 import { TTS_PROVIDER_LABELS, type TtsProviderId, type TtsSettings, type TtsSetupState } from "../types/tts";
 import type { RepairIntensity, TutorSettings, TutorSetupState } from "../types/tutor";
+import type { ListeningAccentFocus, VoiceGenderPreference } from "../types/listening";
 
 type SettingsPageProps = {
   transcriptionState: TranscriptionSetupState;
@@ -72,6 +74,28 @@ const REPAIR_INTENSITY_OPTIONS: Array<{
     label: "Strict",
     description: "Flags most errors worth attention, including smaller slips.",
   },
+];
+
+const ACCENT_FOCUS_LABELS: Record<ListeningAccentFocus, string> = {
+  american: "American English",
+  british: "British English",
+  mixed: "Mixed accents",
+  software_workplace: "Software & workplace English",
+  travel_everyday: "Travel & everyday English",
+};
+
+const VOICE_GENDER_PREF_LABELS: Record<VoiceGenderPreference, string> = {
+  any: "Any",
+  female: "Female",
+  male: "Male",
+};
+
+const LISTENING_STAGE_LABELS = [
+  "Clear & slow",
+  "Clear & natural",
+  "Natural, with contractions",
+  "Regional accent exposure",
+  "Faster, authentic speech",
 ];
 
 const DEPENDENCY_NAMES: Record<DependencyCheck["dependency"], string> = {
@@ -260,6 +284,12 @@ export function SettingsPage({
     (provider) => provider.id === ttsDraft.provider,
   );
   const status = overallStatus(transcriptionState, tutorState);
+
+  const learnerProfile = useLearnerProfile();
+  const listeningSaving =
+    learnerProfile.state.status === "loaded" && learnerProfile.state.saving;
+  const listeningSaveError =
+    learnerProfile.state.status === "loaded" ? learnerProfile.state.saveError : undefined;
 
   return (
     <section
@@ -889,6 +919,132 @@ export function SettingsPage({
               onReset={onTtsReset}
               saveLabel="Save voice settings"
               saving={ttsSaving}
+              savingLabel="Saving…"
+            />
+          </form>
+        </SettingsSection>
+      )}
+
+      {learnerProfile.state.status === "loaded" && (
+        <SettingsSection
+          description="Adapts the tutor's voice and pacing to your listening focus. Difficulty moves itself as comprehension checks land during sessions, but you can override it here."
+          title="Listening"
+          titleId="listening-settings-title"
+        >
+          <form
+            onSubmit={(event) => {
+              event.preventDefault();
+              learnerProfile.save();
+            }}
+          >
+            <FieldGroup>
+              <Field orientation="responsive">
+                <FieldLabel htmlFor="listening-accent-focus">Accent focus</FieldLabel>
+                <FieldContent>
+                  <Select
+                    disabled={listeningSaving}
+                    onValueChange={(value) =>
+                      learnerProfile.setDraft({
+                        ...learnerProfile.draft,
+                        accentFocus:
+                          value === "none" ? undefined : (value as ListeningAccentFocus),
+                      })
+                    }
+                    value={learnerProfile.draft.accentFocus ?? "none"}
+                  >
+                    <SelectTrigger className="w-full" id="listening-accent-focus">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">No preference</SelectItem>
+                      {(Object.keys(ACCENT_FOCUS_LABELS) as ListeningAccentFocus[]).map(
+                        (focus) => (
+                          <SelectItem key={focus} value={focus}>
+                            {ACCENT_FOCUS_LABELS[focus]}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription className="text-xs text-muted-foreground/62">
+                    Drives which installed voice is picked for sessions when a match exists.
+                  </FieldDescription>
+                </FieldContent>
+              </Field>
+
+              <Field orientation="responsive">
+                <FieldLabel htmlFor="listening-voice-gender">Voice gender preference</FieldLabel>
+                <FieldContent>
+                  <Select
+                    disabled={listeningSaving}
+                    onValueChange={(value) =>
+                      learnerProfile.setDraft({
+                        ...learnerProfile.draft,
+                        voiceGenderPref: value as VoiceGenderPreference,
+                      })
+                    }
+                    value={learnerProfile.draft.voiceGenderPref}
+                  >
+                    <SelectTrigger className="w-full" id="listening-voice-gender">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(Object.keys(VOICE_GENDER_PREF_LABELS) as VoiceGenderPreference[]).map(
+                        (pref) => (
+                          <SelectItem key={pref} value={pref}>
+                            {VOICE_GENDER_PREF_LABELS[pref]}
+                          </SelectItem>
+                        ),
+                      )}
+                    </SelectContent>
+                  </Select>
+                </FieldContent>
+              </Field>
+
+              <Field orientation="responsive">
+                <FieldLabel htmlFor="listening-stage">Listening difficulty</FieldLabel>
+                <FieldContent>
+                  <Select
+                    disabled={listeningSaving}
+                    onValueChange={(value) =>
+                      learnerProfile.setDraft({
+                        ...learnerProfile.draft,
+                        listeningStage: Number(value),
+                      })
+                    }
+                    value={String(learnerProfile.draft.listeningStage)}
+                  >
+                    <SelectTrigger className="w-full" id="listening-stage">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {LISTENING_STAGE_LABELS.map((label, stage) => (
+                        <SelectItem key={stage} value={String(stage)}>
+                          {label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <FieldDescription className="text-xs text-muted-foreground/62">
+                    Advances after a few correct comprehension checks, and eases back after
+                    missed ones.
+                  </FieldDescription>
+                </FieldContent>
+              </Field>
+            </FieldGroup>
+
+            {listeningSaveError && (
+              <p className="mt-4 text-caption text-destructive" role="alert">
+                {listeningSaveError}
+              </p>
+            )}
+
+            <FormFooter
+              dirty={learnerProfile.dirty}
+              note="Applies to guided sessions started after saving."
+              onReset={learnerProfile.reset}
+              saveLabel="Save listening settings"
+              saving={listeningSaving}
               savingLabel="Saving…"
             />
           </form>

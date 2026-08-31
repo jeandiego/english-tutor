@@ -20,6 +20,7 @@ import {
   recordRepairEvent as defaultRecordRepairEvent,
   updateRepairEventOutcome as defaultUpdateRepairEventOutcome,
 } from "../native/repair";
+import { loadTtsSetup as defaultLoadTtsSetup } from "../native/tts";
 import {
   evaluateReviewAttempt as defaultEvaluateReviewAttempt,
   recordReviewOutcome as defaultRecordReviewOutcome,
@@ -30,9 +31,12 @@ import {
   toSessionError,
   type SessionError,
 } from "../native/session";
-import { speakTutorReply } from "../native/speech";
+import { speakTutorReply, type SpeechOverrides } from "../native/speech";
 import { findDurationPreset, type DurationPresetId } from "../sessions/catalog";
+import { selectListeningVoice } from "../sessions/listeningVoice";
+import type { ListeningProfile } from "../types/listening";
 import type { SessionSource } from "../types/scenarioPack";
+import type { TtsSetup } from "../types/tts";
 import type {
   EvaluateRepairRequest,
   RecordRepairEventRequest,
@@ -55,6 +59,7 @@ import type {
   TutorTurn,
   TutorTurnRequest,
 } from "../types/tutor";
+import { useListeningChecks } from "./useListeningChecks";
 import { useTutorConversation } from "./useTutorConversation";
 
 export type SessionRunStatus =
@@ -81,7 +86,8 @@ type UseSessionRunOptions = {
   recorder?: AudioRecorder;
   transcribe?: (recording: RecordedAudio) => Promise<TranscriptionResult>;
   respond?: (request: TutorTurnRequest) => Promise<TutorTurn>;
-  speak?: (reply: string) => Promise<void>;
+  speak?: (reply: string, overrides?: SpeechOverrides) => Promise<void>;
+  loadTtsSetup?: () => Promise<TtsSetup>;
   repairIntensity?: RepairIntensity;
   evaluateRepair?: (request: EvaluateRepairRequest) => Promise<RepairEvaluation>;
   recordRepairEvent?: (request: RecordRepairEventRequest) => Promise<number>;
@@ -117,6 +123,7 @@ export function useSessionRun({
   transcribe,
   respond,
   speak = speakTutorReply,
+  loadTtsSetup = defaultLoadTtsSetup,
   repairIntensity = "balanced",
   evaluateRepair = defaultEvaluateRepair,
   recordRepairEvent = defaultRecordRepairEvent,
@@ -141,21 +148,25 @@ export function useSessionRun({
   >();
   const [openingReply, setOpeningReply] = useState<string | undefined>();
   const [dueReviewItems, setDueReviewItems] = useState<ReviewItem[]>([]);
+  const [listeningProfile, setListeningProfile] = useState<ListeningProfile | undefined>();
 
   const engineRef = useRef<Engine | null>(null);
   const statusRef = useRef(status);
   const mountedRef = useRef(true);
   const completeSessionRef = useRef(completeSession);
+  const voiceOverrideRef = useRef<SpeechOverrides | undefined>(undefined);
 
   statusRef.current = status;
   completeSessionRef.current = completeSession;
+
+  const speakWithListeningOverride = (reply: string) => speak(reply, voiceOverrideRef.current);
 
   const conversation = useTutorConversation({
     enabled: enabled && status === "active",
     recorder,
     transcribe,
     respond,
-    speak,
+    speak: speakWithListeningOverride,
     sessionId: conversationSessionId,
     learnerContext: conversationLearnerContext,
     openingReply,
@@ -166,6 +177,14 @@ export function useSessionRun({
     dueReviewItems,
     evaluateReviewAttempt,
     recordReviewOutcome,
+  });
+
+  const listeningChecks = useListeningChecks({
+    enabled: status === "active",
+    exchanges: conversation.exchanges,
+    sessionId: conversationSessionId,
+    accentFocus: listeningProfile?.accentFocus,
+    stage: listeningProfile?.stage ?? 0,
   });
 
   const turnCount = conversation.exchanges.filter(
@@ -191,6 +210,8 @@ export function useSessionRun({
     setConversationSessionId(undefined);
     setConversationLearnerContext(undefined);
     setDueReviewItems([]);
+    setListeningProfile(undefined);
+    voiceOverrideRef.current = undefined;
     setTemplate(chosenTemplate);
     setStatus("starting");
 
@@ -219,11 +240,30 @@ export function useSessionRun({
     }
     engine.sessionId = started.sessionId;
 
+    try {
+      const ttsSetup = await loadTtsSetup();
+      voiceOverrideRef.current = selectListeningVoice(
+        ttsSetup.providers,
+        ttsSetup.settings.provider,
+        started.listeningProfile,
+        engine.sessionId,
+      );
+    } catch {
+      // A missing/failed TTS setup shouldn't block the session — it just
+      // falls back to whatever voice the provider dispatch already uses.
+      voiceOverrideRef.current = undefined;
+    }
+    if (engineRef.current !== engine || !mountedRef.current) {
+      return;
+    }
+    setListeningProfile(started.listeningProfile);
+
     let opening: string;
     try {
       const openingTurn = await openGuidedSession({
         scenarioSystemPrompt: chosenTemplate.systemPrompt,
         learnerContext: started.learnerContext,
+        listeningStage: started.listeningProfile.stage,
       });
       opening = openingTurn.opening;
     } catch (openingError: unknown) {
@@ -367,6 +407,8 @@ export function useSessionRun({
     setConversationLearnerContext(undefined);
     setDueReviewItems([]);
     setOpeningReply(undefined);
+    setListeningProfile(undefined);
+    voiceOverrideRef.current = undefined;
   }
 
   useEffect(() => {
@@ -395,5 +437,6 @@ export function useSessionRun({
     abandon,
     reset,
     conversation,
+    listeningChecks,
   };
 }

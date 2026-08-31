@@ -7,6 +7,7 @@ export type SessionRunStatus = "active" | "completed" | "abandoned";
 export type OpenSessionRequest = {
   scenarioSystemPrompt: string;
   learnerContext?: string;
+  listeningStage?: number;
 };
 
 export type OpeningTurn = {

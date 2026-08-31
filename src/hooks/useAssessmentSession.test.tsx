@@ -132,6 +132,7 @@ beforeEach(() => {
     activeGrammarTargets: [],
     activePronunciationTargets: [],
     progressNotes: [],
+    listening: { voiceGenderPref: "any", stage: 0 },
   });
   vi.mocked(speechNative.speakTutorReply).mockResolvedValue(undefined);
 });

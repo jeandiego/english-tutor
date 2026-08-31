@@ -9,13 +9,14 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 use super::assessment::{cefr_level_str, competency_label, AssessmentCompetency, CefrLevel};
+use super::listening::ListeningCheckType;
 use super::pronunciation::{self, PronunciationProblemCategory, PronunciationTargetSource};
 use super::repair::{RepairIntensity, RepairMode, RepairOutcome, RepairPriority};
 use super::review::{self, ReviewItemType, ReviewOutcome, ReviewSource};
 use super::tutor::{BetterExpression, CorrectionCategory, CorrectionSeverity, TutorCorrection};
 
 const DB_FILE_NAME: &str = "history.sqlite3";
-const SCHEMA_VERSION: i32 = 6;
+const SCHEMA_VERSION: i32 = 7;
 const ALL_TIME_CATEGORY_LIMIT: i64 = 100_000;
 const DEFAULT_LIST_LIMIT: i64 = 10;
 const MAX_LIST_LIMIT: i64 = 100;
@@ -118,6 +119,7 @@ pub struct SessionStart {
     learner_context: Option<String>,
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     due_review_items: Vec<review::ReviewItem>,
+    listening_profile: super::learner_profile::ListeningProfile,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -507,6 +509,36 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             CREATE INDEX IF NOT EXISTS idx_pronunciation_attempt_target ON pronunciation_attempt(pronunciation_target_id, created_at);
 
             ALTER TABLE review_item ADD COLUMN source_pronunciation_target_id INTEGER REFERENCES pronunciation_target(id) ON DELETE SET NULL;",
+        )?;
+    }
+
+    if current_version < 7 {
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS listening_check (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                session_id INTEGER REFERENCES session(id) ON DELETE SET NULL,
+                tutor_reply TEXT NOT NULL,
+                check_type TEXT NOT NULL CHECK (check_type IN (
+                    'detail_question', 'summary_choice', 'repeat_own_words', 'detail_followup'
+                )),
+                question TEXT NOT NULL,
+                options_json TEXT,
+                correct_option_index INTEGER,
+                expected_criteria TEXT,
+                stage INTEGER NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_listening_check_session ON listening_check(session_id, created_at);
+
+            CREATE TABLE IF NOT EXISTS listening_check_attempt (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                listening_check_id INTEGER NOT NULL REFERENCES listening_check(id) ON DELETE CASCADE,
+                answer TEXT NOT NULL,
+                is_correct INTEGER NOT NULL CHECK (is_correct IN (0, 1)),
+                feedback TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_listening_check_attempt_check ON listening_check_attempt(listening_check_id);",
         )?;
     }
 
@@ -955,6 +987,119 @@ pub(crate) fn recent_unresolved_pronunciation_targets(
     rows.collect()
 }
 
+fn listening_check_type_str(check_type: ListeningCheckType) -> &'static str {
+    match check_type {
+        ListeningCheckType::DetailQuestion => "detail_question",
+        ListeningCheckType::SummaryChoice => "summary_choice",
+        ListeningCheckType::RepeatOwnWords => "repeat_own_words",
+        ListeningCheckType::DetailFollowup => "detail_followup",
+    }
+}
+
+fn parse_listening_check_type(value: &str) -> Result<ListeningCheckType, std::io::Error> {
+    match value {
+        "detail_question" => Ok(ListeningCheckType::DetailQuestion),
+        "summary_choice" => Ok(ListeningCheckType::SummaryChoice),
+        "repeat_own_words" => Ok(ListeningCheckType::RepeatOwnWords),
+        "detail_followup" => Ok(ListeningCheckType::DetailFollowup),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown listening check type: {other}"),
+        )),
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn insert_listening_check(
+    conn: &Connection,
+    session_id: Option<i64>,
+    tutor_reply: &str,
+    check_type: ListeningCheckType,
+    question: &str,
+    options_json: Option<&str>,
+    correct_option_index: Option<i64>,
+    expected_criteria: Option<&str>,
+    stage: i32,
+    now_ms: i64,
+) -> rusqlite::Result<i64> {
+    conn.execute(
+        "INSERT INTO listening_check
+            (session_id, tutor_reply, check_type, question, options_json, correct_option_index, expected_criteria, stage, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+        params![
+            session_id,
+            tutor_reply,
+            listening_check_type_str(check_type),
+            question,
+            options_json,
+            correct_option_index,
+            expected_criteria,
+            stage,
+            now_ms,
+        ],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub(crate) struct ListeningCheckCore {
+    pub(crate) tutor_reply: String,
+    pub(crate) check_type: ListeningCheckType,
+    pub(crate) question: String,
+    pub(crate) options: Vec<String>,
+    pub(crate) correct_option_index: Option<i64>,
+    pub(crate) expected_criteria: Option<String>,
+}
+
+pub(crate) fn listening_check_core(
+    conn: &Connection,
+    id: i64,
+) -> rusqlite::Result<Option<ListeningCheckCore>> {
+    conn.query_row(
+        "SELECT tutor_reply, check_type, question, options_json, correct_option_index, expected_criteria
+         FROM listening_check WHERE id = ?1",
+        params![id],
+        |row| {
+            let check_type: String = row.get(1)?;
+            let options_json: Option<String> = row.get(3)?;
+            let options = options_json
+                .as_deref()
+                .map(serde_json::from_str::<Vec<String>>)
+                .transpose()
+                .map_err(|error| {
+                    column_conversion_error(3, std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+                })?
+                .unwrap_or_default();
+            Ok(ListeningCheckCore {
+                tutor_reply: row.get(0)?,
+                check_type: parse_listening_check_type(&check_type)
+                    .map_err(|error| column_conversion_error(1, error))?,
+                question: row.get(2)?,
+                options,
+                correct_option_index: row.get(4)?,
+                expected_criteria: row.get(5)?,
+            })
+        },
+    )
+    .optional()
+}
+
+pub(crate) fn insert_listening_check_attempt(
+    conn: &Connection,
+    listening_check_id: i64,
+    answer: &str,
+    is_correct: bool,
+    feedback: &str,
+    now_ms: i64,
+) -> rusqlite::Result<i64> {
+    conn.execute(
+        "INSERT INTO listening_check_attempt
+            (listening_check_id, answer, is_correct, feedback, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![listening_check_id, answer, is_correct as i64, feedback, now_ms],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
 fn review_item_from_row(row: &rusqlite::Row) -> rusqlite::Result<review::ReviewItem> {
     let item_type: String = row.get(1)?;
     let source: String = row.get(3)?;
@@ -1250,6 +1395,7 @@ pub async fn start_session(
         session_id,
         learner_context: context.learner_context,
         due_review_items: context.due_review_items,
+        listening_profile: context.listening,
     })
 }
 
@@ -2321,6 +2467,106 @@ mod tests {
         let unresolved_after_success =
             recent_unresolved_pronunciation_targets(&conn, 10).expect("unresolved must list");
         assert!(unresolved_after_success.is_empty());
+    }
+
+    #[test]
+    fn migration_from_version_6_adds_listening_tables_without_touching_existing_data() {
+        let (_directory, path) = scratch_db();
+
+        {
+            let conn = Connection::open(&path).expect("connection must open");
+            conn.execute_batch(
+                "CREATE TABLE session (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at INTEGER NOT NULL,
+                    ended_at INTEGER NOT NULL,
+                    mode TEXT,
+                    topic TEXT
+                );
+                CREATE TABLE pronunciation_target (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    phrase TEXT NOT NULL,
+                    source TEXT NOT NULL,
+                    source_repair_event_id INTEGER,
+                    source_session_id INTEGER,
+                    review_item_id INTEGER,
+                    created_at INTEGER NOT NULL
+                );
+                INSERT INTO pronunciation_target (phrase, source, created_at)
+                    VALUES ('I walked to the store', 'session_summary', 1000);",
+            )
+            .expect("v6 pronunciation_target table must create");
+            conn.pragma_update(None, "user_version", 6)
+                .expect("version must set");
+        }
+
+        let conn = open_connection(&path).expect("connection must upgrade");
+        let version: i32 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version must read");
+        assert_eq!(version, SCHEMA_VERSION);
+
+        let phrase: String = conn
+            .query_row(
+                "SELECT phrase FROM pronunciation_target WHERE id = 1",
+                [],
+                |row| row.get(0),
+            )
+            .expect("pre-existing pronunciation_target row must survive migration");
+        assert_eq!(phrase, "I walked to the store");
+
+        let check_id = insert_listening_check(
+            &conn,
+            None,
+            "The train leaves at six.",
+            ListeningCheckType::DetailQuestion,
+            "What time does the train leave?",
+            None,
+            None,
+            Some("six o'clock / 6"),
+            0,
+            2_000,
+        )
+        .expect("listening_check must insert after migration");
+        assert!(check_id > 0);
+    }
+
+    #[test]
+    fn listening_check_and_attempt_round_trip() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+
+        let check_id = insert_listening_check(
+            &conn,
+            None,
+            "We should meet at the cafe on Elm Street around noon.",
+            ListeningCheckType::SummaryChoice,
+            "Which summary is accurate?",
+            Some(r#"["They will meet at noon.","They will meet in the evening.","They cancelled the meeting."]"#),
+            Some(0),
+            None,
+            1,
+            1_000,
+        )
+        .expect("check must insert");
+
+        let core = listening_check_core(&conn, check_id)
+            .expect("query must succeed")
+            .expect("check must exist");
+        assert_eq!(core.check_type, ListeningCheckType::SummaryChoice);
+        assert_eq!(core.options.len(), 3);
+        assert_eq!(core.correct_option_index, Some(0));
+
+        let attempt_id = insert_listening_check_attempt(
+            &conn,
+            check_id,
+            "They will meet at noon.",
+            true,
+            "Correct.",
+            1_500,
+        )
+        .expect("attempt must insert");
+        assert!(attempt_id > 0);
     }
 
     #[test]

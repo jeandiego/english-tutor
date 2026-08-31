@@ -253,7 +253,10 @@ function readyHealth() {
 beforeEach(() => {
   loadTutorSetupMock.mockResolvedValue(readyTutorSetup);
   loadTtsSetupMock.mockResolvedValue(readyTtsSetup);
-  startSessionMock.mockResolvedValue({ sessionId: 1 });
+  startSessionMock.mockResolvedValue({
+    sessionId: 1,
+    listeningProfile: { voiceGenderPref: "any", stage: 0 },
+  });
   listRecentSessionsMock.mockResolvedValue([]);
   listCorrectionCategoryCountsMock.mockResolvedValue([]);
   listRecentExpressionsMock.mockResolvedValue([]);
