@@ -1130,6 +1130,7 @@ mod tests {
                 suggestion: "I agree.".into(),
                 explanation: Some("More natural phrasing.".into()),
             }],
+            "spoken",
             2_000,
         )
         .expect("turn pair must record");
@@ -1162,6 +1163,7 @@ mod tests {
             "That's a good point.",
             &[correction(CorrectionCategory::Grammar)],
             &[],
+            "spoken",
             2_000,
         )
         .expect("turn pair must record");

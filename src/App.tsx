@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type CSSProperties } from "react";
 import { ErrorBoundary, getErrorMessage, type FallbackProps } from "react-error-boundary";
 import { AssessmentPage } from "./components/AssessmentPage";
+import { Composer } from "./components/Composer";
 import { ConversationStage } from "./components/ConversationStage";
 import { HistoryPage } from "./components/HistoryPage";
 import { ProgressPage } from "./components/ProgressPage";
@@ -14,7 +15,6 @@ import type {
   TranscriptionDiagnostic,
   TutorDiagnostic,
 } from "./components/SystemDiagnostics";
-import { TalkControl } from "./components/TalkControl";
 import { TopBar } from "./components/TopBar";
 import {
   AlertDialog,
@@ -93,6 +93,7 @@ function App() {
     saveTtsSettings,
     saveTutorSettings,
     selectTtsVoice,
+    selectTutorModel,
     settingsDirty,
     settingsDraft,
     setSettingsDraft,
@@ -274,29 +275,31 @@ function App() {
             state={conversation.state}
             thinking={conversation.thinking}
           />
-          <TalkControl
-            disabled={
-              healthState.status !== "ready" ||
-              !transcriptionReady ||
-              !tutorReady ||
-              conversation.state.status === "transcribing" ||
-              conversation.thinking ||
-              conversation.speaking
-            }
+          <Composer
+            currentModel={tutorState.status === "loaded" ? tutorState.setup.settings.modelName : undefined}
+            disabled={voiceBusy || healthState.status !== "ready" || !transcriptionReady || !tutorReady}
             disabledHint={voiceDisabledHint}
-            onEnd={(owner) => void conversation.end(owner)}
-            onStart={(owner) => void conversation.begin(owner)}
+            modelPickerDisabled={tutorState.status !== "loaded" || tutorState.saving}
+            models={tutorState.status === "loaded" ? tutorState.setup.preflight.availableModels : []}
+            onRecordEnd={(owner) => void conversation.end(owner)}
+            onRecordStart={(owner) => void conversation.begin(owner)}
+            onSelectModel={(name) => void selectTutorModel(name)}
+            onSend={(text) => conversation.sendTypedMessage(text)}
+            recordingState={conversation.state}
             speaking={conversation.speaking}
-            state={conversation.state}
             thinking={conversation.thinking}
           />
         </>
       ) : activePage === "sessions" ? (
         <SessionsPage
+          currentModel={tutorState.status === "loaded" ? tutorState.setup.settings.modelName : undefined}
           disabled={
             healthState.status !== "ready" || !transcriptionReady || !tutorReady
           }
           disabledHint={voiceDisabledHint}
+          modelPickerDisabled={tutorState.status !== "loaded" || tutorState.saving}
+          models={tutorState.status === "loaded" ? tutorState.setup.preflight.availableModels : []}
+          onSelectModel={(name) => void selectTutorModel(name)}
           repairIntensity={repairIntensity}
         />
       ) : activePage === "assessment" ? (

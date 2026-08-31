@@ -42,6 +42,7 @@ describe("ConversationDetail", () => {
           role: "user",
           text: "I want a pizza",
           timestamp: 1,
+          origin: "spoken",
           corrections: [
             {
               original: "I want a pizza",
@@ -59,6 +60,7 @@ describe("ConversationDetail", () => {
           role: "assistant",
           text: "Sure, what size?",
           timestamp: 2,
+          origin: "spoken",
           corrections: [],
           expressions: [
             { suggestion: "Coming right up!", explanation: "A more natural reply." },
@@ -76,6 +78,50 @@ describe("ConversationDetail", () => {
 
     expect(screen.getByText(/I'd like a pizza/)).toBeInTheDocument();
     expect(screen.getByText(/Coming right up!/)).toBeInTheDocument();
+  });
+
+  it("badges a typed user turn as Typed and leaves spoken turns unbadged", async () => {
+    getSessionDetailMock.mockResolvedValue({
+      ...baseDetail,
+      turns: [
+        {
+          id: 1,
+          role: "user",
+          text: "I work as software engineer since five years.",
+          timestamp: 1,
+          origin: "typed",
+          corrections: [],
+          expressions: [],
+          repairEvents: [],
+        },
+        {
+          id: 2,
+          role: "assistant",
+          text: "Nice, tell me more.",
+          timestamp: 2,
+          origin: "spoken",
+          corrections: [],
+          expressions: [],
+          repairEvents: [],
+        },
+        {
+          id: 3,
+          role: "user",
+          text: "I go to the office yesterday.",
+          timestamp: 3,
+          origin: "spoken",
+          corrections: [],
+          expressions: [],
+          repairEvents: [],
+        },
+      ],
+    });
+
+    render(<ConversationDetail onBack={vi.fn()} sessionId={1} />);
+
+    await screen.findByText("I work as software engineer since five years.");
+
+    expect(screen.getAllByText("Typed")).toHaveLength(1);
   });
 
   it("shows a not-found message when the session id does not exist", async () => {

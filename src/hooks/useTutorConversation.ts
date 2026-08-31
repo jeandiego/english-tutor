@@ -263,17 +263,8 @@ export function useTutorConversation({
     );
   }, [openingReply]);
 
-  useEffect(() => {
-    if (
-      recording.state.status !== "transcribed" ||
-      processedRecordingRef.current === recording.state.recording
-    ) {
-      return;
-    }
-
-    processedRecordingRef.current = recording.state.recording;
+  function processLearnerTurn(transcript: string, origin: "spoken" | "typed") {
     const exchangeId = nextExchangeIdRef.current++;
-    const transcript = recording.state.text;
     const isFirstLearnerTurn = firstLearnerTurnRef.current;
     firstLearnerTurnRef.current = false;
     const history = conversationHistory(exchangesRef.current).slice(
@@ -296,6 +287,7 @@ export function useTutorConversation({
         history,
         sessionId: sessionIdRef.current,
         learnerContext: learnerContextRef.current,
+        origin,
       })
       .then(async (tutorTurn) => {
         if (!mountedRef.current || requestIdRef.current !== requestId) {
@@ -572,7 +564,27 @@ export function useTutorConversation({
         );
         setThinking(false);
       });
+  }
+
+  useEffect(() => {
+    if (
+      recording.state.status !== "transcribed" ||
+      processedRecordingRef.current === recording.state.recording
+    ) {
+      return;
+    }
+
+    processedRecordingRef.current = recording.state.recording;
+    processLearnerTurn(recording.state.text, "spoken");
   }, [recording.state]);
+
+  function sendTypedMessage(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || !enabled || thinking || speaking) {
+      return;
+    }
+    processLearnerTurn(trimmed, "typed");
+  }
 
   useEffect(() => {
     const previous = previousSessionIdRef.current;
@@ -696,5 +708,6 @@ export function useTutorConversation({
     pendingReview,
     skipReview,
     liveTurnCount,
+    sendTypedMessage,
   };
 }

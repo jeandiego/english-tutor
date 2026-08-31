@@ -104,6 +104,7 @@ function TurnBubble({ turn }: { turn: SessionTurnDetail }) {
 
   return (
     <div className={cn("flex flex-col gap-2", isUser ? "items-end" : "items-start")}>
+      {isUser && turn.origin === "typed" && <Badge variant="outline">Typed</Badge>}
       <div
         className={cn(
           "max-w-[85%] rounded-[var(--radius-cards)] px-3 py-2 text-body",

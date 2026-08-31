@@ -11,6 +11,7 @@ import { DURATION_PRESETS, type DurationPresetId } from "../sessions/catalog";
 import { PACK_CATALOG } from "../sessions/loadPacks";
 import { toSessionSource, type ScenarioPack, type SessionSource } from "../types/scenarioPack";
 import type { RepairIntensity, RepairOutcome, RepairPriority } from "../types/repair";
+import type { TutorModel } from "../types/tutor";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -19,12 +20,16 @@ import { Field, FieldContent, FieldLabel } from "./ui/field";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { cn } from "../lib/utils";
+import { Composer } from "./Composer";
 import { ConversationStage, ListeningCheckCard } from "./ConversationStage";
-import { TalkControl } from "./TalkControl";
 
 type SessionsPageProps = {
+  currentModel?: string;
   disabled: boolean;
   disabledHint?: string;
+  modelPickerDisabled?: boolean;
+  models: TutorModel[];
+  onSelectModel: (modelName: string) => void;
   repairIntensity?: RepairIntensity;
 };
 
@@ -390,7 +395,15 @@ function SessionSummaryView({
   );
 }
 
-export function SessionsPage({ disabled, disabledHint, repairIntensity }: SessionsPageProps) {
+export function SessionsPage({
+  currentModel,
+  disabled,
+  disabledHint,
+  modelPickerDisabled,
+  models,
+  onSelectModel,
+  repairIntensity,
+}: SessionsPageProps) {
   const [defaultDifficulty, setDefaultDifficulty] = useState<CefrLevel | undefined>();
   const run = useSessionRun({ enabled: !disabled, repairIntensity });
 
@@ -476,13 +489,18 @@ export function SessionsPage({ disabled, disabledHint, repairIntensity }: Sessio
           {run.status === "finishing" ? (
             <ProcessingStatus label="Writing your session summary…" />
           ) : (
-            <TalkControl
+            <Composer
+              currentModel={currentModel}
               disabled={talkControlDisabled}
               disabledHint={disabledHint}
-              onEnd={(owner) => void run.conversation.end(owner)}
-              onStart={(owner) => void run.conversation.begin(owner)}
+              modelPickerDisabled={modelPickerDisabled}
+              models={models}
+              onRecordEnd={(owner) => void run.conversation.end(owner)}
+              onRecordStart={(owner) => void run.conversation.begin(owner)}
+              onSelectModel={onSelectModel}
+              onSend={(text) => run.conversation.sendTypedMessage(text)}
+              recordingState={run.conversation.state}
               speaking={run.conversation.speaking}
-              state={run.conversation.state}
               thinking={run.conversation.thinking}
             />
           )}

@@ -41,13 +41,14 @@ export type TutorTurnRequest = {
   history: TutorMessage[];
   sessionId?: number;
   learnerContext?: string;
+  origin?: "spoken" | "typed";
 };
 
 export type TutorCorrection = {
   original: string;
   correction: string;
   explanation: string;
-  category: "grammar" | "vocabulary" | "naturalness" | "clarity";
+  category: "grammar" | "vocabulary" | "naturalness" | "clarity" | "cohesion" | "register";
   severity: "minor" | "important";
 };
 

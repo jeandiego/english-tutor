@@ -1,256 +1,183 @@
 ---
-name: English Coach
-description: A calm, private rehearsal space for local spoken-English practice.
+name: Pako
+description: A warm, ink-on-parchment desktop coach for private spoken and written English practice.
 colors:
-  canvas-mist: "#f4f7fb"
-  shell-frost: "#f8fafe"
-  chrome-white: "#fbfcfe"
-  stage-white: "#ffffff"
-  deep-navy-ink: "#132238"
-  masthead-ink: "#0c1d35"
-  subtitle-ink: "#30415a"
-  muted-slate: "#617087"
-  cool-rule: "#d8e0eb"
-  frame-blue-gray: "#aec0d8"
-  signal-blue: "#1769e0"
-  signal-blue-ink: "#1559bc"
-  disabled-control: "#e9eef5"
-  disabled-ink: "#647187"
-  runtime-ready: "#277557"
-  runtime-error: "#a5363f"
-  runtime-error-ink: "#7f3138"
-  runtime-error-surface: "#fff8f8"
+  parchment: "#faf8f5"
+  ink: "#27251e"
+  soft-paper: "#fdfbfa"
+  deep-teal: "#016a71"
+  greige: "#efece4"
+  warm-fog: "#f3efe8"
+  graphite: "#66625b"
+  ash: "#7d7c76"
+  warm-mist: "#d1d1cd"
+  lilac-wash: "#f7f1ff"
+  destructive: "#a5363f"
+  success: "#3f6b52"
+  warning: "#8a5a12"
 typography:
-  display:
-    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif'
-    fontSize: "clamp(1.12rem, 2.5vw, 1.48rem)"
-    fontWeight: 680
-    letterSpacing: "-0.025em"
-  headline:
-    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif'
-    fontSize: "clamp(1.05rem, 2.2vw, 1.32rem)"
-    fontWeight: 520
-    lineHeight: 1.4
-    letterSpacing: "-0.018em"
-  title:
-    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif'
-    fontSize: "1.08rem"
-    fontWeight: 680
-    letterSpacing: "-0.02em"
+  caption:
+    fontFamily: "'Inter Variable', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "10px"
+    lineHeight: 1.25
+    letterSpacing: "0.5px"
   body:
-    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif'
-    fontSize: "0.9rem"
-    fontWeight: 560
-  label:
-    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif'
-    fontSize: "0.82rem"
-    fontWeight: 650
-  hint:
-    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif'
-    fontSize: "0.85rem"
-    fontWeight: 470
-  micro:
-    fontFamily: '-apple-system, BlinkMacSystemFont, "SF Pro Text", "Helvetica Neue", Arial, sans-serif'
-    fontSize: "0.76rem"
+    fontFamily: "'Inter Variable', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "14px"
+    lineHeight: 1.5
+  bodyLarge:
+    fontFamily: "'Inter Variable', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "16px"
+    lineHeight: 1.5
+  subheading:
+    fontFamily: "'Inter Variable', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "20px"
+    lineHeight: 1.38
+  heading:
+    fontFamily: "'Inter Variable', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "36px"
+    fontWeight: 600
+    lineHeight: 1.25
+    letterSpacing: "-0.9px"
+  display:
+    fontFamily: "'Inter Variable', ui-sans-serif, system-ui, sans-serif"
+    fontSize: "56px"
+    fontWeight: 600
+    lineHeight: 1
+    letterSpacing: "-2.8px"
 rounded:
-  status-mark: "2px"
-  detail: "8px"
-  control: "12px"
-  pill: "999px"
-  circle: "50%"
+  buttons: "6px"
+  inputs: "12px"
+  cards: "16px"
+  chips: "9999px"
 spacing:
-  control-gap: "0.28rem"
-  inline-gap: "0.5rem"
-  strip-block: "0.75rem"
-  section-gap: "1.15rem"
-  control-inline: "1.5rem"
-  stage-copy: "2rem"
-  shell-inline: "clamp(1.25rem, 3vw, 2.5rem)"
+  xs: "4px"
+  sm: "8px"
+  md: "16px"
+  lg: "24px"
 components:
-  local-status:
-    backgroundColor: "#f7faff"
-    textColor: "{colors.signal-blue-ink}"
-    typography: "{typography.label}"
-    rounded: "{rounded.pill}"
-    padding: "0.36rem 0.7rem"
-  conversation-stage:
-    backgroundColor: "{colors.stage-white}"
-    textColor: "{colors.subtitle-ink}"
-    typography: "{typography.headline}"
-    padding: "{spacing.stage-copy}"
-  talk-control-disabled:
-    backgroundColor: "{colors.disabled-control}"
-    textColor: "{colors.disabled-ink}"
-    typography: "{typography.display}"
-    rounded: "{rounded.control}"
-    padding: "1rem 1.5rem"
-  system-strip:
-    backgroundColor: "{colors.chrome-white}"
-    textColor: "{colors.deep-navy-ink}"
+  button-primary:
+    backgroundColor: "{colors.deep-teal}"
+    textColor: "{colors.parchment}"
     typography: "{typography.body}"
-    padding: "0.75rem clamp(1.25rem, 3vw, 2.5rem)"
-  error-detail:
-    backgroundColor: "{colors.runtime-error-surface}"
-    textColor: "{colors.runtime-error-ink}"
-    typography: "{typography.micro}"
-    rounded: "{rounded.detail}"
-    padding: "0.65rem 0.75rem"
+    rounded: "{rounded.buttons}"
+    padding: "6px 15px"
+  button-primary-hover:
+    backgroundColor: "{colors.deep-teal}"
+  button-outline:
+    backgroundColor: "transparent"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.buttons}"
+  badge-default:
+    backgroundColor: "{colors.deep-teal}"
+    textColor: "{colors.parchment}"
+    rounded: "{rounded.chips}"
+    padding: "2px 8px"
+  composer-input-group:
+    backgroundColor: "{colors.parchment}"
+    textColor: "{colors.ink}"
+    rounded: "{rounded.inputs}"
 ---
 
-# Design System: English Coach
+# Design System: Pako
 
 ## Overview
 
-**Creative North Star: "Subtitled rehearsal"**
+**Creative North Star: "Ink on parchment, one live signal"**
 
-English Coach should feel like a quiet place to rehearse a spoken line: cool, private, attentive, and free of generic chat-product spectacle. The visual system borrows the restraint of a subtitle-safe frame—deep ink, pale fields, precise notation, and generous calm—while keeping the product's local runtime state legible.
+Pako is a private, local-first desktop coach: a warm parchment canvas and near-black ink carry the entire reading and writing surface, and exactly one saturated color — a deep teal — marks every place the learner can act. Before this pass, that teal lived only in the sidebar's active-item highlight; every button, badge, and focus ring elsewhere rendered in plain ink-on-parchment, which read as flat and colorless even though the underlying "paper" identity was intentional. The fix was not a new palette — it was finishing the one this system already committed to: let the single existing brand accent do its job everywhere an action lives, and give muted surfaces enough tonal separation to read as a layer rather than a void.
 
-Conversation remains visually primary and coaching remains secondary. Native macOS typography, thin rules, and a small signal-blue vocabulary make the interface feel direct rather than branded for its own sake; semantic green and red appear only when runtime health requires them.
+Structurally, Pako is an Operate-mode desktop shell: a persistent sidebar (Conversation, Sessions, Assessment, History, Progress, Pronunciation, Storage, Settings) built on shadcn/ui's `base-nova` primitives over Tailwind v4, hairline borders instead of shadows, and a chat composer (`InputGroup` + textarea + toolbar) that is the product's center of gravity.
 
 **Key Characteristics:**
 
-- Cool white and blue-gray tonal layering.
-- Deep navy text with sparing signal-blue notation.
-- Subtitle-like centered conversational copy.
-- Thin rules and frame marks instead of nested cards.
-- Calm, explicit runtime feedback with reduced-motion support.
+- Warm parchment canvas and soft-paper cards; ink text at full strength, graphite and ash for secondary tiers.
+- One chromatic commitment — Deep Teal — now consistent across the sidebar's active state, every primary button, badges, links, and focus rings.
+- Flat, ruled surfaces: 1px warm-mist borders instead of drop shadows; a full-pill radius for chips/badges, 12px for inputs, 16px for cards.
+- Status color (destructive/success/warning) stays desaturated enough to sit inside the ink-on-parchment family rather than competing with the teal signal.
 
 ## Colors
 
-The palette is a restrained cool-neutral field: signal blue identifies local product state, while green and red are reserved for runtime health.
+A near-monochrome warm neutral field with a single deliberate chromatic accent; status colors are muted so they read as information, not decoration.
 
 ### Primary
-
-- **Signal Blue:** The sole brand accent, used for the local identity dot and system label.
-- **Signal Blue Ink:** A slightly deeper companion for small blue text on pale surfaces.
-
-### Tertiary
-
-- **Runtime Ready:** Confirms healthy native state; do not use it decoratively.
-- **Runtime Error:** Marks unavailable native state and error indicators.
-- **Runtime Error Ink:** Carries readable error copy and disclosure labels.
-- **Runtime Error Surface:** Provides the quietest possible warm backdrop for technical detail.
+- **Deep Teal** (`#016a71`): The system's one chromatic commitment. Fills every primary button and default badge, tints focus rings (`~40%` alpha), and marks the sidebar's active nav item — the same value in all four roles so "this is the actionable thing" reads as one consistent signal across the app. Previously confined to the sidebar alone, leaving every other primary action (the composer's send button, "New session," Settings' save actions) rendered in plain ink — indistinguishable from static text. **This was the core fix for the "looks too gray" complaint.**
 
 ### Neutral
+- **Parchment** (`#faf8f5`): Page canvas. Warm, not stark white — the system's tactile-paper base.
+- **Soft Paper** (`#fdfbfa`): Card and popover surfaces, barely lighter than the canvas.
+- **Ink** (`#27251e`): Primary text and the sidebar's own primary/foreground pairing. 14.5:1 on parchment — no contrast concern.
+- **Graphite** (`#66625b`): Secondary/muted text. Darkened from `#72706b` in this pass — the prior value cleared only 4.67:1 against the canvas and would have failed once `--muted` stopped being identical to `--background`; it now holds 5.7:1 on canvas and 5.3:1 on the new muted surface.
+- **Ash** (`#7d7c76`): The quietest text tier (meta/helper copy, currently unused by any shipped component). Darkened from `#92918b`, which cleared only 2.98:1 on the canvas — failing WCAG AA even for large text.
+- **Warm Fog** (`#f3efe8`): `--muted` surface. Previously identical to the page background (`#faf8f5`), so muted panels had zero visual separation from the canvas; now a genuine, if deliberately subtle, tonal step down, matching this system's flat/ruled character rather than introducing a shadow.
+- **Greige** (`#efece4`): `--secondary` surface. Replaced a plain cool `#ececec` that broke the otherwise warm-tinted neutral family.
+- **Warm Mist** (`#d1d1cd`): The standard 1px border/divider.
+- **Lilac Wash** (`#f7f1ff`): Menu/dropdown-item hover highlight (shadcn's built-in `accent` role) — a real, load-bearing surface, not decorative color.
 
-- **Canvas Mist:** The browser and window theme field behind the interface.
-- **Shell Frost:** The cool outer application field.
-- **Chrome White:** The subtly tinted header and diagnostics surface.
-- **Stage White:** The clearest field, reserved for conversation content.
-- **Deep Navy Ink:** Default high-contrast text.
-- **Masthead Ink:** The darkest title treatment.
-- **Subtitle Ink:** Softer primary copy for the conversation stage.
-- **Muted Slate:** Secondary diagnostics and metadata.
-- **Cool Rule:** The standard one-pixel region divider.
-- **Frame Blue-Gray:** The quieter notation color for stage corner and center marks.
-- **Disabled Control / Disabled Ink:** A paired neutral state that remains readable without pretending the action is available.
+### Tertiary
+- **Destructive** (`#a5363f`), **Success** (`#3f6b52`), **Warning** (`#8a5a12`): Desaturated enough to sit inside the ink-on-parchment family; reserved for runtime/status meaning, never used decoratively.
 
 ### Named Rules
 
-**The Signal, Not Decoration Rule.** Blue identifies local product structure; green and red report runtime truth. None of the three colors is ambient decoration.
+**The One Signal Rule.** Deep Teal is the only chromatic color used for interactive/actionable elements anywhere in the app. If a second saturated color starts appearing on buttons, links, or badges, that's drift — route new "brand" color needs back through this single value rather than adding a second accent.
 
-**The Clearest Field Rule.** Conversation content gets the cleanest white surface so it remains visually primary.
+**The Muted-Isn't-Background Rule.** `--muted` must always read as a visibly distinct step from `--background`, even subtly. Reintroducing an identical value (as shipped before this pass) silently erases surface hierarchy everywhere `bg-muted` is used.
 
 ## Typography
 
-**Display Font:** Native system sans (`-apple-system`, with SF Pro Text, Helvetica Neue, Arial, and sans-serif fallbacks)  
-**Body Font:** The same native system stack  
-**Label/Mono Font:** Labels inherit the system stack; technical code inherits the platform monospace default
+**Body Font:** Inter Variable (system sans fallback stack)
 
-**Character:** Compact native typography keeps the desktop shell familiar and low-friction. Slightly negative tracking gives large labels and centered dialogue copy the composure of subtitles without turning the interface editorial.
+**Character:** A single grotesque sans carries the whole system; hierarchy comes from size, weight, and color tier, not font-switching. Display sizes carry aggressive negative tracking (-2.8px at 56px) to keep large numerals/headings feeling compact rather than airy.
 
 ### Hierarchy
-
-- **Display:** Semibold, fluid, tightly tracked type for the main talk-control label.
-- **Headline:** Medium-weight, fluid, balanced type for the centered conversation-stage message.
-- **Title:** Compact semibold type for the product masthead.
-- **Body:** Firm, small text for the current runtime message.
-- **Label:** Compact semibold text for chips and diagnostics labels; the diagnostics heading may rise to a stronger weight.
-- **Hint:** Lighter secondary text for an action's explanatory line.
-- **Micro:** Small metadata and error-supporting copy; keep it subordinate but readable.
-
-### Named Rules
-
-**The Native Voice Rule.** Use the platform sans stack throughout; hierarchy comes from scale, weight, and placement rather than decorative font switching.
-
-**The Subtitle Restraint Rule.** Reserve centered, balanced, slightly tightened copy for the conversational voice—not for every piece of interface chrome.
+- **Display** (600, 56px, -2.8px tracking): reserved for rare large numerals/stats.
+- **Heading** (600, 36px, -0.9px tracking): page/section titles.
+- **Subheading** (400, 20px): sub-section titles.
+- **Body-lg / Body** (400, 16px / 14px): primary reading and UI copy.
+- **Caption** (400, 10px, +0.5px tracking): metadata, timestamps, chip labels.
 
 ## Layout
 
-Use a full-window grid with flexible content regions and compact fixed chrome. Spacing is fluid at the window edges and measured inside controls; major regions are separated by one-pixel rules rather than card stacks. The current shell's exact region sequence and proportions are surface-specific and remain documented in `.impeccable/surfaces/src-app-tsx.md`.
-
-At compact width or height, reduce chrome height, control padding, and frame-mark size while preserving information order. The shipped compact thresholds are `700px` width or `520px` height; at `560px` width, header and error-detail placement tighten again. Support windows down to `320px` wide without horizontal scrolling.
-
-**The Stable Topology Rule.** Responsive changes compress and wrap; they do not reorder the learner's task or hide runtime truth.
+Full-window sidebar shell (`SidebarProvider`/`SidebarInset`) with a fixed top bar and a scrollable content region per page. The chat composer is a fixed-height bar pinned under the conversation log, not a floating overlay. Comfortable density; base spacing unit 4px.
 
 ## Elevation & Depth
 
-The system is flat by default. White and blue-gray surface shifts, thin rules, and sparse markers establish hierarchy; decorative elevation is absent. A low ambient shadow appears only beneath the broad disabled control, while the technical-error detail uses a slightly warmer ambient shadow to separate temporary disclosure content from the strip below it.
+Flat by default. Region and surface separation come from the parchment → soft-paper → warm-fog tonal steps and 1px warm-mist borders, not shadows. No component in the current implementation uses `box-shadow` for structural elevation.
 
-### Shadow Vocabulary
-
-- **Disabled Control Ambient** (`0 8px 22px rgb(35 57 84 / 7%)`): A modest lift for the large control surface, even while inactive.
-- **Error Detail Ambient** (`0 8px 22px rgb(67 27 31 / 10%)`): A localized warm shadow for open technical details.
-
-### Named Rules
-
-**The Flat-by-Default Rule.** Region boundaries come from tone and one-pixel rules. Shadows belong only to a control or temporary disclosure that must separate from its immediate surface.
+**The Flat-by-Default Rule.** Reach for a tonal surface step or a hairline border before reaching for a shadow.
 
 ## Shapes
 
-Geometry is mostly square and ruled. The primary control uses a modestly rounded rectangle; small disclosure surfaces use a tighter curve, status chips use a full pill, and status indicators use circles except for the squared error mark. Conversation framing is made from open one-pixel corner and center marks rather than a closed container border.
-
-**The Open Frame Rule.** Use sparse corner or center notation when a quiet area needs definition; avoid enclosing important content in another card by default.
+- **Buttons:** 6px radius.
+- **Inputs / composer bar:** 12px radius.
+- **Cards:** 16px radius.
+- **Chips / badges:** full pill (9999px) — a deliberate, confirmed reversal of an earlier "never pill" convention.
 
 ## Components
 
-### Local Status Chip
+### Buttons
+- **Primary** (`variant="default"`): Deep Teal fill, parchment text, 6px radius. `hover:bg-primary/80` lightens toward teal, not gray.
+- **Outline / Ghost / Secondary:** transparent or greige fill, ink text — reserved for lower-commitment actions; Deep Teal never appears on more than one button per view unless they're duplicate instances of the same primary action.
+- **Destructive:** desaturated red at 10% fill, full-strength red text.
 
-- **Character:** Compact, reassuring local-identity notation rather than a promotional badge.
-- **Shape:** Full pill with a small circular signal-blue dot.
-- **Color:** Signal Blue Ink on a nearly white blue surface with a cool blue-gray border.
-- **Behavior:** Informational and noninteractive; never style it like a clickable button.
+### Chat Composer
+- **Character:** The product's center of gravity — a single bordered `InputGroup` bar (textarea on top, a toolbar row below holding the model picker, mic toggle, and send button).
+- **Send button:** Deep Teal fill (primary), full-pill icon button.
+- **Mic button:** icon-only, click-to-toggle; idle state is a plain ghost icon (no fill), recording state uses the desaturated destructive red with a pulse, matching the system's existing status-color vocabulary rather than introducing a new "recording" hue.
+- **Model picker:** dropdown trigger styled as a ghost toolbar button; the active model gets a check mark, not a color change — selection state here is communicated by icon, not hue, since Deep Teal is reserved for primary actions.
 
-### Conversation Stage
-
-- **Character:** The calmest, clearest content field in the product.
-- **Surface:** Stage White with centered Subtitle Ink copy.
-- **Framing:** Six sparse Frame Blue-Gray corner and center marks; no closed border or shadow.
-- **Type:** Balanced headline copy with a readable maximum measure.
-
-### Talk Control
-
-- **Character:** Broad, tactile, and unmistakable even when unavailable.
-- **Shape:** Gently rounded control using the system's control radius.
-- **Disabled:** Disabled Control surface, Disabled Ink label, cool border, and full opacity; pair the primary label with a lighter hint.
-- **Depth:** Use only the Disabled Control Ambient shadow documented above.
-
-### System Diagnostics
-
-- **Character:** A compact runtime ledger that explains native state without competing with conversation.
-- **Structure:** Signal-blue section label, a one-pixel divider, state mark, concise message, and optional trailing metadata or recovery detail.
-- **Checking:** Outlined circular indicator with a single rotating gap; stop animation under reduced-motion preferences.
-- **Ready:** Filled circular Runtime Ready indicator.
-- **Error:** Filled squared Runtime Error indicator with direct recovery guidance and an optional technical-details disclosure.
-
-### Error Detail
-
-- **Character:** Specific and inspectable, but visually subordinate to recovery guidance.
-- **Shape:** Tightly rounded disclosure panel with a pale warm surface and warm border.
-- **Behavior:** Position near its summary, constrain its width to the window, and allow wrapping for technical content.
+### Badges
+- **Default:** Deep Teal fill (mirrors primary buttons — a badge with `variant="default"` reads as "this is notable/primary," not merely decorative).
+- **Outline:** the neutral default for informational tags (repair priority, "Typed" origin marker) — border-only, ink text, no color.
 
 ## Do's and Don'ts
 
 ### Do:
-
-- **Do** keep conversation on the clearest surface and runtime coaching or diagnostics in subordinate chrome.
-- **Do** use thin cool-gray rules, restrained blue notation, and native system typography to establish hierarchy.
-- **Do** preserve visible checking, ready, and error states, including a nonanimated reduced-motion fallback.
-- **Do** compress spacing and wrap secondary diagnostics in compact windows without changing task order.
+- **Do** reserve Deep Teal for actionable elements (primary buttons, links, badges marked `default`, the sidebar's active state, focus rings) — never for decoration or illustration.
+- **Do** keep `--muted` and `--secondary` visibly distinct from `--background`, even if subtly, so flat/ruled surfaces still read as layered.
+- **Do** use warm-tinted neutrals (graphite, ash, warm mist) throughout; a cool/pure gray anywhere in this system reads as an inconsistency against the parchment family.
 
 ### Don't:
-
-- **Don't** introduce generic chat bubbles, AI gradients, glowing assistant effects, or ornamental brand imagery.
-- **Don't** use semantic green or red outside runtime health and recovery states.
-- **Don't** turn each region into a floating rounded card; tonal fields and rules are the default structure.
-- **Don't** promote the current surface's row composition into a system-wide template; keep surface composition in its surface brief.
+- **Don't** introduce a second saturated brand color; status colors (destructive/success/warning) stay desaturated and reserved for runtime meaning.
+- **Don't** add shadows for structural elevation — use the parchment → soft-paper → warm-fog tonal steps and hairline borders instead.
+- **Don't** let `--muted-foreground` or `--ash-foreground` drift below 4.5:1 / 3:1 contrast respectively against the surfaces they're actually used on — both were previously failing and were corrected in this pass; re-verify contrast whenever either token or its paired surface changes.

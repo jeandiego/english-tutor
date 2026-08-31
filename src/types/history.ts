@@ -69,6 +69,7 @@ export type SessionTurnDetail = {
   role: "user" | "assistant";
   text: string;
   timestamp: number;
+  origin: "spoken" | "typed";
   corrections: TutorCorrection[];
   expressions: BetterExpression[];
   repairEvents: SessionRepairEventDetail[];

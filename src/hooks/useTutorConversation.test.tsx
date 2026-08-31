@@ -1,8 +1,8 @@
 import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AudioRecorder, RecordedAudio } from "../audio/recorder";
+import { Composer } from "../components/Composer";
 import { ConversationStage } from "../components/ConversationStage";
-import { TalkControl } from "../components/TalkControl";
 import { historyKeys } from "../queryKeys/history";
 import { renderWithQueryClient } from "../test/queryTestUtils";
 import type {
@@ -105,12 +105,15 @@ function ConversationHarness({
         state={conversation.state}
         thinking={conversation.thinking}
       />
-      <TalkControl
+      <Composer
         disabled={conversation.thinking || conversation.speaking}
-        onEnd={(owner) => void conversation.end(owner)}
-        onStart={(owner) => void conversation.begin(owner)}
+        models={[]}
+        onRecordEnd={(owner) => void conversation.end(owner)}
+        onRecordStart={(owner) => void conversation.begin(owner)}
+        onSelectModel={() => {}}
+        onSend={(text) => conversation.sendTypedMessage(text)}
+        recordingState={conversation.state}
         speaking={conversation.speaking}
-        state={conversation.state}
         thinking={conversation.thinking}
       />
     </>
@@ -121,6 +124,12 @@ async function recordOneTurn() {
   fireEvent.keyDown(window, { code: "Space" });
   await screen.findByText("Listening");
   fireEvent.keyUp(window, { code: "Space" });
+}
+
+function sendTypedTurn(text: string) {
+  const textarea = screen.getByLabelText("Type a message");
+  fireEvent.change(textarea, { target: { value: text } });
+  fireEvent.keyDown(textarea, { key: "Enter" });
 }
 
 function deferred<T>() {
@@ -207,6 +216,7 @@ describe("useTutorConversation", () => {
     expect(respond).toHaveBeenCalledWith({
       transcript: "I have used React since many years.",
       history: [],
+      origin: "spoken",
     });
 
     await act(async () => {
@@ -221,7 +231,7 @@ describe("useTutorConversation", () => {
     expect(
       screen.getByText("for many years", { exact: false }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
 
     await recordOneTurn();
     await waitFor(() => expect(respond).toHaveBeenCalledTimes(2));
@@ -235,6 +245,7 @@ describe("useTutorConversation", () => {
             "That is substantial React experience. What backend area interests you?",
         },
       ],
+      origin: "spoken",
     });
     expect(
       await screen.findByText("Rust is a useful complement. What are you building?"),
@@ -264,7 +275,7 @@ describe("useTutorConversation", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Can we discuss APIs?")).toBeInTheDocument();
     expect(screen.getByText("connection refused")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
   });
 
   it("speaks only the tutor reply, keeps corrections silent, and blocks recording until speech ends", async () => {
@@ -306,7 +317,7 @@ describe("useTutorConversation", () => {
       await speech.promise;
     });
 
-    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
   });
 
   it("keeps the tutor reply visible, exposes speech errors, and becomes recoverable", async () => {
@@ -336,7 +347,116 @@ describe("useTutorConversation", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Speech unavailable")).toBeInTheDocument();
     expect(screen.getByText("exit status: 1")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
+  });
+
+  describe("typed messages", () => {
+    it("sends a typed message with origin typed and renders the tutor's reply", async () => {
+      const recorder = createRecorder();
+      const respond = vi.fn().mockResolvedValue(
+        turn("Thanks for sharing that in writing."),
+      );
+
+      renderWithQueryClient(
+        <ConversationHarness
+          recorder={recorder}
+          respond={respond}
+          transcribe={async () => ({ text: "unused" })}
+        />,
+      );
+
+      sendTypedTurn("I work as software engineer since five years.");
+
+      expect(respond).toHaveBeenCalledWith({
+        transcript: "I work as software engineer since five years.",
+        history: [],
+        origin: "typed",
+      });
+      expect(
+        await screen.findByText("Thanks for sharing that in writing."),
+      ).toBeInTheDocument();
+    });
+
+    it("does not send while the tutor is thinking or speaking", async () => {
+      const recorder = createRecorder();
+      const pending = deferred<TutorTurn>();
+      const respond = vi.fn(() => pending.promise);
+
+      renderWithQueryClient(
+        <ConversationHarness
+          recorder={recorder}
+          respond={respond}
+          transcribe={async () => ({ text: "unused" })}
+        />,
+      );
+
+      sendTypedTurn("First message.");
+      expect(respond).toHaveBeenCalledTimes(1);
+      expect(await screen.findByLabelText("Type a message")).toBeDisabled();
+
+      sendTypedTurn("Second message while thinking.");
+      expect(respond).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        pending.resolve(turn("Got the first one."));
+        await pending.promise;
+      });
+    });
+
+    it("lets a typed turn and a spoken turn coexist in history", async () => {
+      const recorder = createRecorder();
+      const respond = vi
+        .fn<(request: TutorTurnRequest) => Promise<TutorTurn>>()
+        .mockResolvedValueOnce(turn("Nice, tell me more."))
+        .mockResolvedValueOnce(turn("Got it, spoken turn received."));
+
+      renderWithQueryClient(
+        <ConversationHarness
+          recorder={recorder}
+          respond={respond}
+          transcribe={async () => ({ text: "I go to the office yesterday." })}
+        />,
+      );
+
+      sendTypedTurn("I work as software engineer since five years.");
+      await screen.findByText("Nice, tell me more.");
+
+      await recordOneTurn();
+      await screen.findByText("Got it, spoken turn received.");
+
+      expect(respond).toHaveBeenLastCalledWith({
+        transcript: "I go to the office yesterday.",
+        history: [
+          { role: "user", content: "I work as software engineer since five years." },
+          { role: "assistant", content: "Nice, tell me more." },
+        ],
+        origin: "spoken",
+      });
+    });
+
+    it("invalidates history queries after a typed turn persists with a turnId", async () => {
+      const recorder = createRecorder();
+      const respond = vi.fn().mockResolvedValue({
+        reply: "Persisted.",
+        corrections: [],
+        betterExpressions: [],
+        turnId: 42,
+      });
+
+      const { client } = renderWithQueryClient(
+        <ConversationHarness
+          recorder={recorder}
+          respond={respond}
+          sessionId={1}
+          transcribe={async () => ({ text: "unused" })}
+        />,
+      );
+      const invalidateSpy = vi.spyOn(client, "invalidateQueries");
+
+      sendTypedTurn("I work as software engineer since five years.");
+      expect(await screen.findByText("Persisted.")).toBeInTheDocument();
+      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: historyKeys.all });
+    });
   });
 
   describe("session switching", () => {
@@ -416,6 +536,7 @@ describe("useTutorConversation", () => {
         ],
         sessionId: 2,
         learnerContext: undefined,
+        origin: "spoken",
       }));
     });
 
@@ -555,7 +676,7 @@ describe("useTutorConversation", () => {
       expect(recordRepairEvent).toHaveBeenCalledWith(
         expect.objectContaining({ turnId: 1, mode: "quick", priority: "vocabulary" }),
       );
-      expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
     });
 
     it("repair mode replaces the spoken reply with the repair prompt and records an improved outcome once the retry lands", async () => {

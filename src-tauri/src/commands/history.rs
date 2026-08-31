@@ -19,7 +19,7 @@ use super::tutor::{
 };
 
 const DB_FILE_NAME: &str = "history.sqlite3";
-const SCHEMA_VERSION: i32 = 8;
+const SCHEMA_VERSION: i32 = 10;
 const ALL_TIME_CATEGORY_LIMIT: i64 = 100_000;
 const DEFAULT_LIST_LIMIT: i64 = 10;
 const MAX_LIST_LIMIT: i64 = 100;
@@ -196,6 +196,8 @@ fn category_str(category: CorrectionCategory) -> &'static str {
         CorrectionCategory::Vocabulary => "vocabulary",
         CorrectionCategory::Naturalness => "naturalness",
         CorrectionCategory::Clarity => "clarity",
+        CorrectionCategory::Cohesion => "cohesion",
+        CorrectionCategory::Register => "register",
     }
 }
 
@@ -212,6 +214,8 @@ fn parse_correction_category(value: &str) -> Result<CorrectionCategory, std::io:
         "vocabulary" => Ok(CorrectionCategory::Vocabulary),
         "naturalness" => Ok(CorrectionCategory::Naturalness),
         "clarity" => Ok(CorrectionCategory::Clarity),
+        "cohesion" => Ok(CorrectionCategory::Cohesion),
+        "register" => Ok(CorrectionCategory::Register),
         other => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             format!("unknown correction category: {other}"),
@@ -634,6 +638,34 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    if current_version < 9 {
+        conn.execute_batch(
+            "ALTER TABLE turn ADD COLUMN origin TEXT NOT NULL DEFAULT 'spoken'
+                CHECK (origin IN ('spoken', 'typed'));",
+        )?;
+    }
+
+    if current_version < 10 {
+        conn.execute_batch(
+            "CREATE TABLE correction_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                turn_id INTEGER NOT NULL REFERENCES turn(id) ON DELETE CASCADE,
+                original TEXT NOT NULL,
+                correction TEXT NOT NULL,
+                explanation TEXT NOT NULL,
+                category TEXT NOT NULL CHECK (category IN (
+                    'grammar', 'vocabulary', 'naturalness', 'clarity', 'cohesion', 'register'
+                )),
+                severity TEXT NOT NULL CHECK (severity IN ('minor', 'important'))
+            );
+            INSERT INTO correction_new SELECT * FROM correction;
+            DROP TABLE correction;
+            ALTER TABLE correction_new RENAME TO correction;
+            CREATE INDEX IF NOT EXISTS idx_correction_turn ON correction(turn_id);
+            CREATE INDEX IF NOT EXISTS idx_correction_category ON correction(category);",
+        )?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
 }
@@ -819,13 +851,14 @@ pub(crate) fn record_turn_pair(
     reply: &str,
     corrections: &[TutorCorrection],
     expressions: &[BetterExpression],
+    origin: &str,
     now_ms: i64,
 ) -> rusqlite::Result<i64> {
     let tx = conn.transaction()?;
 
     tx.execute(
-        "INSERT INTO turn (session_id, role, text, timestamp) VALUES (?1, 'user', ?2, ?3)",
-        params![session_id, transcript, now_ms],
+        "INSERT INTO turn (session_id, role, text, timestamp, origin) VALUES (?1, 'user', ?2, ?3, ?4)",
+        params![session_id, transcript, now_ms, origin],
     )?;
     let user_turn_id = tx.last_insert_rowid();
 
@@ -1540,6 +1573,7 @@ pub struct SessionTurnDetail {
     role: String,
     text: String,
     timestamp: i64,
+    origin: String,
     corrections: Vec<TutorCorrection>,
     expressions: Vec<BetterExpression>,
     repair_events: Vec<SessionRepairEventDetail>,
@@ -1572,9 +1606,9 @@ pub struct SessionDetail {
 fn turns_for_session(
     conn: &Connection,
     session_id: i64,
-) -> rusqlite::Result<Vec<(i64, String, String, i64)>> {
+) -> rusqlite::Result<Vec<(i64, String, String, i64, String)>> {
     let mut statement = conn.prepare(
-        "SELECT id, role, text, timestamp FROM turn
+        "SELECT id, role, text, timestamp, origin FROM turn
          WHERE session_id = ?1 ORDER BY timestamp ASC, id ASC",
     )?;
     let rows = statement.query_map(params![session_id], |row| {
@@ -1583,6 +1617,7 @@ fn turns_for_session(
             row.get::<_, String>(1)?,
             row.get::<_, String>(2)?,
             row.get::<_, i64>(3)?,
+            row.get::<_, String>(4)?,
         ))
     })?;
     rows.collect()
@@ -1594,13 +1629,13 @@ fn turns_for_session(
 const RESUME_RECENT_MESSAGE_LIMIT: usize = 12; // last 6 turn pairs
 
 fn recent_tutor_messages(
-    turns: &[(i64, String, String, i64)],
+    turns: &[(i64, String, String, i64, String)],
     limit: usize,
 ) -> Vec<TutorMessage> {
     let start = turns.len().saturating_sub(limit);
     turns[start..]
         .iter()
-        .filter_map(|(_, role, text, _)| {
+        .filter_map(|(_, role, text, _, _)| {
             let role = match role.as_str() {
                 "user" => Some(TutorMessageRole::User),
                 "assistant" => Some(TutorMessageRole::Assistant),
@@ -1820,11 +1855,12 @@ fn session_detail(conn: &Connection, session_id: i64) -> rusqlite::Result<Option
 
     let turns = turn_rows
         .into_iter()
-        .map(|(turn_id, role, text, timestamp)| SessionTurnDetail {
+        .map(|(turn_id, role, text, timestamp, origin)| SessionTurnDetail {
             id: turn_id,
             role,
             text,
             timestamp,
+            origin,
             corrections: corrections_by_turn.remove(&turn_id).unwrap_or_default(),
             expressions: expressions_by_turn.remove(&turn_id).unwrap_or_default(),
             repair_events: repair_events_by_turn.remove(&turn_id).unwrap_or_default(),
@@ -1879,6 +1915,7 @@ pub(crate) async fn persist_turn(
     reply: String,
     corrections: Vec<TutorCorrection>,
     expressions: Vec<BetterExpression>,
+    origin: &'static str,
 ) -> Result<i64, HistoryCommandError> {
     let path = db_path(app_handle)?;
     run_blocking(move || {
@@ -1890,6 +1927,7 @@ pub(crate) async fn persist_turn(
             &reply,
             &corrections,
             &expressions,
+            origin,
             now_ms(),
         )?;
         Ok(user_turn_id)
@@ -2690,6 +2728,22 @@ mod tests {
                     mode TEXT,
                     topic TEXT
                 );
+                CREATE TABLE turn (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+                    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+                    text TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL
+                );
+                CREATE TABLE correction (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    turn_id INTEGER NOT NULL REFERENCES turn(id) ON DELETE CASCADE,
+                    original TEXT NOT NULL,
+                    correction TEXT NOT NULL,
+                    explanation TEXT NOT NULL,
+                    category TEXT NOT NULL CHECK (category IN ('grammar', 'vocabulary', 'naturalness', 'clarity')),
+                    severity TEXT NOT NULL CHECK (severity IN ('minor', 'important'))
+                );
                 CREATE TABLE repair_event (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     turn_id INTEGER NOT NULL,
@@ -2765,6 +2819,22 @@ mod tests {
                     mode TEXT,
                     topic TEXT
                 );
+                CREATE TABLE turn (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+                    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+                    text TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL
+                );
+                CREATE TABLE correction (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    turn_id INTEGER NOT NULL REFERENCES turn(id) ON DELETE CASCADE,
+                    original TEXT NOT NULL,
+                    correction TEXT NOT NULL,
+                    explanation TEXT NOT NULL,
+                    category TEXT NOT NULL CHECK (category IN ('grammar', 'vocabulary', 'naturalness', 'clarity')),
+                    severity TEXT NOT NULL CHECK (severity IN ('minor', 'important'))
+                );
                 INSERT INTO session (started_at, ended_at) VALUES (1000, 2000);",
             )
             .expect("v2 session table must create");
@@ -2814,6 +2884,22 @@ mod tests {
                     target_turns INTEGER,
                     summary_json TEXT
                 );
+                CREATE TABLE turn (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+                    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+                    text TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL
+                );
+                CREATE TABLE correction (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    turn_id INTEGER NOT NULL REFERENCES turn(id) ON DELETE CASCADE,
+                    original TEXT NOT NULL,
+                    correction TEXT NOT NULL,
+                    explanation TEXT NOT NULL,
+                    category TEXT NOT NULL CHECK (category IN ('grammar', 'vocabulary', 'naturalness', 'clarity')),
+                    severity TEXT NOT NULL CHECK (severity IN ('minor', 'important'))
+                );
                 INSERT INTO session (started_at, ended_at) VALUES (1000, 2000);",
             )
             .expect("v7 session table must create");
@@ -2837,6 +2923,147 @@ mod tests {
             )
             .expect("pre-existing session row must survive migration");
         assert_eq!(continued_from_session_id, None);
+    }
+
+    #[test]
+    fn migration_from_version_8_adds_turn_origin_column_defaulting_existing_rows_to_spoken() {
+        let (_directory, path) = scratch_db();
+
+        let turn_id = {
+            let conn = Connection::open(&path).expect("connection must open");
+            conn.execute_batch(
+                "CREATE TABLE session (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at INTEGER NOT NULL,
+                    ended_at INTEGER NOT NULL,
+                    mode TEXT,
+                    topic TEXT,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    difficulty TEXT,
+                    target_turns INTEGER,
+                    summary_json TEXT,
+                    continued_from_session_id INTEGER
+                );
+                CREATE TABLE turn (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+                    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+                    text TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL
+                );
+                CREATE TABLE correction (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    turn_id INTEGER NOT NULL REFERENCES turn(id) ON DELETE CASCADE,
+                    original TEXT NOT NULL,
+                    correction TEXT NOT NULL,
+                    explanation TEXT NOT NULL,
+                    category TEXT NOT NULL CHECK (category IN ('grammar', 'vocabulary', 'naturalness', 'clarity')),
+                    severity TEXT NOT NULL CHECK (severity IN ('minor', 'important'))
+                );
+                INSERT INTO session (started_at, ended_at) VALUES (1000, 2000);
+                INSERT INTO turn (session_id, role, text, timestamp) VALUES (1, 'user', 'hello', 1500);",
+            )
+            .expect("v8 session/turn tables must create");
+            let turn_id = conn.last_insert_rowid();
+            conn.pragma_update(None, "user_version", 8)
+                .expect("version must set");
+            turn_id
+        };
+
+        let conn = open_connection(&path).expect("connection must upgrade");
+        let version: i32 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version must read");
+        assert_eq!(version, SCHEMA_VERSION);
+
+        let origin: String = conn
+            .query_row(
+                "SELECT origin FROM turn WHERE id = ?1",
+                params![turn_id],
+                |row| row.get(0),
+            )
+            .expect("pre-existing turn row must survive migration");
+        assert_eq!(origin, "spoken");
+    }
+
+    #[test]
+    fn migration_from_version_9_rebuilds_correction_table_with_cohesion_and_register_categories() {
+        let (_directory, path) = scratch_db();
+
+        let correction_id = {
+            let conn = Connection::open(&path).expect("connection must open");
+            conn.execute_batch(
+                "CREATE TABLE session (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at INTEGER NOT NULL,
+                    ended_at INTEGER NOT NULL,
+                    mode TEXT,
+                    topic TEXT,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    difficulty TEXT,
+                    target_turns INTEGER,
+                    summary_json TEXT,
+                    continued_from_session_id INTEGER
+                );
+                CREATE TABLE turn (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+                    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+                    text TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL,
+                    origin TEXT NOT NULL DEFAULT 'spoken' CHECK (origin IN ('spoken', 'typed'))
+                );
+                CREATE TABLE correction (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    turn_id INTEGER NOT NULL REFERENCES turn(id) ON DELETE CASCADE,
+                    original TEXT NOT NULL,
+                    correction TEXT NOT NULL,
+                    explanation TEXT NOT NULL,
+                    category TEXT NOT NULL CHECK (category IN ('grammar', 'vocabulary', 'naturalness', 'clarity')),
+                    severity TEXT NOT NULL CHECK (severity IN ('minor', 'important'))
+                );
+                CREATE INDEX idx_correction_turn ON correction(turn_id);
+                CREATE INDEX idx_correction_category ON correction(category);
+                INSERT INTO session (started_at, ended_at) VALUES (1000, 2000);
+                INSERT INTO turn (session_id, role, text, timestamp) VALUES (1, 'user', 'hello', 1500);
+                INSERT INTO correction (turn_id, original, correction, explanation, category, severity)
+                    VALUES (1, 'hi', 'hello', 'more natural greeting', 'grammar', 'minor');",
+            )
+            .expect("v9 session/turn/correction tables must create");
+            let correction_id = conn.last_insert_rowid();
+            conn.pragma_update(None, "user_version", 9)
+                .expect("version must set");
+            correction_id
+        };
+
+        let conn = open_connection(&path).expect("connection must upgrade");
+        let version: i32 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version must read");
+        assert_eq!(version, SCHEMA_VERSION);
+
+        let (original, category): (String, String) = conn
+            .query_row(
+                "SELECT original, category FROM correction WHERE id = ?1",
+                params![correction_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("pre-existing correction row must survive migration");
+        assert_eq!(original, "hi");
+        assert_eq!(category, "grammar");
+
+        conn.execute(
+            "INSERT INTO correction (turn_id, original, correction, explanation, category, severity)
+             VALUES (1, 'x', 'y', 'z', 'cohesion', 'minor')",
+            [],
+        )
+        .expect("cohesion category must now be accepted");
+        conn.execute(
+            "INSERT INTO correction (turn_id, original, correction, explanation, category, severity)
+             VALUES (1, 'x', 'y', 'z', 'register', 'minor')",
+            [],
+        )
+        .expect("register category must now be accepted");
     }
 
     #[test]
@@ -3028,6 +3255,7 @@ mod tests {
                 &format!("assistant turn {index}"),
                 &[],
                 &[],
+                "spoken",
                 2_000 + index,
             )
             .expect("turn pair must record");
@@ -3096,6 +3324,7 @@ mod tests {
                 CorrectionSeverity::Important,
             )],
             &[expression("I agree.")],
+            "typed",
             2_000,
         )
         .expect("turn pair must record");
@@ -3114,6 +3343,23 @@ mod tests {
                 |row| row.get(0),
             )
             .expect("assistant turn must exist");
+
+        let user_turn_origin: String = conn
+            .query_row(
+                "SELECT origin FROM turn WHERE id = ?1",
+                params![user_turn_id],
+                |row| row.get(0),
+            )
+            .expect("user turn origin must be readable");
+        assert_eq!(user_turn_origin, "typed");
+        let assistant_turn_origin: String = conn
+            .query_row(
+                "SELECT origin FROM turn WHERE id = ?1",
+                params![assistant_turn_id],
+                |row| row.get(0),
+            )
+            .expect("assistant turn origin must be readable");
+        assert_eq!(assistant_turn_origin, "spoken");
 
         let correction_turn_id: i64 = conn
             .query_row("SELECT turn_id FROM correction LIMIT 1", [], |row| {
@@ -3151,6 +3397,7 @@ mod tests {
             "Nice, what did you work on?",
             &[],
             &[],
+            "spoken",
             2_000,
         )
         .expect("turn pair must record");
@@ -3289,6 +3536,22 @@ mod tests {
                     mode TEXT,
                     topic TEXT
                 );
+                CREATE TABLE turn (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+                    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+                    text TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL
+                );
+                CREATE TABLE correction (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    turn_id INTEGER NOT NULL REFERENCES turn(id) ON DELETE CASCADE,
+                    original TEXT NOT NULL,
+                    correction TEXT NOT NULL,
+                    explanation TEXT NOT NULL,
+                    category TEXT NOT NULL CHECK (category IN ('grammar', 'vocabulary', 'naturalness', 'clarity')),
+                    severity TEXT NOT NULL CHECK (severity IN ('minor', 'important'))
+                );
                 CREATE TABLE pronunciation_target (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     phrase TEXT NOT NULL,
@@ -3392,6 +3655,7 @@ mod tests {
                 correction(CorrectionCategory::Clarity, CorrectionSeverity::Minor),
             ],
             &[],
+            "spoken",
             2_000,
         )
         .expect("turn pair must record");
@@ -3406,9 +3670,9 @@ mod tests {
         let (_directory, path) = scratch_db();
         let mut conn = open_connection(&path).expect("connection must open");
         let session_id = create_session(&conn, 1_000, None, None, None, None).expect("session must create");
-        record_turn_pair(&mut conn, session_id, "a", "b", &[], &[], 2_000)
+        record_turn_pair(&mut conn, session_id, "a", "b", &[], &[], "spoken", 2_000)
             .expect("first turn must record");
-        record_turn_pair(&mut conn, session_id, "c", "d", &[], &[], 3_000)
+        record_turn_pair(&mut conn, session_id, "c", "d", &[], &[], "spoken", 3_000)
             .expect("second turn must record");
 
         let sessions = recent_sessions(&conn, 10).expect("sessions must list");
@@ -3423,7 +3687,7 @@ mod tests {
         let mut conn = open_connection(&path).expect("connection must open");
         let with_turn =
             create_session(&conn, 1_000, None, None, None, None).expect("session must create");
-        record_turn_pair(&mut conn, with_turn, "hello there", "hi!", &[], &[], 2_000)
+        record_turn_pair(&mut conn, with_turn, "hello there", "hi!", &[], &[], "spoken", 2_000)
             .expect("turn pair must record");
         let without_turn =
             create_session(&conn, 500, None, None, None, None).expect("session must create");
@@ -3483,6 +3747,7 @@ mod tests {
             "first assistant turn",
             std::slice::from_ref(&first_correction),
             std::slice::from_ref(&first_expression),
+            "typed",
             2_000,
         )
         .expect("first turn pair must record");
@@ -3494,6 +3759,7 @@ mod tests {
             "second assistant turn",
             &[],
             &[],
+            "spoken",
             3_000,
         )
         .expect("second turn pair must record");
@@ -3522,6 +3788,11 @@ mod tests {
         assert_eq!(detail.turns[1].text, "first assistant turn");
         assert_eq!(detail.turns[2].text, "second user turn");
         assert_eq!(detail.turns[3].text, "second assistant turn");
+
+        assert_eq!(detail.turns[0].origin, "typed");
+        assert_eq!(detail.turns[1].origin, "spoken");
+        assert_eq!(detail.turns[2].origin, "spoken");
+        assert_eq!(detail.turns[3].origin, "spoken");
 
         assert_eq!(detail.turns[0].corrections, vec![first_correction]);
         assert!(detail.turns[1].corrections.is_empty());
@@ -3614,6 +3885,22 @@ mod tests {
                     ended_at INTEGER NOT NULL,
                     mode TEXT,
                     topic TEXT
+                );
+                CREATE TABLE turn (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    session_id INTEGER NOT NULL REFERENCES session(id) ON DELETE CASCADE,
+                    role TEXT NOT NULL CHECK (role IN ('user', 'assistant')),
+                    text TEXT NOT NULL,
+                    timestamp INTEGER NOT NULL
+                );
+                CREATE TABLE correction (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    turn_id INTEGER NOT NULL REFERENCES turn(id) ON DELETE CASCADE,
+                    original TEXT NOT NULL,
+                    correction TEXT NOT NULL,
+                    explanation TEXT NOT NULL,
+                    category TEXT NOT NULL CHECK (category IN ('grammar', 'vocabulary', 'naturalness', 'clarity')),
+                    severity TEXT NOT NULL CHECK (severity IN ('minor', 'important'))
                 );
                 INSERT INTO session (started_at, ended_at) VALUES (1000, 2000);",
             )

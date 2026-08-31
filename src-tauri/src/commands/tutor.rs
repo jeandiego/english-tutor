@@ -36,7 +36,7 @@ Always return exactly this top-level JSON object shape, using these exact field 
       "original": "the learner's wording",
       "correction": "a corrected version",
       "explanation": "a short useful reason",
-      "category": "grammar | vocabulary | naturalness | clarity",
+      "category": "grammar | vocabulary | naturalness | clarity | cohesion | register",
       "severity": "minor | important"
     }
   ],
@@ -49,6 +49,8 @@ Always return exactly this top-level JSON object shape, using these exact field 
   ]
 }
 Use empty arrays when there are no useful corrections or expressions. Never replace these fields with alternatives such as feedback, suggestion, answer, or response. The reply field is only the natural conversational response; correction explanations and better expressions belong only in their respective arrays."#;
+
+const TUTOR_WRITTEN_INPUT_INSTRUCTION: &str = r#"This turn was typed by the learner, not spoken and transcribed. Do not apply the usual leniency for punctuation, capitalization, or transcription artifacts — hold typed text to the same precision standard as normal written English. You may use the "cohesion" category for issues linking ideas/sentences together and "register" for tone/formality mismatches, in addition to grammar, vocabulary, naturalness, and clarity. Still be selective: only flag errors that matter."#;
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase")]
@@ -133,6 +135,13 @@ pub enum TutorMessageRole {
     Assistant,
 }
 
+#[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "lowercase")]
+pub enum TurnOrigin {
+    Spoken,
+    Typed,
+}
+
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TutorMessage {
@@ -155,6 +164,8 @@ pub struct TutorTurnRequest {
     session_id: Option<i64>,
     #[serde(default)]
     learner_context: Option<String>,
+    #[serde(default)]
+    origin: Option<TurnOrigin>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -164,6 +175,8 @@ pub enum CorrectionCategory {
     Vocabulary,
     Naturalness,
     Clarity,
+    Cohesion,
+    Register,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -760,7 +773,7 @@ fn response_schema() -> Value {
                         "explanation": { "type": "string", "minLength": 1 },
                         "category": {
                             "type": "string",
-                            "enum": ["grammar", "vocabulary", "naturalness", "clarity"]
+                            "enum": ["grammar", "vocabulary", "naturalness", "clarity", "cohesion", "register"]
                         },
                         "severity": {
                             "type": "string",
@@ -791,13 +804,21 @@ fn response_schema() -> Value {
 fn request_messages(
     request: TutorTurnRequest,
 ) -> Result<Vec<OllamaRequestMessage>, TutorCommandError> {
+    let origin = request.origin.unwrap_or(TurnOrigin::Spoken);
     let transcript = required_text(request.transcript, "transcript")?;
     let history_start = request.history.len().saturating_sub(MAX_HISTORY_MESSAGES);
-    let mut messages = Vec::with_capacity(request.history.len() - history_start + 3);
+    let mut messages = Vec::with_capacity(request.history.len() - history_start + 4);
     messages.push(OllamaRequestMessage {
         role: "system",
         content: TUTOR_SYSTEM_INSTRUCTION.to_string(),
     });
+
+    if origin == TurnOrigin::Typed {
+        messages.push(OllamaRequestMessage {
+            role: "system",
+            content: TUTOR_WRITTEN_INPUT_INSTRUCTION.to_string(),
+        });
+    }
 
     if let Some(learner_context) = request.learner_context {
         let learner_context = learner_context.trim().to_string();
@@ -1010,6 +1031,10 @@ pub async fn generate_tutor_turn(
     let settings = load_settings(config_path(&app_handle)?).await?;
     let session_id = request.session_id;
     let transcript = request.transcript.clone();
+    let origin = match request.origin.unwrap_or(TurnOrigin::Spoken) {
+        TurnOrigin::Spoken => "spoken",
+        TurnOrigin::Typed => "typed",
+    };
     let mut turn = generate(&settings, request).await?;
 
     if let Some(session_id) = session_id {
@@ -1020,6 +1045,7 @@ pub async fn generate_tutor_turn(
             turn.reply.clone(),
             turn.corrections.clone(),
             turn.better_expressions.clone(),
+            origin,
         )
         .await
         {
@@ -1283,6 +1309,7 @@ mod tests {
                     history,
                     session_id: None,
                     learner_context: None,
+                    origin: None,
                 },
             )
             .await
@@ -1349,6 +1376,7 @@ mod tests {
                     history: Vec::new(),
                     session_id: None,
                     learner_context: None,
+                    origin: None,
                 },
             )
             .await
@@ -1374,6 +1402,7 @@ mod tests {
             history: Vec::new(),
             session_id: None,
             learner_context: None,
+            origin: None,
         })
         .expect("messages must build");
         assert_eq!(without_context.len(), 2);
@@ -1386,6 +1415,7 @@ mod tests {
             history: Vec::new(),
             session_id: None,
             learner_context: Some("   ".into()),
+            origin: None,
         })
         .expect("messages must build");
         assert_eq!(with_blank_context.len(), 2);
@@ -1397,12 +1427,54 @@ mod tests {
             learner_context: Some(
                 "The learner has recently repeated mistakes involving grammar.".into(),
             ),
+            origin: None,
         })
         .expect("messages must build");
         assert_eq!(with_context.len(), 3);
         assert_eq!(with_context[1].role, "system");
         assert!(with_context[1].content.contains("grammar"));
         assert_eq!(with_context[2].role, "user");
+    }
+
+    #[test]
+    fn request_messages_adds_written_input_instruction_only_for_typed_origin() {
+        let spoken = request_messages(TutorTurnRequest {
+            transcript: "Hello".into(),
+            history: Vec::new(),
+            session_id: None,
+            learner_context: None,
+            origin: Some(TurnOrigin::Spoken),
+        })
+        .expect("messages must build");
+        assert_eq!(spoken.len(), 2);
+        assert!(!spoken.iter().any(|message| message.content == TUTOR_WRITTEN_INPUT_INSTRUCTION));
+
+        let typed = request_messages(TutorTurnRequest {
+            transcript: "Hello".into(),
+            history: Vec::new(),
+            session_id: None,
+            learner_context: None,
+            origin: Some(TurnOrigin::Typed),
+        })
+        .expect("messages must build");
+        assert_eq!(typed.len(), 3);
+        assert_eq!(typed[1].role, "system");
+        assert_eq!(typed[1].content, TUTOR_WRITTEN_INPUT_INSTRUCTION);
+        assert_eq!(typed[2].role, "user");
+    }
+
+    #[test]
+    fn response_schema_category_enum_includes_cohesion_and_register() {
+        let schema = response_schema();
+        let category_enum = schema["properties"]["corrections"]["items"]["properties"]["category"]["enum"]
+            .as_array()
+            .expect("category enum must be an array");
+        let categories: Vec<&str> = category_enum
+            .iter()
+            .map(|value| value.as_str().expect("category values must be strings"))
+            .collect();
+        assert!(categories.contains(&"cohesion"));
+        assert!(categories.contains(&"register"));
     }
 
     #[test]
@@ -1466,6 +1538,7 @@ mod tests {
                     history: Vec::new(),
                     session_id: None,
                     learner_context: None,
+                    origin: None,
                 },
             )
             .await

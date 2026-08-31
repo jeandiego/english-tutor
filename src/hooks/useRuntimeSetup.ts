@@ -249,6 +249,22 @@ export function useRuntimeSetup() {
     }
   };
 
+  const selectTutorModel = async (modelName: string) => {
+    if (tutorState.status !== "loaded") {
+      return;
+    }
+    try {
+      const setup = await tutorMutation.mutateAsync({
+        ...tutorState.setup.settings,
+        modelName,
+      });
+      queryClient.setQueryData(runtimeKeys.tutorSetup(), setup);
+      setTutorSettingsDraft(setup.settings);
+    } catch {
+      // surfaced via tutorState.saveError
+    }
+  };
+
   const transcriptionReady =
     transcriptionState.status === "loaded" &&
     !transcriptionState.saving &&
@@ -303,6 +319,7 @@ export function useRuntimeSetup() {
     saveTtsSettings: saveTtsSettingsAction,
     saveTutorSettings,
     selectTtsVoice,
+    selectTutorModel,
     settingsDirty,
     settingsDraft,
     setSettingsDraft,

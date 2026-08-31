@@ -88,18 +88,26 @@
     --card-foreground: #27251e;
     --popover: #fdfbfa;
     --popover-foreground: #27251e;
-    --primary: #27251e; /* Ink */
+    --primary: #016a71; /* Deep Teal — was Ink; the sidebar's "one chromatic accent"
+                            promoted to the system-wide primary-action color, since
+                            an all-ink primary left every button/CTA colorless */
     --primary-foreground: #faf8f5; /* Parchment */
-    --secondary: #ececec;
+    --secondary: #efece4; /* warm-tinted greige, replacing a cool #ececec that
+                              broke the warm ink-on-paper family */
     --secondary-foreground: #27251e;
-    --muted: #faf8f5;
-    --muted-foreground: #72706b; /* Graphite — dominant secondary */
-    --ash-foreground: #92918b; /* Ash — more muted still, e.g. meta/helper text */
-    --accent: #f7f1ff; /* lilac-wash — kept defined but unused for now */
+    --muted: #f3efe8; /* was identical to --background (#faf8f5), so muted
+                          surfaces had zero separation from the page */
+    --muted-foreground: #66625b; /* darkened from #72706b to keep 4.5:1+ AA
+                                     contrast against the now-visible --muted */
+    --ash-foreground: #7d7c76; /* was #92918b at 2.98:1 on background, failing
+                                   AA even for large text; darkened to ~3.9:1 */
+    --accent: #f7f1ff; /* lilac-wash — menu/item hover highlight (shadcn's
+                           built-in accent role), not decorative */
     --accent-foreground: #27251e;
     --border: #d1d1cd; /* Warm Mist */
     --input: #d1d1cd;
-    --ring: #27251e40; /* Ink, 25% */
+    --ring: #016a7166; /* Deep Teal, ~40% alpha — focus rings now read as the
+                           same accent as primary actions, not plain ink */
 
     /* Status — desaturated to sit inside the ink-on-cream family, distinct
        from the doc's bright syntax-highlight colors (which are reserved for
