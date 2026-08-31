@@ -254,7 +254,7 @@ function App() {
           }
         />
       ) : activePage === "history" ? (
-        <HistoryPage focusSessionId={focusSessionId} />
+        <HistoryPage focusSessionId={focusSessionId} onSelectSession={setFocusSessionId} />
       ) : activePage === "progress" ? (
         <ProgressPage />
       ) : activePage === "pronunciation" ? (

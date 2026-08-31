@@ -1,5 +1,4 @@
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
 import {
   listCorrectionCategoryCounts,
   listRecentExpressions,
@@ -8,39 +7,24 @@ import {
 } from "../native/history";
 import { listRecentReviewEvents } from "../native/review";
 import { historyKeys } from "../queryKeys/history";
+import { conversationTitleFor } from "../sessions/conversationTitle";
 import { scenarioLabelFor } from "../sessions/loadPacks";
 import type {
   CategoryCount,
   ExpressionSummary,
   SessionSummary,
 } from "../types/history";
-import type { RepairOutcome, RepairPriority } from "../types/repair";
 import type { ReviewEventSummary, ReviewItemType, ReviewOutcome } from "../types/review";
 import { Badge } from "./ui/badge";
 import { Card, CardContent, CardHeader } from "./ui/card";
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
-import { cn } from "../lib/utils";
+import { ConversationDetail } from "./ConversationDetail";
+import { SessionSummaryDetail } from "./SessionSummaryDetail";
 
 const CATEGORY_LABELS: Record<string, string> = {
   grammar: "Grammar",
   vocabulary: "Vocabulary",
   naturalness: "Naturalness",
   clarity: "Clarity",
-};
-
-const REPAIR_PRIORITY_LABELS: Record<RepairPriority, string> = {
-  grammar: "Grammar",
-  vocabulary: "Vocabulary",
-  pronunciation: "Pronunciation",
-  fluency: "Fluency",
-  coherence: "Coherence",
-  pragmatics: "Pragmatics",
-};
-
-const REPAIR_OUTCOME_LABELS: Record<RepairOutcome, string> = {
-  improved: "Fixed",
-  failed: "Still tricky",
-  skipped: "Skipped",
 };
 
 const REVIEW_TYPE_LABELS: Record<ReviewItemType, string> = {
@@ -93,71 +77,12 @@ function HistorySection({ title, children }: { title: string; children: React.Re
   );
 }
 
-function SummaryList({ heading, items }: { heading: string; items: string[] }) {
-  if (items.length === 0) {
-    return null;
-  }
-  return (
-    <div className="flex flex-col gap-1">
-      <h4 className="text-caption font-medium text-muted-foreground">{heading}</h4>
-      <ul className="flex flex-col gap-0.5 text-body text-foreground">
-        {items.map((item, index) => (
-          <li key={index}>{item}</li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function SessionSummaryDetail({ session }: { session: SessionSummary }) {
-  const [expanded, setExpanded] = useState(false);
-  const summary = session.summary;
-
-  if (!summary) {
-    return null;
-  }
-
-  return (
-    <Collapsible onOpenChange={setExpanded} open={expanded}>
-      <CollapsibleTrigger
-        aria-expanded={expanded}
-        className="text-caption font-medium text-primary hover:underline"
-      >
-        {expanded ? "Hide summary" : "Show summary"}
-      </CollapsibleTrigger>
-      <CollapsibleContent className="mt-2 flex flex-col gap-3">
-        <SummaryList heading="What went well" items={summary.whatWentWell} />
-        <SummaryList heading="Priorities" items={summary.priorityIssues} />
-        <SummaryList
-          heading="Review later"
-          items={summary.reviewItems.map((item) => item.content)}
-        />
-        {summary.repairEvents.length > 0 && (
-          <div className="flex flex-col gap-1">
-            <h4 className="text-caption font-medium text-muted-foreground">
-              Repair practice
-            </h4>
-            <ul className="flex flex-col gap-0.5 text-body text-foreground">
-              {summary.repairEvents.map((event, index) => (
-                <li key={index}>
-                  {REPAIR_PRIORITY_LABELS[event.priority]}: {event.issue}
-                  {event.outcome && <> — {REPAIR_OUTCOME_LABELS[event.outcome]}</>}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-      </CollapsibleContent>
-    </Collapsible>
-  );
-}
-
 function SessionList({
   sessions,
-  focusSessionId,
+  onSelectSession,
 }: {
   sessions: SessionSummary[];
-  focusSessionId?: number;
+  onSelectSession: (sessionId: number) => void;
 }) {
   if (sessions.length === 0) {
     return <p className="text-body text-muted-foreground">No sessions yet.</p>;
@@ -165,32 +90,36 @@ function SessionList({
 
   return (
     <ul className="flex flex-col divide-y divide-border">
-      {sessions.map((session) => (
-        <li
-          className={cn(
-            "flex flex-col gap-2 py-3 first:pt-0 last:pb-0",
-            session.id === focusSessionId && "-mx-2 rounded-lg px-2 ring-2 ring-primary",
-          )}
-          id={`history-session-${session.id}`}
-          key={session.id}
-        >
-          <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
-            <span className="text-body font-medium text-foreground">
-              {scenarioLabelFor(session.mode)}
-            </span>
-            <span className="text-caption text-muted-foreground">
-              {formatSessionDate(session.startedAt)}
-            </span>
-            <span className="text-caption text-muted-foreground">
-              {session.turnCount} {session.turnCount === 1 ? "turn" : "turns"}
-            </span>
-            {session.status !== "active" && (
-              <Badge variant="outline">{session.status}</Badge>
-            )}
-          </div>
-          <SessionSummaryDetail session={session} />
-        </li>
-      ))}
+      {sessions.map((session) => {
+        const title = conversationTitleFor(session);
+        const scenario = scenarioLabelFor(session.mode);
+        return (
+          <li className="py-3 first:pt-0 last:pb-0" key={session.id}>
+            <button
+              className="flex w-full flex-col gap-2 rounded-lg text-left focus-visible:outline-2 focus-visible:outline-ring"
+              onClick={() => onSelectSession(session.id)}
+              type="button"
+            >
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                <span className="text-body font-medium text-foreground">{title}</span>
+                {scenario !== title && (
+                  <span className="text-caption text-muted-foreground">{scenario}</span>
+                )}
+                <span className="text-caption text-muted-foreground">
+                  {formatSessionDate(session.startedAt)}
+                </span>
+                <span className="text-caption text-muted-foreground">
+                  {session.turnCount} {session.turnCount === 1 ? "turn" : "turns"}
+                </span>
+                {session.status !== "active" && (
+                  <Badge variant="outline">{session.status}</Badge>
+                )}
+              </div>
+            </button>
+            <SessionSummaryDetail summary={session.summary} />
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -262,20 +191,26 @@ function ExpressionList({ expressions }: { expressions: ExpressionSummary[] }) {
   );
 }
 
-export function HistoryPage({ focusSessionId }: { focusSessionId?: number } = {}) {
+export function HistoryPage({
+  focusSessionId,
+  onSelectSession = () => {},
+}: {
+  focusSessionId?: number;
+  onSelectSession?: (sessionId: number | undefined) => void;
+} = {}) {
   const query = useQuery({
     queryKey: historyKeys.recent(10),
     queryFn: loadHistoryData,
   });
 
-  useEffect(() => {
-    if (focusSessionId === undefined || !query.data) {
-      return;
-    }
-    document
-      .getElementById(`history-session-${focusSessionId}`)
-      ?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [focusSessionId, query.data]);
+  if (focusSessionId !== undefined) {
+    return (
+      <ConversationDetail
+        onBack={() => onSelectSession(undefined)}
+        sessionId={focusSessionId}
+      />
+    );
+  }
 
   return (
     <section aria-labelledby="history-title" className="min-h-0 flex-1 overflow-y-auto">
@@ -294,7 +229,7 @@ export function HistoryPage({ focusSessionId }: { focusSessionId?: number } = {}
       {query.data && (
         <div className="flex flex-col gap-6">
           <HistorySection title="Recent sessions">
-            <SessionList focusSessionId={focusSessionId} sessions={query.data.sessions} />
+            <SessionList onSelectSession={onSelectSession} sessions={query.data.sessions} />
           </HistorySection>
           <HistorySection title="Recurring patterns">
             <CategoryList categories={query.data.categories} />

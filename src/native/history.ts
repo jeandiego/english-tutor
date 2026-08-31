@@ -3,6 +3,7 @@ import type {
   CategoryCount,
   CompleteSessionRequest,
   ExpressionSummary,
+  SessionDetail,
   SessionStart,
   SessionSummary,
   StartSessionRequest,
@@ -75,6 +76,18 @@ export async function listRecentSessions(
 ): Promise<SessionSummary[]> {
   try {
     return await invoke<SessionSummary[]>("list_recent_sessions", { limit });
+  } catch (error) {
+    throw toHistoryError(error);
+  }
+}
+
+export async function getSessionDetail(
+  sessionId: number,
+): Promise<SessionDetail | null> {
+  try {
+    return await invoke<SessionDetail | null>("get_session_detail", {
+      sessionId,
+    });
   } catch (error) {
     throw toHistoryError(error);
   }

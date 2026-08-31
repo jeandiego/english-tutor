@@ -34,7 +34,10 @@ import {
 } from "../SystemDiagnostics";
 import { listRecentSessions } from "../../native/history";
 import { historyKeys } from "../../queryKeys/history";
+import { conversationTitleFor } from "../../sessions/conversationTitle";
 import { scenarioLabelFor } from "../../sessions/loadPacks";
+import { relativeTimeFor } from "../../lib/relativeTime";
+import type { SessionSummary } from "../../types/history";
 import type { HealthState } from "../../types/runtime";
 import type { TtsProviderId, TtsSetupState } from "../../types/tts";
 import { VoiceSwitcher } from "./VoiceSwitcher";
@@ -66,6 +69,17 @@ const NAV_ITEMS: {
 ];
 
 const RECENT_CONVERSATIONS_LIMIT = 8;
+
+function recentConversationSubtitle(session: SessionSummary, title: string): string {
+  const scenario = scenarioLabelFor(session.mode);
+  const parts = [scenario === title ? undefined : scenario, relativeTimeFor(session.startedAt)].filter(
+    (part): part is string => part !== undefined,
+  );
+  if (session.turnCount > 0) {
+    parts.push(`${session.turnCount} ${session.turnCount === 1 ? "turn" : "turns"}`);
+  }
+  return parts.join(" · ");
+}
 
 type AppSidebarProps = {
   activePage: AppPage;
@@ -175,17 +189,35 @@ export function AppSidebar({
                 </SidebarMenuItem>
               )}
 
-              {recentSessionsQuery.data?.map((session) => (
-                <SidebarMenuItem key={session.id}>
-                  <SidebarMenuButton
-                    onClick={() => onOpenSession(session.id)}
-                    tooltip={scenarioLabelFor(session.mode)}
-                  >
-                    <IconMessage />
-                    <span>{scenarioLabelFor(session.mode)}</span>
-                  </SidebarMenuButton>
-                </SidebarMenuItem>
-              ))}
+              {recentSessionsQuery.data?.map((session) => {
+                const title = conversationTitleFor(session);
+                const subtitle = recentConversationSubtitle(session, title);
+                return (
+                  <SidebarMenuItem key={session.id}>
+                    <SidebarMenuButton
+                      onClick={() => onOpenSession(session.id)}
+                      size="lg"
+                      tooltip={`${title} — ${subtitle}`}
+                    >
+                      <IconMessage />
+                      <div className="flex min-w-0 flex-col gap-0.5">
+                        <span className="truncate">{title}</span>
+                        <span className="truncate text-caption text-muted-foreground">
+                          {subtitle}
+                        </span>
+                      </div>
+                    </SidebarMenuButton>
+                    {session.status !== "completed" && (
+                      <SidebarMenuBadge>
+                        <span
+                          aria-hidden="true"
+                          className="block size-1.5 rounded-full bg-warning"
+                        />
+                      </SidebarMenuBadge>
+                    )}
+                  </SidebarMenuItem>
+                );
+              })}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

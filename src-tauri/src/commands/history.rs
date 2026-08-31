@@ -138,6 +138,8 @@ pub struct SessionSummary {
     difficulty: Option<CefrLevel>,
     #[serde(skip_serializing_if = "Option::is_none")]
     summary: Option<super::session::SessionSummaryPayload>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    first_user_turn: Option<String>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq, Eq)]
@@ -178,6 +180,30 @@ fn severity_str(severity: CorrectionSeverity) -> &'static str {
     match severity {
         CorrectionSeverity::Minor => "minor",
         CorrectionSeverity::Important => "important",
+    }
+}
+
+fn parse_correction_category(value: &str) -> Result<CorrectionCategory, std::io::Error> {
+    match value {
+        "grammar" => Ok(CorrectionCategory::Grammar),
+        "vocabulary" => Ok(CorrectionCategory::Vocabulary),
+        "naturalness" => Ok(CorrectionCategory::Naturalness),
+        "clarity" => Ok(CorrectionCategory::Clarity),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown correction category: {other}"),
+        )),
+    }
+}
+
+fn parse_correction_severity(value: &str) -> Result<CorrectionSeverity, std::io::Error> {
+    match value {
+        "minor" => Ok(CorrectionSeverity::Minor),
+        "important" => Ok(CorrectionSeverity::Important),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown correction severity: {other}"),
+        )),
     }
 }
 
@@ -227,6 +253,42 @@ fn parse_repair_priority(value: &str) -> Result<RepairPriority, std::io::Error> 
         other => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             format!("unknown repair priority: {other}"),
+        )),
+    }
+}
+
+fn parse_repair_mode(value: &str) -> Result<RepairMode, std::io::Error> {
+    match value {
+        "implicit" => Ok(RepairMode::Implicit),
+        "quick" => Ok(RepairMode::Quick),
+        "repair" => Ok(RepairMode::Repair),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown repair mode: {other}"),
+        )),
+    }
+}
+
+fn parse_repair_outcome(value: &str) -> Result<RepairOutcome, std::io::Error> {
+    match value {
+        "improved" => Ok(RepairOutcome::Improved),
+        "failed" => Ok(RepairOutcome::Failed),
+        "skipped" => Ok(RepairOutcome::Skipped),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown repair outcome: {other}"),
+        )),
+    }
+}
+
+fn parse_repair_intensity(value: &str) -> Result<RepairIntensity, std::io::Error> {
+    match value {
+        "light" => Ok(RepairIntensity::Light),
+        "balanced" => Ok(RepairIntensity::Balanced),
+        "strict" => Ok(RepairIntensity::Strict),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown repair intensity: {other}"),
         )),
     }
 }
@@ -1257,6 +1319,7 @@ fn session_summary_from_row(row: &rusqlite::Row) -> rusqlite::Result<SessionSumm
             .map_err(|error| {
                 column_conversion_error(8, std::io::Error::new(std::io::ErrorKind::InvalidData, error))
             })?,
+        first_user_turn: row.get(9)?,
     })
 }
 
@@ -1264,7 +1327,9 @@ fn recent_sessions(conn: &Connection, limit: i64) -> rusqlite::Result<Vec<Sessio
     let mut statement = conn.prepare(
         "SELECT s.id, s.started_at, s.ended_at, s.mode, s.topic,
                 (SELECT COUNT(*) FROM turn t WHERE t.session_id = s.id AND t.role = 'user') AS turn_count,
-                s.status, s.difficulty, s.summary_json
+                s.status, s.difficulty, s.summary_json,
+                (SELECT t.text FROM turn t WHERE t.session_id = s.id AND t.role = 'user'
+                 ORDER BY t.timestamp ASC, t.id ASC LIMIT 1) AS first_user_turn
          FROM session s
          ORDER BY s.started_at DESC
          LIMIT ?1",
@@ -1316,6 +1381,303 @@ pub(crate) fn recent_expressions(
         })
     })?;
     rows.collect()
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionRepairEventDetail {
+    id: i64,
+    priority: RepairPriority,
+    issue: String,
+    original: String,
+    suggested: String,
+    micro_explanation: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    repair_prompt: Option<String>,
+    mode: RepairMode,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    outcome: Option<RepairOutcome>,
+    intensity: RepairIntensity,
+    created_at: i64,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionTurnDetail {
+    id: i64,
+    role: String,
+    text: String,
+    timestamp: i64,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    corrections: Vec<TutorCorrection>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    expressions: Vec<BetterExpression>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    repair_events: Vec<SessionRepairEventDetail>,
+}
+
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct SessionDetail {
+    id: i64,
+    started_at: i64,
+    ended_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    mode: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    topic: Option<String>,
+    status: SessionRunStatus,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    difficulty: Option<CefrLevel>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    target_turns: Option<i64>,
+    turns: Vec<SessionTurnDetail>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    review_events: Vec<review::ReviewEventSummary>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    summary: Option<super::session::SessionSummaryPayload>,
+}
+
+#[allow(clippy::type_complexity)]
+fn turns_for_session(
+    conn: &Connection,
+    session_id: i64,
+) -> rusqlite::Result<Vec<(i64, String, String, i64)>> {
+    let mut statement = conn.prepare(
+        "SELECT id, role, text, timestamp FROM turn
+         WHERE session_id = ?1 ORDER BY timestamp ASC, id ASC",
+    )?;
+    let rows = statement.query_map(params![session_id], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, i64>(3)?,
+        ))
+    })?;
+    rows.collect()
+}
+
+fn corrections_for_session(
+    conn: &Connection,
+    session_id: i64,
+) -> rusqlite::Result<Vec<(i64, TutorCorrection)>> {
+    let mut statement = conn.prepare(
+        "SELECT c.turn_id, c.original, c.correction, c.explanation, c.category, c.severity
+         FROM correction c
+         JOIN turn t ON t.id = c.turn_id
+         WHERE t.session_id = ?1
+         ORDER BY t.timestamp ASC, t.id ASC, c.id ASC",
+    )?;
+    let rows = statement.query_map(params![session_id], |row| {
+        let category: String = row.get(4)?;
+        let severity: String = row.get(5)?;
+        Ok((
+            row.get::<_, i64>(0)?,
+            TutorCorrection {
+                original: row.get(1)?,
+                correction: row.get(2)?,
+                explanation: row.get(3)?,
+                category: parse_correction_category(&category)
+                    .map_err(|error| column_conversion_error(4, error))?,
+                severity: parse_correction_severity(&severity)
+                    .map_err(|error| column_conversion_error(5, error))?,
+            },
+        ))
+    })?;
+    rows.collect()
+}
+
+fn expressions_for_session(
+    conn: &Connection,
+    session_id: i64,
+) -> rusqlite::Result<Vec<(i64, BetterExpression)>> {
+    let mut statement = conn.prepare(
+        "SELECT e.turn_id, e.original, e.suggestion, e.explanation
+         FROM expression e
+         JOIN turn t ON t.id = e.turn_id
+         WHERE t.session_id = ?1
+         ORDER BY t.timestamp ASC, t.id ASC, e.id ASC",
+    )?;
+    let rows = statement.query_map(params![session_id], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            BetterExpression {
+                original: row.get(1)?,
+                suggestion: row.get(2)?,
+                explanation: row.get(3)?,
+            },
+        ))
+    })?;
+    rows.collect()
+}
+
+fn repair_events_for_session(
+    conn: &Connection,
+    session_id: i64,
+) -> rusqlite::Result<Vec<(i64, SessionRepairEventDetail)>> {
+    let mut statement = conn.prepare(
+        "SELECT r.turn_id, r.id, r.priority, r.issue, r.original, r.suggested,
+                r.micro_explanation, r.repair_prompt, r.mode, r.outcome, r.intensity, r.created_at
+         FROM repair_event r
+         JOIN turn t ON t.id = r.turn_id
+         WHERE t.session_id = ?1
+         ORDER BY t.timestamp ASC, t.id ASC, r.id ASC",
+    )?;
+    let rows = statement.query_map(params![session_id], |row| {
+        let priority: String = row.get(2)?;
+        let mode: String = row.get(8)?;
+        let outcome: Option<String> = row.get(9)?;
+        let intensity: String = row.get(10)?;
+        Ok((
+            row.get::<_, i64>(0)?,
+            SessionRepairEventDetail {
+                id: row.get(1)?,
+                priority: parse_repair_priority(&priority)
+                    .map_err(|error| column_conversion_error(2, error))?,
+                issue: row.get(3)?,
+                original: row.get(4)?,
+                suggested: row.get(5)?,
+                micro_explanation: row.get(6)?,
+                repair_prompt: row.get(7)?,
+                mode: parse_repair_mode(&mode).map_err(|error| column_conversion_error(8, error))?,
+                outcome: outcome
+                    .map(|value| parse_repair_outcome(&value))
+                    .transpose()
+                    .map_err(|error| column_conversion_error(9, error))?,
+                intensity: parse_repair_intensity(&intensity)
+                    .map_err(|error| column_conversion_error(10, error))?,
+                created_at: row.get(11)?,
+            },
+        ))
+    })?;
+    rows.collect()
+}
+
+fn review_events_for_session(
+    conn: &Connection,
+    session_id: i64,
+) -> rusqlite::Result<Vec<review::ReviewEventSummary>> {
+    let mut statement = conn.prepare(
+        "SELECT re.review_item_id, ri.type, ri.content, re.outcome, re.session_id, re.created_at
+         FROM review_event re
+         JOIN review_item ri ON ri.id = re.review_item_id
+         WHERE re.session_id = ?1
+         ORDER BY re.created_at ASC",
+    )?;
+    let rows = statement.query_map(params![session_id], |row| {
+        let item_type: String = row.get(1)?;
+        let outcome: String = row.get(3)?;
+        Ok(review::ReviewEventSummary {
+            review_item_id: row.get(0)?,
+            item_type: parse_review_item_type(&item_type)
+                .map_err(|error| column_conversion_error(1, error))?,
+            content: row.get(2)?,
+            outcome: parse_review_outcome(&outcome)
+                .map_err(|error| column_conversion_error(3, error))?,
+            session_id: row.get(4)?,
+            created_at: row.get(5)?,
+        })
+    })?;
+    rows.collect()
+}
+
+#[allow(clippy::type_complexity)]
+fn session_detail(conn: &Connection, session_id: i64) -> rusqlite::Result<Option<SessionDetail>> {
+    let session_row: Option<(
+        i64,
+        i64,
+        i64,
+        Option<String>,
+        Option<String>,
+        String,
+        Option<String>,
+        Option<i64>,
+        Option<String>,
+    )> = conn
+        .query_row(
+            "SELECT id, started_at, ended_at, mode, topic, status, difficulty, target_turns, summary_json
+             FROM session WHERE id = ?1",
+            params![session_id],
+            |row| {
+                Ok((
+                    row.get(0)?,
+                    row.get(1)?,
+                    row.get(2)?,
+                    row.get(3)?,
+                    row.get(4)?,
+                    row.get(5)?,
+                    row.get(6)?,
+                    row.get(7)?,
+                    row.get(8)?,
+                ))
+            },
+        )
+        .optional()?;
+
+    let Some((id, started_at, ended_at, mode, topic, status_str, difficulty_str, target_turns, summary_json)) =
+        session_row
+    else {
+        return Ok(None);
+    };
+
+    let status = parse_session_run_status(&status_str).map_err(|error| column_conversion_error(5, error))?;
+    let difficulty = difficulty_str
+        .map(|value| parse_cefr_level(&value))
+        .transpose()
+        .map_err(|error| column_conversion_error(6, error))?;
+    let summary = summary_json
+        .map(|value| serde_json::from_str(&value))
+        .transpose()
+        .map_err(|error| {
+            column_conversion_error(8, std::io::Error::new(std::io::ErrorKind::InvalidData, error))
+        })?;
+
+    let turn_rows = turns_for_session(conn, id)?;
+    let mut corrections_by_turn: std::collections::HashMap<i64, Vec<TutorCorrection>> =
+        std::collections::HashMap::new();
+    for (turn_id, correction) in corrections_for_session(conn, id)? {
+        corrections_by_turn.entry(turn_id).or_default().push(correction);
+    }
+    let mut expressions_by_turn: std::collections::HashMap<i64, Vec<BetterExpression>> =
+        std::collections::HashMap::new();
+    for (turn_id, expression) in expressions_for_session(conn, id)? {
+        expressions_by_turn.entry(turn_id).or_default().push(expression);
+    }
+    let mut repair_events_by_turn: std::collections::HashMap<i64, Vec<SessionRepairEventDetail>> =
+        std::collections::HashMap::new();
+    for (turn_id, repair_event) in repair_events_for_session(conn, id)? {
+        repair_events_by_turn.entry(turn_id).or_default().push(repair_event);
+    }
+
+    let turns = turn_rows
+        .into_iter()
+        .map(|(turn_id, role, text, timestamp)| SessionTurnDetail {
+            id: turn_id,
+            role,
+            text,
+            timestamp,
+            corrections: corrections_by_turn.remove(&turn_id).unwrap_or_default(),
+            expressions: expressions_by_turn.remove(&turn_id).unwrap_or_default(),
+            repair_events: repair_events_by_turn.remove(&turn_id).unwrap_or_default(),
+        })
+        .collect();
+
+    let review_events = review_events_for_session(conn, id)?;
+
+    Ok(Some(SessionDetail {
+        id,
+        started_at,
+        ended_at,
+        mode,
+        topic,
+        status,
+        difficulty,
+        target_turns,
+        turns,
+        review_events,
+        summary,
+    }))
 }
 
 fn clamp_limit(limit: Option<u32>) -> i64 {
@@ -1473,6 +1835,15 @@ pub async fn list_recent_sessions(
         Ok(recent_sessions(&conn, limit)?)
     })
     .await
+}
+
+#[tauri::command]
+pub async fn get_session_detail(
+    app_handle: AppHandle,
+    session_id: i64,
+) -> Result<Option<SessionDetail>, HistoryCommandError> {
+    let path = db_path(&app_handle)?;
+    run_blocking(move || Ok(session_detail(&open_connection(&path)?, session_id)?)).await
 }
 
 #[tauri::command]
@@ -2609,6 +2980,170 @@ mod tests {
         assert_eq!(sessions.len(), 1);
         assert_eq!(sessions[0].turn_count, 2);
         assert_eq!(sessions[0].ended_at, 3_000);
+    }
+
+    #[test]
+    fn recent_sessions_includes_first_user_turn() {
+        let (_directory, path) = scratch_db();
+        let mut conn = open_connection(&path).expect("connection must open");
+        let with_turn =
+            create_session(&conn, 1_000, None, None, None, None).expect("session must create");
+        record_turn_pair(&mut conn, with_turn, "hello there", "hi!", &[], &[], 2_000)
+            .expect("turn pair must record");
+        let without_turn =
+            create_session(&conn, 500, None, None, None, None).expect("session must create");
+
+        let sessions = recent_sessions(&conn, 10).expect("sessions must list");
+        let with_turn_summary = sessions.iter().find(|s| s.id == with_turn).unwrap();
+        let without_turn_summary = sessions.iter().find(|s| s.id == without_turn).unwrap();
+        assert_eq!(with_turn_summary.first_user_turn.as_deref(), Some("hello there"));
+        assert_eq!(without_turn_summary.first_user_turn, None);
+    }
+
+    #[test]
+    fn session_detail_returns_none_for_missing_session() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+        assert_eq!(session_detail(&conn, 999).expect("query must succeed"), None);
+    }
+
+    #[test]
+    fn session_detail_handles_session_with_no_turns_and_no_summary() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+        let session_id =
+            create_session(&conn, 1_000, None, None, None, None).expect("session must create");
+
+        let detail = session_detail(&conn, session_id)
+            .expect("query must succeed")
+            .expect("session must be found");
+        assert_eq!(detail.status, SessionRunStatus::Active);
+        assert!(detail.turns.is_empty());
+        assert!(detail.review_events.is_empty());
+        assert_eq!(detail.summary, None);
+    }
+
+    #[test]
+    fn session_detail_includes_turns_corrections_expressions_repair_events_in_order() {
+        let (_directory, path) = scratch_db();
+        let mut conn = open_connection(&path).expect("connection must open");
+        let session_id =
+            create_session(&conn, 1_000, None, None, None, None).expect("session must create");
+
+        let first_correction = correction(CorrectionCategory::Grammar, CorrectionSeverity::Minor);
+        let first_expression = expression("I agree");
+        let first_user_turn_id = record_turn_pair(
+            &mut conn,
+            session_id,
+            "first user turn",
+            "first assistant turn",
+            std::slice::from_ref(&first_correction),
+            std::slice::from_ref(&first_expression),
+            2_000,
+        )
+        .expect("first turn pair must record");
+
+        record_turn_pair(
+            &mut conn,
+            session_id,
+            "second user turn",
+            "second assistant turn",
+            &[],
+            &[],
+            3_000,
+        )
+        .expect("second turn pair must record");
+
+        insert_repair_event(
+            &conn,
+            first_user_turn_id,
+            RepairPriority::Grammar,
+            "issue",
+            "original",
+            "suggested",
+            "micro explanation",
+            None,
+            RepairMode::Quick,
+            RepairIntensity::Balanced,
+            2_500,
+        )
+        .expect("repair event must insert");
+
+        let detail = session_detail(&conn, session_id)
+            .expect("query must succeed")
+            .expect("session must be found");
+
+        assert_eq!(detail.turns.len(), 4);
+        assert_eq!(detail.turns[0].text, "first user turn");
+        assert_eq!(detail.turns[1].text, "first assistant turn");
+        assert_eq!(detail.turns[2].text, "second user turn");
+        assert_eq!(detail.turns[3].text, "second assistant turn");
+
+        assert_eq!(detail.turns[0].corrections, vec![first_correction]);
+        assert!(detail.turns[1].corrections.is_empty());
+        assert_eq!(detail.turns[1].expressions, vec![first_expression]);
+        assert!(detail.turns[0].expressions.is_empty());
+
+        assert_eq!(detail.turns[0].repair_events.len(), 1);
+        assert_eq!(detail.turns[0].repair_events[0].issue, "issue");
+        assert_eq!(detail.turns[0].repair_events[0].outcome, None);
+        assert!(detail.turns[2].repair_events.is_empty());
+    }
+
+    #[test]
+    fn session_detail_includes_review_events_and_summary_json() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+        let session_id =
+            create_session(&conn, 1_000, None, None, None, None).expect("session must create");
+
+        let summary = super::super::session::SessionSummaryPayload {
+            what_went_well: vec!["Good pacing".into()],
+            priority_issues: vec![],
+            alternative_phrases: vec![],
+            review_items: vec![],
+            repair_events: vec![],
+        };
+        let summary_json = serde_json::to_string(&summary).expect("summary must serialize");
+        complete_session_run(
+            &conn,
+            session_id,
+            SessionRunStatus::Completed,
+            Some(&summary_json),
+            4_000,
+        )
+        .expect("session must complete");
+
+        let review_item_id = insert_review_item(
+            &conn,
+            ReviewItemType::Vocabulary,
+            "a phrase to review",
+            ReviewSource::SessionSummary,
+            None,
+            Some(session_id),
+            None,
+            None,
+            4_000,
+        )
+        .expect("review item must insert");
+        record_review_event_and_reschedule(
+            &conn,
+            review_item_id,
+            Some(session_id),
+            ReviewOutcome::Remembered,
+            5_000,
+        )
+        .expect("review event must record");
+
+        let detail = session_detail(&conn, session_id)
+            .expect("query must succeed")
+            .expect("session must be found");
+
+        assert_eq!(detail.status, SessionRunStatus::Completed);
+        assert_eq!(detail.summary, Some(summary));
+        assert_eq!(detail.review_events.len(), 1);
+        assert_eq!(detail.review_events[0].review_item_id, review_item_id);
+        assert_eq!(detail.review_events[0].outcome, ReviewOutcome::Remembered);
     }
 
     #[test]

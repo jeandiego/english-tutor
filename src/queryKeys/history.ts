@@ -4,4 +4,5 @@ export const historyKeys = {
   recent: (limit: number) => [...historyKeys.all, "recent", limit] as const,
   recentSessions: (limit: number) =>
     [...historyKeys.all, "recentSessions", limit] as const,
+  detail: (sessionId: number) => [...historyKeys.all, "detail", sessionId] as const,
 };

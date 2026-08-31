@@ -20,6 +20,7 @@ pub fn run() {
             commands::history::start_session,
             commands::history::complete_session,
             commands::history::list_recent_sessions,
+            commands::history::get_session_detail,
             commands::history::list_correction_category_counts,
             commands::history::list_recent_expressions,
             commands::learner_profile::get_learner_profile,

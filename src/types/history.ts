@@ -1,7 +1,9 @@
 import type { CefrLevel } from "./assessment";
 import type { ListeningProfile } from "./listening";
 import type { SessionRunStatus, SessionSummaryPayload } from "./session";
-import type { ReviewItem } from "./review";
+import type { ReviewItem, ReviewEventSummary } from "./review";
+import type { BetterExpression, TutorCorrection } from "./tutor";
+import type { RepairIntensity, RepairMode, RepairOutcome, RepairPriority } from "./repair";
 
 export type StartSessionRequest = {
   scenarioId?: string;
@@ -27,6 +29,7 @@ export type SessionSummary = {
   status: SessionRunStatus;
   difficulty?: CefrLevel;
   summary?: SessionSummaryPayload;
+  firstUserTurn?: string;
 };
 
 export type CompleteSessionRequest = {
@@ -45,4 +48,42 @@ export type ExpressionSummary = {
   suggestion: string;
   explanation?: string;
   timestamp: number;
+};
+
+export type SessionRepairEventDetail = {
+  id: number;
+  priority: RepairPriority;
+  issue: string;
+  original: string;
+  suggested: string;
+  microExplanation: string;
+  repairPrompt?: string;
+  mode: RepairMode;
+  outcome?: RepairOutcome;
+  intensity: RepairIntensity;
+  createdAt: number;
+};
+
+export type SessionTurnDetail = {
+  id: number;
+  role: "user" | "assistant";
+  text: string;
+  timestamp: number;
+  corrections: TutorCorrection[];
+  expressions: BetterExpression[];
+  repairEvents: SessionRepairEventDetail[];
+};
+
+export type SessionDetail = {
+  id: number;
+  startedAt: number;
+  endedAt: number;
+  mode?: string;
+  topic?: string;
+  status: SessionRunStatus;
+  difficulty?: CefrLevel;
+  targetTurns?: number;
+  turns: SessionTurnDetail[];
+  reviewEvents: ReviewEventSummary[];
+  summary?: SessionSummaryPayload;
 };

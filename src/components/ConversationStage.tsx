@@ -241,7 +241,7 @@ export function ConversationStage(props: ConversationStageProps) {
   return <ConversationStageContent {...props} />;
 }
 
-function Corrections({ corrections }: { corrections: TutorCorrection[] }) {
+export function Corrections({ corrections }: { corrections: TutorCorrection[] }) {
   if (corrections.length === 0) {
     return null;
   }
@@ -271,7 +271,7 @@ function Corrections({ corrections }: { corrections: TutorCorrection[] }) {
   );
 }
 
-function BetterExpressions({ expressions }: { expressions: BetterExpression[] }) {
+export function BetterExpressions({ expressions }: { expressions: BetterExpression[] }) {
   if (expressions.length === 0) {
     return null;
   }

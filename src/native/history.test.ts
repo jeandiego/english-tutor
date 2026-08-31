@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   HistoryError,
   completeSession,
+  getSessionDetail,
   listCorrectionCategoryCounts,
   listRecentExpressions,
   listRecentSessions,
@@ -67,6 +68,22 @@ describe("native history service", () => {
     expect(invokeMock).toHaveBeenNthCalledWith(3, "list_recent_expressions", {
       limit: 5,
     });
+  });
+
+  it("fetches session detail by id", async () => {
+    const detail = { id: 7, turns: [] };
+    invokeMock.mockResolvedValue(detail);
+
+    await expect(getSessionDetail(7)).resolves.toBe(detail);
+    expect(invokeMock).toHaveBeenCalledWith("get_session_detail", {
+      sessionId: 7,
+    });
+  });
+
+  it("resolves session detail to null when the session is missing", async () => {
+    invokeMock.mockResolvedValue(null);
+
+    await expect(getSessionDetail(999)).resolves.toBeNull();
   });
 
   it("maps structured native failures to HistoryError", async () => {

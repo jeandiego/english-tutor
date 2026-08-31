@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useRef, useState } from "react";
+import { historyKeys } from "../queryKeys/history";
 import { learnerProfileKeys } from "../queryKeys/learnerProfile";
 import type { CefrLevel } from "../types/assessment";
 import type { SessionStart } from "../types/history";
@@ -239,6 +240,7 @@ export function useSessionRun({
       return;
     }
     engine.sessionId = started.sessionId;
+    void queryClient.invalidateQueries({ queryKey: historyKeys.all });
 
     try {
       const ttsSetup = await loadTtsSetup();
@@ -360,6 +362,7 @@ export function useSessionRun({
     if (engineRef.current !== engine || !mountedRef.current) {
       return;
     }
+    void queryClient.invalidateQueries({ queryKey: historyKeys.all });
 
     try {
       await applySessionToLearnerProfile({
@@ -386,6 +389,7 @@ export function useSessionRun({
     }
     try {
       await completeSession({ sessionId: engine.sessionId, status: "abandoned" });
+      void queryClient.invalidateQueries({ queryKey: historyKeys.all });
     } catch {
       // Best-effort — returning to the catalog shouldn't be blocked by this.
     }
