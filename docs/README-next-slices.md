@@ -60,6 +60,60 @@ listening com sotaques graduais
 revisão espaçada
 ```
 
+## Próximo bloco: conversa retomável e output C1
+
+Depois do slice `16`, o diagnóstico muda: o app já é forte em conversa oral, listening,
+repair e revisão. O próximo bloco deve corrigir o gargalo real do usuário:
+
+```text
+reading C2 + listening C1
+writing B1 + speaking B1
+```
+
+Isso significa priorizar histórico retomável, produção escrita, vocabulário produtivo e
+uso ativo de leitura.
+
+## Ordem recomendada para o próximo bloco
+
+10. `17-recent-conversations.md`
+11. `18-resumable-conversations.md`
+12. `19-typed-chat-and-writing-input.md`
+13. `20-writing-gym-c1-foundation.md`
+14. `21-productive-vocabulary-chunk-bank.md`
+15. `22-reading-to-writing-sessions.md`
+
+## Milestone de continuidade
+
+Ao final do slice `18`, a sidebar deve deixar de parecer um placeholder:
+
+```text
+conversa feita
+   ↓
+aparece em Recent conversations
+   ↓
+abre transcript e feedback
+   ↓
+pode ser continuada com contexto
+```
+
+## Milestone de output produtivo
+
+Ao final do slice `22`, o produto deve atacar diretamente o gap B1 em writing/speaking:
+
+```text
+texto ou conversa
+   ↓
+chunks úteis
+   ↓
+produção escrita/falada
+   ↓
+feedback seletivo
+   ↓
+rewrite ou repair
+   ↓
+revisão espaçada
+```
+
 ## Regras para o coding LLM
 
 - Execute apenas um slice por vez.
@@ -85,4 +139,3 @@ Cada nova feature deve reforçar pelo menos um destes mecanismos:
 - repetição de tarefas com variação;
 - revisão espaçada;
 - progressão mensurável.
-
