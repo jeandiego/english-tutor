@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 
 use super::assessment::{cefr_level_str, competency_label, AssessmentCompetency, CefrLevel};
+use super::chunk::{self, ChunkCandidateInput, ChunkOrigin, ExerciseType, LexicalChunkType, Modality, ProductiveStatus};
 use super::listening::ListeningCheckType;
 use super::pronunciation::{self, PronunciationProblemCategory, PronunciationTargetSource};
 use super::repair::{RepairIntensity, RepairMode, RepairOutcome, RepairPriority};
@@ -23,7 +24,7 @@ use super::tutor::{
 };
 
 const DB_FILE_NAME: &str = "history.sqlite3";
-const SCHEMA_VERSION: i32 = 11;
+const SCHEMA_VERSION: i32 = 12;
 const ALL_TIME_CATEGORY_LIMIT: i64 = 100_000;
 const DEFAULT_LIST_LIMIT: i64 = 10;
 const MAX_LIST_LIMIT: i64 = 100;
@@ -354,6 +355,7 @@ fn review_source_str(source: ReviewSource) -> &'static str {
         ReviewSource::SessionSummary => "session_summary",
         ReviewSource::AssessmentPriority => "assessment_priority",
         ReviewSource::WritingTask => "writing_task",
+        ReviewSource::Chunk => "chunk",
     }
 }
 
@@ -363,6 +365,7 @@ fn parse_review_source(value: &str) -> Result<ReviewSource, std::io::Error> {
         "session_summary" => Ok(ReviewSource::SessionSummary),
         "assessment_priority" => Ok(ReviewSource::AssessmentPriority),
         "writing_task" => Ok(ReviewSource::WritingTask),
+        "chunk" => Ok(ReviewSource::Chunk),
         other => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             format!("unknown review source: {other}"),
@@ -843,6 +846,96 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    if current_version < 12 {
+        conn.execute_batch(
+            "CREATE TABLE lexical_chunk (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chunk_type TEXT NOT NULL CHECK (chunk_type IN (
+                    'single_word', 'collocation', 'phrase', 'discourse_marker',
+                    'hedging_expression', 'stance_phrase', 'register_specific_expression',
+                    'domain_specific_expression'
+                )),
+                text TEXT NOT NULL,
+                normalized_text TEXT NOT NULL UNIQUE,
+                meaning TEXT NOT NULL,
+                register TEXT NOT NULL,
+                target_level TEXT NOT NULL CHECK (target_level IN ('A1','A2','B1','B2','C1','C2')),
+                domain TEXT,
+                examples_json TEXT NOT NULL,
+                common_error TEXT,
+                origin TEXT NOT NULL CHECK (origin IN (
+                    'correction', 'better_expression', 'repair_event', 'writing_task', 'manual'
+                )),
+                source_correction_id INTEGER REFERENCES correction(id) ON DELETE SET NULL,
+                source_expression_id INTEGER REFERENCES expression(id) ON DELETE SET NULL,
+                source_repair_event_id INTEGER REFERENCES repair_event(id) ON DELETE SET NULL,
+                source_writing_evaluation_id INTEGER REFERENCES writing_evaluation(id) ON DELETE SET NULL,
+                productive_status TEXT NOT NULL DEFAULT 'not_tried' CHECK (productive_status IN (
+                    'not_tried', 'recognized', 'used_with_help', 'used_independently', 'automatic'
+                )),
+                review_item_id INTEGER REFERENCES review_item(id) ON DELETE SET NULL,
+                last_used_at INTEGER,
+                created_at INTEGER NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_lexical_chunk_normalized_text ON lexical_chunk(normalized_text);
+            CREATE INDEX IF NOT EXISTS idx_lexical_chunk_status ON lexical_chunk(productive_status);
+
+            CREATE TABLE lexical_chunk_attempt (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                lexical_chunk_id INTEGER NOT NULL REFERENCES lexical_chunk(id) ON DELETE CASCADE,
+                exercise_type TEXT NOT NULL CHECK (exercise_type IN (
+                    'use_in_sentence', 'complete_response', 'rewrite_sentence',
+                    'spoken_response', 'mini_paragraph'
+                )),
+                modality TEXT NOT NULL CHECK (modality IN ('written', 'spoken')),
+                prompt TEXT NOT NULL,
+                transcript TEXT NOT NULL,
+                outcome TEXT NOT NULL CHECK (outcome IN ('remembered', 'partially_remembered', 'missed', 'skipped')),
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_lexical_chunk_attempt_chunk ON lexical_chunk_attempt(lexical_chunk_id, created_at);
+
+            PRAGMA foreign_keys = OFF;
+
+            CREATE TABLE review_item_v12 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL CHECK (type IN (
+                    'grammar_pattern', 'vocabulary', 'phrase', 'pronunciation_target', 'conversation_strategy'
+                )),
+                content TEXT NOT NULL,
+                source TEXT NOT NULL CHECK (source IN (
+                    'repair_event', 'session_summary', 'assessment_priority', 'writing_task', 'chunk'
+                )),
+                source_repair_event_id INTEGER REFERENCES repair_event(id) ON DELETE SET NULL,
+                source_session_id INTEGER REFERENCES session(id) ON DELETE SET NULL,
+                source_assessment_id INTEGER REFERENCES assessment(id) ON DELETE SET NULL,
+                source_pronunciation_target_id INTEGER REFERENCES pronunciation_target(id) ON DELETE SET NULL,
+                source_writing_task_id INTEGER REFERENCES writing_task(id) ON DELETE SET NULL,
+                source_chunk_id INTEGER REFERENCES lexical_chunk(id) ON DELETE SET NULL,
+                stage INTEGER NOT NULL DEFAULT 0 CHECK (stage BETWEEN 0 AND 5),
+                next_review_at INTEGER NOT NULL,
+                last_reviewed_at INTEGER,
+                review_count INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL
+            );
+            INSERT INTO review_item_v12
+                (id, type, content, source, source_repair_event_id, source_session_id, source_assessment_id,
+                 source_pronunciation_target_id, source_writing_task_id, source_chunk_id, stage, next_review_at,
+                 last_reviewed_at, review_count, created_at)
+            SELECT
+                id, type, content, source, source_repair_event_id, source_session_id, source_assessment_id,
+                source_pronunciation_target_id, source_writing_task_id, NULL, stage, next_review_at,
+                last_reviewed_at, review_count, created_at
+            FROM review_item;
+            DROP TABLE review_item;
+            ALTER TABLE review_item_v12 RENAME TO review_item;
+            CREATE INDEX IF NOT EXISTS idx_review_item_next_review_at ON review_item(next_review_at);
+            CREATE INDEX IF NOT EXISTS idx_review_item_type ON review_item(type);
+
+            PRAGMA foreign_keys = ON;",
+        )?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
 }
@@ -1058,6 +1151,38 @@ pub(crate) fn record_turn_pair(
                 severity_str(correction.severity),
             ],
         )?;
+        let correction_id = tx.last_insert_rowid();
+
+        // Only categories that name a reusable expression (not a one-off
+        // grammar/cohesion slip) become chunk candidates — see the slice's
+        // plan for why grammar/cohesion are excluded.
+        if matches!(
+            correction.category,
+            CorrectionCategory::Vocabulary
+                | CorrectionCategory::Naturalness
+                | CorrectionCategory::Clarity
+                | CorrectionCategory::Register
+        ) {
+            create_chunk_candidate(
+                &tx,
+                ChunkCandidateInput {
+                    chunk_type: chunk::infer_chunk_type(&correction.correction),
+                    text: &correction.correction,
+                    meaning: &correction.explanation,
+                    register: "neutral",
+                    target_level: CefrLevel::C1,
+                    domain: None,
+                    examples: std::slice::from_ref(&correction.correction),
+                    common_error: Some(&correction.original),
+                    origin: ChunkOrigin::Correction,
+                    source_correction_id: Some(correction_id),
+                    source_expression_id: None,
+                    source_repair_event_id: None,
+                    source_writing_evaluation_id: None,
+                },
+                now_ms,
+            )?;
+        }
     }
 
     for expression in expressions {
@@ -1070,6 +1195,31 @@ pub(crate) fn record_turn_pair(
                 &expression.suggestion,
                 &expression.explanation,
             ],
+        )?;
+        let expression_id = tx.last_insert_rowid();
+
+        let meaning = expression
+            .explanation
+            .clone()
+            .unwrap_or_else(|| "A more natural way to say this.".to_string());
+        create_chunk_candidate(
+            &tx,
+            ChunkCandidateInput {
+                chunk_type: chunk::infer_chunk_type(&expression.suggestion),
+                text: &expression.suggestion,
+                meaning: &meaning,
+                register: "neutral",
+                target_level: CefrLevel::C1,
+                domain: None,
+                examples: std::slice::from_ref(&expression.suggestion),
+                common_error: expression.original.as_deref(),
+                origin: ChunkOrigin::BetterExpression,
+                source_correction_id: None,
+                source_expression_id: Some(expression_id),
+                source_repair_event_id: None,
+                source_writing_evaluation_id: None,
+            },
+            now_ms,
         )?;
     }
 
@@ -1190,14 +1340,15 @@ pub(crate) fn insert_review_item(
     source_assessment_id: Option<i64>,
     source_pronunciation_target_id: Option<i64>,
     source_writing_task_id: Option<i64>,
+    source_chunk_id: Option<i64>,
     now_ms: i64,
 ) -> rusqlite::Result<i64> {
     conn.execute(
         "INSERT INTO review_item
             (type, content, source, source_repair_event_id, source_session_id, source_assessment_id,
-             source_pronunciation_target_id, source_writing_task_id, stage, next_review_at, last_reviewed_at,
-             review_count, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9, NULL, 0, ?9)",
+             source_pronunciation_target_id, source_writing_task_id, source_chunk_id, stage, next_review_at,
+             last_reviewed_at, review_count, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10, NULL, 0, ?10)",
         params![
             review_item_type_str(item_type),
             content,
@@ -1207,10 +1358,364 @@ pub(crate) fn insert_review_item(
             source_assessment_id,
             source_pronunciation_target_id,
             source_writing_task_id,
+            source_chunk_id,
             now_ms,
         ],
     )?;
     Ok(conn.last_insert_rowid())
+}
+
+// ---------------------------------------------------------------------
+// Lexical chunk persistence (productive vocabulary chunk bank)
+// ---------------------------------------------------------------------
+
+fn lexical_chunk_type_str(chunk_type: LexicalChunkType) -> &'static str {
+    match chunk_type {
+        LexicalChunkType::SingleWord => "single_word",
+        LexicalChunkType::Collocation => "collocation",
+        LexicalChunkType::Phrase => "phrase",
+        LexicalChunkType::DiscourseMarker => "discourse_marker",
+        LexicalChunkType::HedgingExpression => "hedging_expression",
+        LexicalChunkType::StancePhrase => "stance_phrase",
+        LexicalChunkType::RegisterSpecificExpression => "register_specific_expression",
+        LexicalChunkType::DomainSpecificExpression => "domain_specific_expression",
+    }
+}
+
+fn parse_lexical_chunk_type(value: &str) -> Result<LexicalChunkType, std::io::Error> {
+    match value {
+        "single_word" => Ok(LexicalChunkType::SingleWord),
+        "collocation" => Ok(LexicalChunkType::Collocation),
+        "phrase" => Ok(LexicalChunkType::Phrase),
+        "discourse_marker" => Ok(LexicalChunkType::DiscourseMarker),
+        "hedging_expression" => Ok(LexicalChunkType::HedgingExpression),
+        "stance_phrase" => Ok(LexicalChunkType::StancePhrase),
+        "register_specific_expression" => Ok(LexicalChunkType::RegisterSpecificExpression),
+        "domain_specific_expression" => Ok(LexicalChunkType::DomainSpecificExpression),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown lexical chunk type: {other}"),
+        )),
+    }
+}
+
+fn chunk_origin_str(origin: ChunkOrigin) -> &'static str {
+    match origin {
+        ChunkOrigin::Correction => "correction",
+        ChunkOrigin::BetterExpression => "better_expression",
+        ChunkOrigin::RepairEvent => "repair_event",
+        ChunkOrigin::WritingTask => "writing_task",
+        ChunkOrigin::Manual => "manual",
+    }
+}
+
+fn parse_chunk_origin(value: &str) -> Result<ChunkOrigin, std::io::Error> {
+    match value {
+        "correction" => Ok(ChunkOrigin::Correction),
+        "better_expression" => Ok(ChunkOrigin::BetterExpression),
+        "repair_event" => Ok(ChunkOrigin::RepairEvent),
+        "writing_task" => Ok(ChunkOrigin::WritingTask),
+        "manual" => Ok(ChunkOrigin::Manual),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown chunk origin: {other}"),
+        )),
+    }
+}
+
+fn productive_status_str(status: ProductiveStatus) -> &'static str {
+    match status {
+        ProductiveStatus::NotTried => "not_tried",
+        ProductiveStatus::Recognized => "recognized",
+        ProductiveStatus::UsedWithHelp => "used_with_help",
+        ProductiveStatus::UsedIndependently => "used_independently",
+        ProductiveStatus::Automatic => "automatic",
+    }
+}
+
+fn parse_productive_status(value: &str) -> Result<ProductiveStatus, std::io::Error> {
+    match value {
+        "not_tried" => Ok(ProductiveStatus::NotTried),
+        "recognized" => Ok(ProductiveStatus::Recognized),
+        "used_with_help" => Ok(ProductiveStatus::UsedWithHelp),
+        "used_independently" => Ok(ProductiveStatus::UsedIndependently),
+        "automatic" => Ok(ProductiveStatus::Automatic),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown productive status: {other}"),
+        )),
+    }
+}
+
+fn exercise_type_str(exercise_type: ExerciseType) -> &'static str {
+    match exercise_type {
+        ExerciseType::UseInSentence => "use_in_sentence",
+        ExerciseType::CompleteResponse => "complete_response",
+        ExerciseType::RewriteSentence => "rewrite_sentence",
+        ExerciseType::SpokenResponse => "spoken_response",
+        ExerciseType::MiniParagraph => "mini_paragraph",
+    }
+}
+
+fn modality_str(modality: Modality) -> &'static str {
+    match modality {
+        Modality::Written => "written",
+        Modality::Spoken => "spoken",
+    }
+}
+
+const LEXICAL_CHUNK_COLUMNS: &str = "id, chunk_type, text, meaning, register, target_level, domain, \
+     examples_json, common_error, origin, productive_status, review_item_id, last_used_at, created_at";
+
+fn lexical_chunk_from_row(row: &rusqlite::Row) -> rusqlite::Result<chunk::LexicalChunk> {
+    let chunk_type: String = row.get(1)?;
+    let target_level: String = row.get(5)?;
+    let examples_json: String = row.get(7)?;
+    let origin: String = row.get(9)?;
+    let productive_status: String = row.get(10)?;
+    let review_item_id: Option<i64> = row.get(11)?;
+    let examples: Vec<String> = serde_json::from_str(&examples_json).unwrap_or_default();
+    Ok(chunk::LexicalChunk {
+        id: row.get(0)?,
+        chunk_type: parse_lexical_chunk_type(&chunk_type).map_err(|error| column_conversion_error(1, error))?,
+        text: row.get(2)?,
+        meaning: row.get(3)?,
+        register: row.get(4)?,
+        target_level: parse_cefr_level(&target_level).map_err(|error| column_conversion_error(5, error))?,
+        domain: row.get(6)?,
+        examples,
+        common_error: row.get(8)?,
+        origin: parse_chunk_origin(&origin).map_err(|error| column_conversion_error(9, error))?,
+        productive_status: parse_productive_status(&productive_status)
+            .map_err(|error| column_conversion_error(10, error))?,
+        is_promoted: review_item_id.is_some(),
+        last_used_at: row.get(12)?,
+        created_at: row.get(13)?,
+    })
+}
+
+pub(crate) fn lexical_chunk_by_id(
+    conn: &Connection,
+    chunk_id: i64,
+) -> rusqlite::Result<Option<chunk::LexicalChunk>> {
+    conn.query_row(
+        &format!("SELECT {LEXICAL_CHUNK_COLUMNS} FROM lexical_chunk WHERE id = ?1"),
+        params![chunk_id],
+        lexical_chunk_from_row,
+    )
+    .optional()
+}
+
+pub(crate) fn find_chunk_by_normalized_text(
+    conn: &Connection,
+    normalized_text: &str,
+) -> rusqlite::Result<Option<i64>> {
+    conn.query_row(
+        "SELECT id FROM lexical_chunk WHERE normalized_text = ?1",
+        params![normalized_text],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
+pub(crate) fn list_active_lexical_chunks(
+    conn: &Connection,
+    limit: i64,
+) -> rusqlite::Result<Vec<chunk::LexicalChunk>> {
+    let mut statement = conn.prepare(&format!(
+        "SELECT {LEXICAL_CHUNK_COLUMNS} FROM lexical_chunk ORDER BY created_at DESC LIMIT ?1"
+    ))?;
+    let rows = statement.query_map(params![limit], lexical_chunk_from_row)?;
+    rows.collect()
+}
+
+/// The single entry point every chunk source (corrections, better
+/// expressions, repair events, writing feedback, manual add) goes through.
+/// Normalizes the text and checks `normalized_text` for a dedup match
+/// first — `(existing_id, false)` if one exists, `(new_id, true)` if a row
+/// was actually inserted. Callers that only care about "the chunk exists"
+/// (persist_turn, writing.rs, manual add) can ignore the bool; repair.rs
+/// uses it to decide whether to auto-promote.
+pub(crate) fn create_chunk_candidate(
+    conn: &Connection,
+    input: ChunkCandidateInput,
+    now_ms: i64,
+) -> rusqlite::Result<(i64, bool)> {
+    let normalized_text = chunk::normalize_chunk_text(input.text);
+    if let Some(existing_id) = find_chunk_by_normalized_text(conn, &normalized_text)? {
+        return Ok((existing_id, false));
+    }
+
+    let examples_json = serde_json::to_string(input.examples).unwrap_or_else(|_| "[]".to_string());
+    conn.execute(
+        "INSERT INTO lexical_chunk
+            (chunk_type, text, normalized_text, meaning, register, target_level, domain, examples_json,
+             common_error, origin, source_correction_id, source_expression_id, source_repair_event_id,
+             source_writing_evaluation_id, productive_status, review_item_id, last_used_at, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 'not_tried', NULL, NULL, ?15)",
+        params![
+            lexical_chunk_type_str(input.chunk_type),
+            input.text,
+            normalized_text,
+            input.meaning,
+            input.register,
+            cefr_level_str(input.target_level),
+            input.domain,
+            examples_json,
+            input.common_error,
+            chunk_origin_str(input.origin),
+            input.source_correction_id,
+            input.source_expression_id,
+            input.source_repair_event_id,
+            input.source_writing_evaluation_id,
+            now_ms,
+        ],
+    )?;
+    Ok((conn.last_insert_rowid(), true))
+}
+
+/// Promotes a chunk into `ReviewItem` — the architectural boundary the
+/// slice's docs are explicit about (`LexicalChunk` feeds `ReviewItem`, it
+/// doesn't replace it). Errors if the chunk is already promoted, mirroring
+/// the guard `submit_pronunciation_attempt` uses before promoting a target.
+pub(crate) fn promote_chunk_to_review(
+    conn: &Connection,
+    chunk_id: i64,
+    now_ms: i64,
+) -> Result<chunk::LexicalChunk, HistoryCommandError> {
+    let existing = lexical_chunk_by_id(conn, chunk_id)?.ok_or_else(|| {
+        HistoryCommandError::new(
+            "not-found",
+            "That chunk no longer exists.",
+            format!("lexical_chunk {chunk_id} not found"),
+        )
+    })?;
+    if existing.is_promoted {
+        return Err(HistoryCommandError::new(
+            "already-promoted",
+            "This chunk is already in spaced review.",
+            format!("lexical_chunk {chunk_id} already promoted"),
+        ));
+    }
+
+    let item_type = chunk::chunk_review_item_type(existing.chunk_type);
+    let content = format!("{} — {}", existing.text, existing.meaning);
+    let review_item_id = insert_review_item(
+        conn,
+        item_type,
+        &content,
+        ReviewSource::Chunk,
+        None,
+        None,
+        None,
+        None,
+        None,
+        Some(chunk_id),
+        now_ms,
+    )?;
+    conn.execute(
+        "UPDATE lexical_chunk SET review_item_id = ?1 WHERE id = ?2",
+        params![review_item_id, chunk_id],
+    )?;
+
+    lexical_chunk_by_id(conn, chunk_id)?.ok_or_else(|| {
+        HistoryCommandError::new(
+            "chunk-task-failed",
+            "The chunk could not be promoted to spaced review.",
+            format!("lexical_chunk {chunk_id} vanished after promotion"),
+        )
+    })
+}
+
+/// Persists a practice attempt and applies `chunk::apply_chunk_outcome` to
+/// the chunk's `productive_status`, bumping `last_used_at`. This is the
+/// direct-practice counterpart to `apply_outcome_to_source_chunk`, which
+/// applies the same rule when a *promoted* chunk's review item outcome is
+/// recorded from a live conversation instead.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn record_lexical_chunk_attempt(
+    conn: &Connection,
+    chunk_id: i64,
+    exercise_type: ExerciseType,
+    modality: Modality,
+    prompt: &str,
+    transcript: &str,
+    outcome: ReviewOutcome,
+    now_ms: i64,
+) -> Result<chunk::LexicalChunk, HistoryCommandError> {
+    conn.execute(
+        "INSERT INTO lexical_chunk_attempt
+            (lexical_chunk_id, exercise_type, modality, prompt, transcript, outcome, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
+        params![
+            chunk_id,
+            exercise_type_str(exercise_type),
+            modality_str(modality),
+            prompt,
+            transcript,
+            review_outcome_str(outcome),
+            now_ms,
+        ],
+    )?;
+
+    apply_outcome_to_chunk(conn, chunk_id, outcome, now_ms)?;
+
+    lexical_chunk_by_id(conn, chunk_id)?.ok_or_else(|| {
+        HistoryCommandError::new(
+            "chunk-task-failed",
+            "The practice attempt could not be saved.",
+            format!("lexical_chunk {chunk_id} vanished after attempt"),
+        )
+    })
+}
+
+fn apply_outcome_to_chunk(
+    conn: &Connection,
+    chunk_id: i64,
+    outcome: ReviewOutcome,
+    now_ms: i64,
+) -> rusqlite::Result<()> {
+    let current_status: String = conn.query_row(
+        "SELECT productive_status FROM lexical_chunk WHERE id = ?1",
+        params![chunk_id],
+        |row| row.get(0),
+    )?;
+    let new_status = chunk::apply_chunk_outcome(
+        parse_productive_status(&current_status).map_err(|error| column_conversion_error(0, error))?,
+        outcome,
+    );
+    conn.execute(
+        "UPDATE lexical_chunk SET productive_status = ?1, last_used_at = ?2 WHERE id = ?3",
+        params![productive_status_str(new_status), now_ms, chunk_id],
+    )?;
+    Ok(())
+}
+
+/// Called from `record_review_event_and_reschedule` right after a review
+/// item's outcome is recorded: if the item was sourced from a chunk
+/// (`source = Chunk`), cascades the same outcome onto the chunk's
+/// `productive_status`. This is what makes a promoted chunk's status
+/// advance "for free" when the tutor surfaces it in a live conversation —
+/// no conversation-side code needs to know chunks exist.
+fn apply_outcome_to_source_chunk(
+    conn: &Connection,
+    review_item_id: i64,
+    outcome: ReviewOutcome,
+    now_ms: i64,
+) -> rusqlite::Result<()> {
+    let source_chunk_id: Option<i64> = conn
+        .query_row(
+            "SELECT source_chunk_id FROM review_item WHERE id = ?1 AND source = 'chunk'",
+            params![review_item_id],
+            |row| row.get(0),
+        )
+        .optional()?
+        .flatten();
+
+    if let Some(chunk_id) = source_chunk_id {
+        apply_outcome_to_chunk(conn, chunk_id, outcome, now_ms)?;
+    }
+    Ok(())
 }
 
 // ---------------------------------------------------------------------
@@ -1282,17 +1787,45 @@ fn insert_writing_evaluation_tx(
             ],
         )?;
     }
-    for (position, chunk) in record.useful_chunks.iter().enumerate() {
+    let task_type_domain: Option<String> = tx
+        .query_row(
+            "SELECT task_type FROM writing_task WHERE id = ?1",
+            params![writing_task_id],
+            |row| row.get(0),
+        )
+        .optional()?;
+
+    for (position, useful_chunk) in record.useful_chunks.iter().enumerate() {
         tx.execute(
             "INSERT INTO writing_useful_chunk (writing_evaluation_id, chunk, register, example, position)
              VALUES (?1, ?2, ?3, ?4, ?5)",
             params![
                 evaluation_id,
-                &chunk.chunk,
-                &chunk.register,
-                &chunk.example,
+                &useful_chunk.chunk,
+                &useful_chunk.register,
+                &useful_chunk.example,
                 position as i64,
             ],
+        )?;
+
+        create_chunk_candidate(
+            tx,
+            ChunkCandidateInput {
+                chunk_type: chunk::infer_chunk_type(&useful_chunk.chunk),
+                text: &useful_chunk.chunk,
+                meaning: &useful_chunk.example,
+                register: &useful_chunk.register,
+                target_level: record.overall_level,
+                domain: task_type_domain.as_deref(),
+                examples: std::slice::from_ref(&useful_chunk.example),
+                common_error: None,
+                origin: ChunkOrigin::WritingTask,
+                source_correction_id: None,
+                source_expression_id: None,
+                source_repair_event_id: None,
+                source_writing_evaluation_id: Some(evaluation_id),
+            },
+            now_ms,
         )?;
     }
 
@@ -1894,6 +2427,8 @@ pub(crate) fn record_review_event_and_reschedule(
             params![stage, next_review_at, now_ms, review_item_id],
         )?;
     }
+
+    apply_outcome_to_source_chunk(conn, review_item_id, outcome, now_ms)?;
 
     Ok(())
 }
@@ -2513,6 +3048,7 @@ pub async fn complete_session(
                     ReviewSource::SessionSummary,
                     None,
                     Some(session_id),
+                    None,
                     None,
                     None,
                     None,
@@ -3715,6 +4251,219 @@ mod tests {
         .expect("writing_task must now be accepted as a review_item source");
     }
 
+    #[test]
+    fn migration_from_version_11_adds_lexical_chunk_tables_and_review_item_chunk_source() {
+        let (_directory, path) = scratch_db();
+
+        let review_item_id = {
+            let conn = Connection::open(&path).expect("connection must open");
+            conn.execute_batch(
+                "CREATE TABLE session (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE repair_event (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE assessment (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE pronunciation_target (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE writing_task (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE writing_evaluation (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE turn (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE correction (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE expression (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE review_item (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type TEXT NOT NULL CHECK (type IN (
+                        'grammar_pattern', 'vocabulary', 'phrase', 'pronunciation_target', 'conversation_strategy'
+                    )),
+                    content TEXT NOT NULL,
+                    source TEXT NOT NULL CHECK (source IN (
+                        'repair_event', 'session_summary', 'assessment_priority', 'writing_task'
+                    )),
+                    source_repair_event_id INTEGER REFERENCES repair_event(id) ON DELETE SET NULL,
+                    source_session_id INTEGER REFERENCES session(id) ON DELETE SET NULL,
+                    source_assessment_id INTEGER REFERENCES assessment(id) ON DELETE SET NULL,
+                    source_pronunciation_target_id INTEGER REFERENCES pronunciation_target(id) ON DELETE SET NULL,
+                    source_writing_task_id INTEGER REFERENCES writing_task(id) ON DELETE SET NULL,
+                    stage INTEGER NOT NULL DEFAULT 0 CHECK (stage BETWEEN 0 AND 5),
+                    next_review_at INTEGER NOT NULL,
+                    last_reviewed_at INTEGER,
+                    review_count INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL
+                );
+                INSERT INTO review_item
+                    (type, content, source, stage, next_review_at, last_reviewed_at, review_count, created_at)
+                VALUES
+                    ('vocabulary', 'a growing concern', 'writing_task', 0, 1000, NULL, 0, 1000);",
+            )
+            .expect("v11 tables must create");
+            let review_item_id = conn.last_insert_rowid();
+            conn.pragma_update(None, "user_version", 11)
+                .expect("version must set");
+            review_item_id
+        };
+
+        let conn = open_connection(&path).expect("connection must upgrade");
+        let version: i32 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version must read");
+        assert_eq!(version, SCHEMA_VERSION);
+
+        for table in ["lexical_chunk", "lexical_chunk_attempt"] {
+            let exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    params![table],
+                    |row| row.get(0),
+                )
+                .expect("sqlite_master must query");
+            assert_eq!(exists, 1, "table {table} must exist after migration");
+        }
+
+        let (content, source): (String, String) = conn
+            .query_row(
+                "SELECT content, source FROM review_item WHERE id = ?1",
+                params![review_item_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("pre-existing review_item row must survive migration");
+        assert_eq!(content, "a growing concern");
+        assert_eq!(source, "writing_task");
+
+        conn.execute(
+            "INSERT INTO review_item
+                (type, content, source, source_chunk_id, stage, next_review_at, last_reviewed_at, review_count, created_at)
+             VALUES ('phrase', 'raise concerns about', 'chunk', NULL, 0, 2000, NULL, 0, 2000)",
+            [],
+        )
+        .expect("'chunk' must now be accepted as a review_item source");
+    }
+
+    fn sample_chunk_input(text: &'static str) -> ChunkCandidateInput<'static> {
+        ChunkCandidateInput {
+            chunk_type: chunk::infer_chunk_type(text),
+            text,
+            meaning: "a short definition",
+            register: "neutral",
+            target_level: CefrLevel::C1,
+            domain: None,
+            examples: &[],
+            common_error: None,
+            origin: ChunkOrigin::Manual,
+            source_correction_id: None,
+            source_expression_id: None,
+            source_repair_event_id: None,
+            source_writing_evaluation_id: None,
+        }
+    }
+
+    #[test]
+    fn create_chunk_candidate_is_idempotent_for_the_same_normalized_text() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+
+        let (first_id, first_created) =
+            create_chunk_candidate(&conn, sample_chunk_input("  Raise Concerns About  "), 1_000)
+                .expect("first candidate must insert");
+        assert!(first_created);
+
+        let (second_id, second_created) =
+            create_chunk_candidate(&conn, sample_chunk_input("raise concerns about"), 2_000)
+                .expect("dedup lookup must succeed");
+        assert_eq!(second_id, first_id);
+        assert!(!second_created);
+
+        let all = list_active_lexical_chunks(&conn, 10).expect("chunks must list");
+        assert_eq!(all.len(), 1);
+    }
+
+    #[test]
+    fn promote_chunk_to_review_links_review_item_and_rejects_double_promotion() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+
+        let (chunk_id, _) = create_chunk_candidate(&conn, sample_chunk_input("a growing concern"), 1_000)
+            .expect("chunk must insert");
+
+        let promoted = promote_chunk_to_review(&conn, chunk_id, 1_500).expect("chunk must promote");
+        assert!(promoted.is_promoted);
+
+        let (source, source_chunk_id): (String, Option<i64>) = conn
+            .query_row(
+                "SELECT source, source_chunk_id FROM review_item
+                 WHERE id = (SELECT review_item_id FROM lexical_chunk WHERE id = ?1)",
+                params![chunk_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("review_item must exist");
+        assert_eq!(source, "chunk");
+        assert_eq!(source_chunk_id, Some(chunk_id));
+
+        let error =
+            promote_chunk_to_review(&conn, chunk_id, 2_000).expect_err("second promotion must fail");
+        assert_eq!(error.into_parts().0, "already-promoted");
+    }
+
+    #[test]
+    fn recording_a_promoted_chunks_review_outcome_advances_its_productive_status() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+
+        let (chunk_id, _) =
+            create_chunk_candidate(&conn, sample_chunk_input("depending on the context"), 1_000)
+                .expect("chunk must insert");
+        promote_chunk_to_review(&conn, chunk_id, 1_500).expect("chunk must promote");
+
+        let review_item_id: i64 = conn
+            .query_row(
+                "SELECT review_item_id FROM lexical_chunk WHERE id = ?1",
+                params![chunk_id],
+                |row| row.get(0),
+            )
+            .expect("review_item_id must be set");
+
+        record_review_event_and_reschedule(&conn, review_item_id, None, ReviewOutcome::Remembered, 2_000)
+            .expect("outcome must record");
+
+        let (status, last_used_at): (String, Option<i64>) = conn
+            .query_row(
+                "SELECT productive_status, last_used_at FROM lexical_chunk WHERE id = ?1",
+                params![chunk_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("chunk must read");
+        assert_eq!(status, "recognized");
+        assert_eq!(last_used_at, Some(2_000));
+    }
+
+    #[test]
+    fn record_lexical_chunk_attempt_persists_row_and_updates_status() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+
+        let (chunk_id, _) =
+            create_chunk_candidate(&conn, sample_chunk_input("concern"), 1_000).expect("chunk must insert");
+
+        let updated = record_lexical_chunk_attempt(
+            &conn,
+            chunk_id,
+            ExerciseType::UseInSentence,
+            Modality::Written,
+            "Use \"concern\" in a sentence.",
+            "My main concern is the deadline.",
+            ReviewOutcome::PartiallyRemembered,
+            1_200,
+        )
+        .expect("attempt must record");
+        assert_eq!(updated.productive_status, ProductiveStatus::UsedWithHelp);
+        assert_eq!(updated.last_used_at, Some(1_200));
+
+        let attempt_count: i64 = conn
+            .query_row(
+                "SELECT COUNT(*) FROM lexical_chunk_attempt WHERE lexical_chunk_id = ?1",
+                params![chunk_id],
+                |row| row.get(0),
+            )
+            .expect("attempts must count");
+        assert_eq!(attempt_count, 1);
+    }
+
     fn sample_writing_evaluation(overall_level: CefrLevel) -> WritingEvaluationRecord {
         WritingEvaluationRecord {
             overall_level,
@@ -4218,6 +4967,7 @@ mod tests {
             None,
             Some(target_id),
             None,
+            None,
             1_500,
         )
         .expect("review item must insert");
@@ -4591,6 +5341,7 @@ mod tests {
             ReviewSource::SessionSummary,
             None,
             Some(session_id),
+            None,
             None,
             None,
             None,

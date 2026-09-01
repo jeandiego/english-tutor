@@ -965,6 +965,7 @@ pub async fn submit_writing_rewrite(
                         None,
                         None,
                         Some(writing_task_id),
+                        None,
                         now,
                     )?;
                 }

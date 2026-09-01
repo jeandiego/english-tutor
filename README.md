@@ -24,6 +24,10 @@
   </p>
 </div>
 
+<p align="center">
+  <img src=".github/assets/pako-preview.png" width="100%" alt="Pako app preview — a live conversation session with the local AI English tutor" />
+</p>
+
 ---
 
 Why "Pako"? Parrots learn language by listening closely and repeating it back until it sounds

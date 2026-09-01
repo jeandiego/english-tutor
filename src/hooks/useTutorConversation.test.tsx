@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AudioRecorder, RecordedAudio } from "../audio/recorder";
-import { Composer } from "../components/Composer";
+import { ConversationControls } from "../components/ConversationControls";
 import { ConversationStage } from "../components/ConversationStage";
 import { historyKeys } from "../queryKeys/history";
 import { renderWithQueryClient } from "../test/queryTestUtils";
@@ -105,7 +105,7 @@ function ConversationHarness({
         state={conversation.state}
         thinking={conversation.thinking}
       />
-      <Composer
+      <ConversationControls
         disabled={conversation.thinking || conversation.speaking}
         models={[]}
         onRecordEnd={(owner) => void conversation.end(owner)}
@@ -127,9 +127,12 @@ async function recordOneTurn() {
 }
 
 function sendTypedTurn(text: string) {
-  const textarea = screen.getByLabelText("Type a message");
-  fireEvent.change(textarea, { target: { value: text } });
-  fireEvent.keyDown(textarea, { key: "Enter" });
+  if (!screen.queryByLabelText("Type a message")) {
+    fireEvent.click(screen.getByRole("switch", { name: "Switch to typed replies" }));
+  }
+  const input = screen.getByLabelText("Type a message");
+  fireEvent.change(input, { target: { value: text } });
+  fireEvent.keyDown(input, { key: "Enter" });
 }
 
 function deferred<T>() {
@@ -231,7 +234,7 @@ describe("useTutorConversation", () => {
     expect(
       screen.getByText("for many years", { exact: false }),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Hold to talk" })).toBeEnabled();
 
     await recordOneTurn();
     await waitFor(() => expect(respond).toHaveBeenCalledTimes(2));
@@ -275,7 +278,7 @@ describe("useTutorConversation", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Can we discuss APIs?")).toBeInTheDocument();
     expect(screen.getByText("connection refused")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Hold to talk" })).toBeEnabled();
   });
 
   it("speaks only the tutor reply, keeps corrections silent, and blocks recording until speech ends", async () => {
@@ -317,7 +320,7 @@ describe("useTutorConversation", () => {
       await speech.promise;
     });
 
-    expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Hold to talk" })).toBeEnabled();
   });
 
   it("keeps the tutor reply visible, exposes speech errors, and becomes recoverable", async () => {
@@ -347,7 +350,7 @@ describe("useTutorConversation", () => {
     ).toBeInTheDocument();
     expect(screen.getByText("Speech unavailable")).toBeInTheDocument();
     expect(screen.getByText("exit status: 1")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Hold to talk" })).toBeEnabled();
   });
 
   describe("typed messages", () => {
@@ -676,7 +679,7 @@ describe("useTutorConversation", () => {
       expect(recordRepairEvent).toHaveBeenCalledWith(
         expect.objectContaining({ turnId: 1, mode: "quick", priority: "vocabulary" }),
       );
-      expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
+      expect(screen.getByRole("button", { name: "Hold to talk" })).toBeEnabled();
     });
 
     it("repair mode replaces the spoken reply with the repair prompt and records an improved outcome once the retry lands", async () => {

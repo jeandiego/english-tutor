@@ -12,6 +12,7 @@ use tauri::{AppHandle, Manager};
 use tempfile::NamedTempFile;
 
 use super::assessment::{cefr_level_str, AssessmentCompetency, CefrLevel};
+use super::chunk;
 use super::history::{self, HistoryCommandError};
 use super::review::{self, ReviewItemDraft};
 
@@ -467,6 +468,7 @@ fn compose_tutor_summary(goals: &[String], issues: &[LearnerIssue]) -> Option<St
 }
 
 const DUE_REVIEW_ITEMS_PER_SESSION: i64 = 3;
+const ACTIVE_CHUNKS_FOR_CONTEXT: i64 = 20;
 
 pub(crate) struct SessionContext {
     pub(crate) learner_context: Option<String>,
@@ -487,10 +489,13 @@ pub(crate) async fn build_session_context(
         let due_review_items =
             history::due_review_items(&conn, now_ms(), DUE_REVIEW_ITEMS_PER_SESSION)
                 .map_err(LearnerProfileCommandError::from)?;
+        let active_chunks = history::list_active_lexical_chunks(&conn, ACTIVE_CHUNKS_FOR_CONTEXT)
+            .map_err(LearnerProfileCommandError::from)?;
 
         let learner_context = [
             compose_tutor_summary(&profile.goals, &issues),
             review::compose_review_context(&due_review_items),
+            chunk::compose_chunk_context(&active_chunks),
         ]
         .into_iter()
         .flatten()
@@ -832,6 +837,7 @@ pub async fn apply_assessment_to_learner_profile(
                     None,
                     None,
                     Some(assessment_id),
+                    None,
                     None,
                     None,
                     created_at,

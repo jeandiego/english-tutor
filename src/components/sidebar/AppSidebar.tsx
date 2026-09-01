@@ -11,6 +11,7 @@ import {
   IconPencil,
   IconPlus,
   IconSettings,
+  IconVocabulary,
 } from "@tabler/icons-react";
 import {
   Sidebar,
@@ -48,6 +49,7 @@ export type AppPage =
   | "sessions"
   | "assessment"
   | "writing"
+  | "chunks"
   | "history"
   | "progress"
   | "pronunciation"
@@ -64,6 +66,7 @@ const NAV_ITEMS: {
   { page: "sessions", label: "Sessions", icon: IconListDetails },
   { page: "assessment", label: "Assessment", icon: IconClipboardCheck },
   { page: "writing", label: "Writing", icon: IconPencil },
+  { page: "chunks", label: "Chunk bank", icon: IconVocabulary },
   { page: "history", label: "History", icon: IconHistory },
   { page: "progress", label: "My Progress", icon: IconChartBar },
   { page: "pronunciation", label: "Pronunciation", icon: IconMicrophone },

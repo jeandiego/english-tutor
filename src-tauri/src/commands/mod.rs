@@ -1,4 +1,5 @@
 pub(crate) mod assessment;
+pub(crate) mod chunk;
 pub(crate) mod health;
 pub(crate) mod history;
 pub(crate) mod learner_profile;

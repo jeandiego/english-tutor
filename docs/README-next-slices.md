@@ -81,6 +81,7 @@ uso ativo de leitura.
 13. `20-writing-gym-c1-foundation.md`
 14. `21-productive-vocabulary-chunk-bank.md`
 15. `22-reading-to-writing-sessions.md`
+16. `23-scenario-pack-chunk-vocabulary.md`
 
 ## Milestone de continuidade
 

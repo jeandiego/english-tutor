@@ -20,7 +20,7 @@ import { Field, FieldContent, FieldLabel } from "./ui/field";
 import { Input } from "./ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { cn } from "../lib/utils";
-import { Composer } from "./Composer";
+import { ConversationControls } from "./ConversationControls";
 import { ConversationStage, ListeningCheckCard } from "./ConversationStage";
 
 type SessionsPageProps = {
@@ -489,7 +489,7 @@ export function SessionsPage({
           {run.status === "finishing" ? (
             <ProcessingStatus label="Writing your session summary…" />
           ) : (
-            <Composer
+            <ConversationControls
               currentModel={currentModel}
               disabled={talkControlDisabled}
               disabledHint={disabledHint}

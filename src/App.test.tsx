@@ -283,7 +283,7 @@ describe("Pako shell", () => {
 
     expect(screen.getByText("Checking desktop runtime")).toBeInTheDocument();
     expect(screen.getByText("Checking local transcription")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Microphone unavailable" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeDisabled();
   });
 
   it("enables voice input only when desktop, transcription, and tutor runtimes are ready", async () => {
@@ -296,7 +296,7 @@ describe("Pako shell", () => {
     expect(await screen.findByText("Local transcription ready")).toBeInTheDocument();
     expect(await screen.findByText("Local tutor ready")).toBeInTheDocument();
     expect(screen.getByText("macos · aarch64")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
     expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
   });
 
@@ -313,7 +313,7 @@ describe("Pako shell", () => {
       screen.queryByText("Set the Whisper executable path."),
     ).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Whisper executable")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Microphone unavailable" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeDisabled();
 
     fireEvent.click(
       screen.getByRole("button", { name: "Open transcription settings" }),
@@ -324,9 +324,7 @@ describe("Pako shell", () => {
     expect(screen.getByText("Set the Whisper model path.")).toBeInTheDocument();
     expect(screen.getByLabelText("Whisper executable")).toBeInTheDocument();
     expect(screen.getByLabelText("Whisper model")).toBeInTheDocument();
-    expect(
-      screen.queryByRole("button", { name: /start recording|microphone unavailable/i }),
-    ).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /hold to talk/i })).not.toBeInTheDocument();
   });
 
   it("retries a failed settings load from the Settings page", async () => {
@@ -401,7 +399,7 @@ describe("Pako shell", () => {
     );
     expect(await screen.findByText("Ready")).toBeInTheDocument();
     fireEvent.click(screen.getByRole("button", { name: "Conversation" }));
-    expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
   });
 
   it("locks path inputs while settings are being verified", async () => {
@@ -440,7 +438,7 @@ describe("Pako shell", () => {
     expect(
       screen.getByText("Restart the desktop app and try again."),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Microphone unavailable" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeDisabled();
   });
 
   it("shows actionable Ollama setup and saves a selected local model", async () => {
@@ -454,7 +452,7 @@ describe("Pako shell", () => {
     expect(
       await screen.findByText("Tutor model not configured"),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Microphone unavailable" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeDisabled();
     fireEvent.click(screen.getByRole("button", { name: "Open tutor settings" }));
 
     expect(await screen.findByLabelText("Ollama URL")).toHaveValue(
@@ -550,7 +548,7 @@ describe("Pako shell", () => {
     expect(
       await screen.findByText("The learning history could not be saved."),
     ).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Start recording" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
   });
 
   it("contains a crashing page inside an error boundary, keeps navigation usable, and recovers on navigation", async () => {
@@ -589,8 +587,6 @@ describe("Pako shell", () => {
     fireEvent.click(conversationNav);
 
     expect(screen.queryByText("This page couldn't load")).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: /start recording|microphone unavailable/i }),
-    ).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /hold to talk/i })).toBeInTheDocument();
   });
 });

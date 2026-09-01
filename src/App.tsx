@@ -2,7 +2,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState, type CSSProperties } from "react";
 import { ErrorBoundary, getErrorMessage, type FallbackProps } from "react-error-boundary";
 import { AssessmentPage } from "./components/AssessmentPage";
-import { Composer } from "./components/Composer";
+import { ChunkBankPage } from "./components/ChunkBankPage";
+import { ConversationControls } from "./components/ConversationControls";
 import { ConversationStage } from "./components/ConversationStage";
 import { HistoryPage } from "./components/HistoryPage";
 import { ProgressPage } from "./components/ProgressPage";
@@ -67,6 +68,7 @@ const PAGE_HEADER: Record<AppPage, { eyebrow: string; title: string }> = {
   sessions: { eyebrow: "Sessions", title: "Choose a scenario" },
   assessment: { eyebrow: "Assessment", title: "Level check" },
   writing: { eyebrow: "Writing", title: "Writing gym" },
+  chunks: { eyebrow: "Chunk bank", title: "Productive vocabulary" },
   history: { eyebrow: "History", title: "Past conversations" },
   progress: { eyebrow: "My Progress", title: "Learning trends" },
   pronunciation: { eyebrow: "Pronunciation", title: "Practice a phrase" },
@@ -285,7 +287,7 @@ function App() {
             state={conversation.state}
             thinking={conversation.thinking}
           />
-          <Composer
+          <ConversationControls
             currentModel={tutorState.status === "loaded" ? tutorState.setup.settings.modelName : undefined}
             disabled={voiceBusy || healthState.status !== "ready" || !transcriptionReady || !tutorReady}
             disabledHint={voiceDisabledHint}
@@ -326,6 +328,11 @@ function App() {
         />
       ) : activePage === "writing" ? (
         <WritingGymPage
+          disabled={healthState.status !== "ready" || !tutorReady}
+          disabledHint={writingDisabledHint}
+        />
+      ) : activePage === "chunks" ? (
+        <ChunkBankPage
           disabled={healthState.status !== "ready" || !tutorReady}
           disabledHint={writingDisabledHint}
         />

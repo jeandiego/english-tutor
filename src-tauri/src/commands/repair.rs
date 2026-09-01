@@ -3,6 +3,8 @@ use serde_json::{json, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tauri::AppHandle;
 
+use super::assessment::CefrLevel;
+use super::chunk::{self, ChunkCandidateInput, ChunkOrigin};
 use super::history::{self, HistoryCommandError};
 use super::review;
 use super::tutor::{
@@ -568,6 +570,36 @@ pub async fn update_repair_event_outcome(
                         None,
                         now_ms(),
                     )?;
+                } else if priority == RepairPriority::Vocabulary {
+                    // A failed vocabulary repair is already a strong "needs
+                    // spaced review" signal, so — unlike other sources — the
+                    // resulting chunk is auto-promoted immediately instead of
+                    // waiting for the user to promote it manually. If dedup
+                    // matched an existing chunk instead, its promotion state
+                    // is left as-is (don't force-promote something the user
+                    // already decided not to promote).
+                    let (chunk_id, created) = history::create_chunk_candidate(
+                        &conn,
+                        ChunkCandidateInput {
+                            chunk_type: chunk::infer_chunk_type(&suggested),
+                            text: &suggested,
+                            meaning: &issue,
+                            register: "neutral",
+                            target_level: CefrLevel::C1,
+                            domain: None,
+                            examples: std::slice::from_ref(&suggested),
+                            common_error: Some(&original),
+                            origin: ChunkOrigin::RepairEvent,
+                            source_correction_id: None,
+                            source_expression_id: None,
+                            source_repair_event_id: Some(request.event_id),
+                            source_writing_evaluation_id: None,
+                        },
+                        now_ms(),
+                    )?;
+                    if created {
+                        history::promote_chunk_to_review(&conn, chunk_id, now_ms())?;
+                    }
                 } else {
                     let item_type = review::review_type_from_repair_priority(priority);
                     let content =
@@ -578,6 +610,7 @@ pub async fn update_repair_event_outcome(
                         &content,
                         review::ReviewSource::RepairEvent,
                         Some(request.event_id),
+                        None,
                         None,
                         None,
                         None,
