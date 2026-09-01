@@ -31,6 +31,7 @@ pub enum ChunkOrigin {
     BetterExpression,
     RepairEvent,
     WritingTask,
+    ReadingSession,
     Manual,
 }
 
@@ -190,6 +191,7 @@ pub(crate) struct ChunkCandidateInput<'a> {
     pub(crate) source_expression_id: Option<i64>,
     pub(crate) source_repair_event_id: Option<i64>,
     pub(crate) source_writing_evaluation_id: Option<i64>,
+    pub(crate) source_reading_session_attempt_id: Option<i64>,
 }
 
 // ---------------------------------------------------------------------
@@ -324,6 +326,7 @@ pub async fn create_manual_lexical_chunk(
                 source_expression_id: None,
                 source_repair_event_id: None,
                 source_writing_evaluation_id: None,
+                source_reading_session_attempt_id: None,
             },
             now_ms(),
         )?;

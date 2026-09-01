@@ -5,6 +5,7 @@ pub(crate) mod history;
 pub(crate) mod learner_profile;
 pub(crate) mod listening;
 pub(crate) mod pronunciation;
+pub(crate) mod reading;
 pub(crate) mod repair;
 pub(crate) mod review;
 pub(crate) mod scenario_packs;

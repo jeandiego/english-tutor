@@ -594,6 +594,7 @@ pub async fn update_repair_event_outcome(
                             source_expression_id: None,
                             source_repair_event_id: Some(request.event_id),
                             source_writing_evaluation_id: None,
+                            source_reading_session_attempt_id: None,
                         },
                         now_ms(),
                     )?;
@@ -610,6 +611,7 @@ pub async fn update_repair_event_outcome(
                         &content,
                         review::ReviewSource::RepairEvent,
                         Some(request.event_id),
+                        None,
                         None,
                         None,
                         None,

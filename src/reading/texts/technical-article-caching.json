@@ -1,0 +1,51 @@
+{
+  "id": "technical-article-caching",
+  "title": "Why Your API Responses Should Be Cacheable",
+  "level": "C1",
+  "theme": "Web performance",
+  "textType": "technical_article",
+  "body": "Every time a client requests data your server has already computed, you're paying a cost you didn't have to pay. HTTP caching exists precisely to eliminate that waste, yet it remains one of the most underused tools in a backend engineer's toolkit.\n\nAt its core, caching relies on two headers doing complementary jobs. Cache-Control tells the client (and any intermediary proxy) how long a response can be reused without checking back with the server — a max-age of 300 means \"trust this for five minutes, no questions asked.\" ETag, by contrast, gives the response a fingerprint. When the cache expires, the client can send that fingerprint back in an If-None-Match header; if nothing has changed, the server replies with a lightweight 304 Not Modified instead of resending the full payload.\n\nThe two mechanisms solve different problems. Cache-Control avoids the network round trip entirely for a while. ETag keeps that round trip cheap once it does happen, since a 304 costs a fraction of a full response. Used together, they let a well-designed API serve the same data thousands of times while doing the real work only once.\n\nThe catch is that caching is easy to get subtly wrong: caching a response that changes per-user, or forgetting to invalidate a cache when the underlying data changes, turns a performance win into a correctness bug. Treat cache headers as part of your API contract, not an afterthought bolted on at the edge.",
+  "targetChunks": [
+    {
+      "text": "underused tool in a/the ... toolkit",
+      "meaning": "something valuable that people don't use enough",
+      "register": "neutral",
+      "chunkType": "collocation"
+    },
+    {
+      "text": "at its core",
+      "meaning": "fundamentally / when you look at the essential part",
+      "register": "neutral",
+      "chunkType": "discourse_marker"
+    },
+    {
+      "text": "the catch is that...",
+      "meaning": "introducing a hidden problem or downside",
+      "register": "neutral",
+      "chunkType": "hedging_expression"
+    },
+    {
+      "text": "an afterthought bolted on at the edge",
+      "meaning": "something added carelessly at the last minute, not designed in from the start",
+      "register": "technical",
+      "chunkType": "domain_specific_expression"
+    },
+    {
+      "text": "turns a ... win into a ... bug",
+      "meaning": "describing how a good outcome becomes a problem if done carelessly",
+      "register": "technical",
+      "chunkType": "phrase"
+    }
+  ],
+  "comprehensionCheck": {
+    "question": "What does the server send instead of a full response when an ETag still matches?",
+    "options": [
+      "A 500 Internal Server Error",
+      "A 304 Not Modified response",
+      "A new max-age value"
+    ],
+    "correctOptionIndex": 1
+  },
+  "summaryPrompt": "Summarize this article in 80-120 words, explaining how Cache-Control and ETag work together.",
+  "responsePrompt": "Write a short response giving your recommendation on when a team should invest time in adding proper cache headers to an API, and why."
+}

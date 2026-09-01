@@ -11,7 +11,8 @@ export type ReviewSource =
   | "repair_event"
   | "session_summary"
   | "assessment_priority"
-  | "writing_task";
+  | "writing_task"
+  | "reading_session";
 
 export type ReviewOutcome = "remembered" | "partially_remembered" | "missed" | "skipped";
 

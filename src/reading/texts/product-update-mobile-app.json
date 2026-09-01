@@ -1,0 +1,51 @@
+{
+  "id": "product-update-mobile-app",
+  "title": "What's New: Version 4.2",
+  "level": "B2",
+  "theme": "Product communication",
+  "textType": "product_update",
+  "body": "Version 4.2 is rolling out to all users this week, and it's centered on one thing: getting you back into your work faster after you've been away.\n\nThe headline feature is offline drafts. If you lose connection mid-session, anything you've typed now saves locally and syncs automatically the moment you're back online — no more losing a paragraph because the wifi dropped for ten seconds. We've also cut cold-start time by roughly 40%, which should be especially noticeable on older devices.\n\nOn the smaller side, we've fixed a long-standing bug where notification badges would occasionally get stuck after marking everything as read, and the search bar now remembers your last three queries so you don't have to retype them.\n\nA quick heads-up: as part of this release, we're deprecating the legacy export format. It'll keep working for now, but we recommend switching to the new format over the next few months, since we plan to phase it out entirely by early next year.\n\nAs always, thanks for the bug reports and feature requests — several of the fixes in this release came directly from your feedback.",
+  "targetChunks": [
+    {
+      "text": "roll out to all users",
+      "meaning": "release something gradually or fully to the whole user base",
+      "register": "neutral",
+      "chunkType": "collocation"
+    },
+    {
+      "text": "the headline feature is...",
+      "meaning": "introducing the main/most important feature",
+      "register": "neutral",
+      "chunkType": "phrase"
+    },
+    {
+      "text": "a quick heads-up",
+      "meaning": "a short, informal warning or notice",
+      "register": "conversational",
+      "chunkType": "phrase"
+    },
+    {
+      "text": "phase out",
+      "meaning": "gradually stop using or supporting something",
+      "register": "neutral",
+      "chunkType": "collocation"
+    },
+    {
+      "text": "long-standing bug",
+      "meaning": "a bug that has existed for a long time",
+      "register": "technical",
+      "chunkType": "collocation"
+    }
+  ],
+  "comprehensionCheck": {
+    "question": "What happens to the legacy export format in this release?",
+    "options": [
+      "It is removed immediately.",
+      "It is deprecated but still works for now.",
+      "It becomes the new default format."
+    ],
+    "correctOptionIndex": 1
+  },
+  "summaryPrompt": "Summarize this product update in 80-120 words, covering the main new feature and the one thing users should act on.",
+  "responsePrompt": "Write a short response as a user: react to the offline drafts feature and ask one clarifying question about the export format deprecation."
+}

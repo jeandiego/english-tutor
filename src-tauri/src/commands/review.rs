@@ -57,6 +57,7 @@ pub enum ReviewSource {
     AssessmentPriority,
     WritingTask,
     Chunk,
+    ReadingSession,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]

@@ -1,0 +1,51 @@
+{
+  "id": "workplace-scenario-remote-onboarding",
+  "title": "A New Hire's First Week",
+  "level": "B2",
+  "theme": "Remote work culture",
+  "textType": "workplace_scenario",
+  "body": "#new-team-intros\n\n**Sam (Team Lead):** Welcome aboard, Alex! Great to finally have you here. Feel free to drop any questions in this channel — no such thing as a silly one during week one.\n\n**Alex (New Hire):** Thanks Sam! Quick question already — I've got access to the main repo, but I'm not seeing the deployment docs anyone mentioned in onboarding. Am I missing a permission somewhere?\n\n**Sam:** Good catch, that's actually a gap in our onboarding checklist. The deployment docs live in a separate internal wiki that isn't linked from the main repo README. I'll get you added today and flag it so we fix the checklist for the next hire.\n\n**Alex:** No worries, happy to help spot these things. In the meantime, is there someone I should shadow for a deploy, or is it more of a \"read the docs and figure it out\" situation?\n\n**Sam:** Definitely shadow first — deploys can be nerve-wracking the first time. Priya usually handles Tuesday deploys, I'll ask if she's okay with you sitting in this week.\n\n**Alex:** Sounds great, thank you. I'll hold off on touching the deploy pipeline myself until then.\n\n**Sam:** Appreciate that. And seriously, keep the questions coming — it's much easier to fix a small gap now than to have it trip up the next five people who join.",
+  "targetChunks": [
+    {
+      "text": "welcome aboard",
+      "meaning": "a friendly greeting for someone new joining a team",
+      "register": "conversational",
+      "chunkType": "phrase"
+    },
+    {
+      "text": "no such thing as a silly ... during...",
+      "meaning": "reassuring someone that any question is acceptable",
+      "register": "conversational",
+      "chunkType": "phrase"
+    },
+    {
+      "text": "good catch",
+      "meaning": "acknowledging that someone noticed something useful or important",
+      "register": "conversational",
+      "chunkType": "phrase"
+    },
+    {
+      "text": "shadow someone",
+      "meaning": "observe an experienced colleague doing a task in order to learn it",
+      "register": "professional",
+      "chunkType": "domain_specific_expression"
+    },
+    {
+      "text": "hold off on...",
+      "meaning": "delay doing something until later",
+      "register": "neutral",
+      "chunkType": "phrase"
+    }
+  ],
+  "comprehensionCheck": {
+    "question": "What does Alex agree to do before touching the deploy pipeline?",
+    "options": [
+      "Read the entire wiki independently",
+      "Shadow Priya during a Tuesday deploy",
+      "Wait until the onboarding checklist is rewritten"
+    ],
+    "correctOptionIndex": 1
+  },
+  "summaryPrompt": "Summarize this conversation in 80-120 words, covering the problem Alex found and how Sam plans to handle it.",
+  "responsePrompt": "Write a short response as Alex, thanking Sam and asking one more clarifying question about the deploy shadowing session."
+}

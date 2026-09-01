@@ -840,6 +840,7 @@ pub async fn apply_assessment_to_learner_profile(
                     None,
                     None,
                     None,
+                    None,
                     created_at,
                 )?;
             }

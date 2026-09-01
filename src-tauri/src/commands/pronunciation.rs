@@ -441,6 +441,7 @@ pub async fn submit_pronunciation_attempt(
                     Some(request.pronunciation_target_id),
                     None,
                     None,
+                    None,
                     created_at,
                 )?;
                 history::set_pronunciation_target_review_item(

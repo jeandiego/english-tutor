@@ -8,6 +8,7 @@ import { ConversationStage } from "./components/ConversationStage";
 import { HistoryPage } from "./components/HistoryPage";
 import { ProgressPage } from "./components/ProgressPage";
 import { PronunciationPracticePage } from "./components/PronunciationPracticePage";
+import { ReadingToWritingPage } from "./components/ReadingToWritingPage";
 import { AppSidebar, type AppPage } from "./components/sidebar/AppSidebar";
 import { SessionsPage } from "./components/SessionsPage";
 import { SettingsPage } from "./components/SettingsPage";
@@ -68,6 +69,7 @@ const PAGE_HEADER: Record<AppPage, { eyebrow: string; title: string }> = {
   sessions: { eyebrow: "Sessions", title: "Choose a scenario" },
   assessment: { eyebrow: "Assessment", title: "Level check" },
   writing: { eyebrow: "Writing", title: "Writing gym" },
+  reading: { eyebrow: "Reading to Writing", title: "Read, then produce" },
   chunks: { eyebrow: "Chunk bank", title: "Productive vocabulary" },
   history: { eyebrow: "History", title: "Past conversations" },
   progress: { eyebrow: "My Progress", title: "Learning trends" },
@@ -328,6 +330,11 @@ function App() {
         />
       ) : activePage === "writing" ? (
         <WritingGymPage
+          disabled={healthState.status !== "ready" || !tutorReady}
+          disabledHint={writingDisabledHint}
+        />
+      ) : activePage === "reading" ? (
+        <ReadingToWritingPage
           disabled={healthState.status !== "ready" || !tutorReady}
           disabledHint={writingDisabledHint}
         />

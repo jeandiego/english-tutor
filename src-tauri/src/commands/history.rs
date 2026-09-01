@@ -1,6 +1,7 @@
 use std::{
     fs,
     path::{Path, PathBuf},
+    sync::{Mutex, OnceLock},
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -12,6 +13,7 @@ use super::assessment::{cefr_level_str, competency_label, AssessmentCompetency, 
 use super::chunk::{self, ChunkCandidateInput, ChunkOrigin, ExerciseType, LexicalChunkType, Modality, ProductiveStatus};
 use super::listening::ListeningCheckType;
 use super::pronunciation::{self, PronunciationProblemCategory, PronunciationTargetSource};
+use super::reading;
 use super::repair::{RepairIntensity, RepairMode, RepairOutcome, RepairPriority};
 use super::review::{self, ReviewItemType, ReviewOutcome, ReviewSource};
 use super::writing::{
@@ -24,7 +26,7 @@ use super::tutor::{
 };
 
 const DB_FILE_NAME: &str = "history.sqlite3";
-const SCHEMA_VERSION: i32 = 12;
+const SCHEMA_VERSION: i32 = 13;
 const ALL_TIME_CATEGORY_LIMIT: i64 = 100_000;
 const DEFAULT_LIST_LIMIT: i64 = 10;
 const MAX_LIST_LIMIT: i64 = 100;
@@ -356,6 +358,7 @@ fn review_source_str(source: ReviewSource) -> &'static str {
         ReviewSource::AssessmentPriority => "assessment_priority",
         ReviewSource::WritingTask => "writing_task",
         ReviewSource::Chunk => "chunk",
+        ReviewSource::ReadingSession => "reading_session",
     }
 }
 
@@ -366,6 +369,7 @@ fn parse_review_source(value: &str) -> Result<ReviewSource, std::io::Error> {
         "assessment_priority" => Ok(ReviewSource::AssessmentPriority),
         "writing_task" => Ok(ReviewSource::WritingTask),
         "chunk" => Ok(ReviewSource::Chunk),
+        "reading_session" => Ok(ReviewSource::ReadingSession),
         other => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             format!("unknown review source: {other}"),
@@ -460,6 +464,78 @@ fn parse_writing_dimension(value: &str) -> Result<WritingDimension, std::io::Err
         other => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             format!("unknown writing dimension: {other}"),
+        )),
+    }
+}
+
+fn parse_reading_session_status(value: &str) -> Result<reading::ReadingSessionStatus, std::io::Error> {
+    match value {
+        "reading" => Ok(reading::ReadingSessionStatus::Reading),
+        "comprehension_answered" => Ok(reading::ReadingSessionStatus::ComprehensionAnswered),
+        "chunks_selected" => Ok(reading::ReadingSessionStatus::ChunksSelected),
+        "summary_submitted" => Ok(reading::ReadingSessionStatus::SummarySubmitted),
+        "evaluated" => Ok(reading::ReadingSessionStatus::Evaluated),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown reading session status: {other}"),
+        )),
+    }
+}
+
+fn summary_fidelity_str(fidelity: reading::SummaryFidelity) -> &'static str {
+    match fidelity {
+        reading::SummaryFidelity::Faithful => "faithful",
+        reading::SummaryFidelity::PartiallyFaithful => "partially_faithful",
+        reading::SummaryFidelity::Unfaithful => "unfaithful",
+    }
+}
+
+fn parse_summary_fidelity(value: &str) -> Result<reading::SummaryFidelity, std::io::Error> {
+    match value {
+        "faithful" => Ok(reading::SummaryFidelity::Faithful),
+        "partially_faithful" => Ok(reading::SummaryFidelity::PartiallyFaithful),
+        "unfaithful" => Ok(reading::SummaryFidelity::Unfaithful),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown summary fidelity: {other}"),
+        )),
+    }
+}
+
+fn response_relevance_str(relevance: reading::ResponseRelevance) -> &'static str {
+    match relevance {
+        reading::ResponseRelevance::Relevant => "relevant",
+        reading::ResponseRelevance::PartiallyRelevant => "partially_relevant",
+        reading::ResponseRelevance::OffTopic => "off_topic",
+    }
+}
+
+fn parse_response_relevance(value: &str) -> Result<reading::ResponseRelevance, std::io::Error> {
+    match value {
+        "relevant" => Ok(reading::ResponseRelevance::Relevant),
+        "partially_relevant" => Ok(reading::ResponseRelevance::PartiallyRelevant),
+        "off_topic" => Ok(reading::ResponseRelevance::OffTopic),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown response relevance: {other}"),
+        )),
+    }
+}
+
+fn reading_issue_category_str(category: reading::ReadingIssueCategory) -> &'static str {
+    match category {
+        reading::ReadingIssueCategory::Summary => "summary",
+        reading::ReadingIssueCategory::Response => "response",
+    }
+}
+
+fn parse_reading_issue_category(value: &str) -> Result<reading::ReadingIssueCategory, std::io::Error> {
+    match value {
+        "summary" => Ok(reading::ReadingIssueCategory::Summary),
+        "response" => Ok(reading::ReadingIssueCategory::Response),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown reading issue category: {other}"),
         )),
     }
 }
@@ -936,6 +1012,145 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    if current_version < 13 {
+        conn.execute_batch(
+            "CREATE TABLE reading_session_attempt (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                text_id TEXT NOT NULL,
+                status TEXT NOT NULL DEFAULT 'reading' CHECK (status IN (
+                    'reading', 'comprehension_answered', 'chunks_selected', 'summary_submitted', 'evaluated'
+                )),
+                comprehension_correct INTEGER CHECK (comprehension_correct IN (0, 1)),
+                comprehension_answered_at INTEGER,
+                selected_chunk_ids_json TEXT,
+                summary_text TEXT,
+                response_text TEXT,
+                production_submitted_at INTEGER,
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_reading_session_attempt_text ON reading_session_attempt(text_id);
+            CREATE INDEX IF NOT EXISTS idx_reading_session_attempt_created_at ON reading_session_attempt(created_at);
+
+            CREATE TABLE reading_session_evaluation (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reading_session_attempt_id INTEGER NOT NULL REFERENCES reading_session_attempt(id) ON DELETE CASCADE,
+                summary_fidelity TEXT NOT NULL CHECK (summary_fidelity IN ('faithful', 'partially_faithful', 'unfaithful')),
+                response_relevance TEXT NOT NULL CHECK (response_relevance IN ('relevant', 'partially_relevant', 'off_topic')),
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_reading_session_evaluation_attempt ON reading_session_evaluation(reading_session_attempt_id);
+
+            CREATE TABLE reading_session_priority_issue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reading_session_evaluation_id INTEGER NOT NULL REFERENCES reading_session_evaluation(id) ON DELETE CASCADE,
+                category TEXT NOT NULL,
+                original TEXT NOT NULL,
+                suggested TEXT NOT NULL,
+                explanation TEXT NOT NULL,
+                position INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_reading_session_priority_issue_evaluation ON reading_session_priority_issue(reading_session_evaluation_id);
+
+            CREATE TABLE reading_session_useful_chunk (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                reading_session_evaluation_id INTEGER NOT NULL REFERENCES reading_session_evaluation(id) ON DELETE CASCADE,
+                chunk TEXT NOT NULL,
+                register TEXT NOT NULL,
+                example TEXT NOT NULL,
+                position INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_reading_session_useful_chunk_evaluation ON reading_session_useful_chunk(reading_session_evaluation_id);
+
+            PRAGMA foreign_keys = OFF;
+
+            CREATE TABLE lexical_chunk_v13 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chunk_type TEXT NOT NULL CHECK (chunk_type IN (
+                    'single_word', 'collocation', 'phrase', 'discourse_marker',
+                    'hedging_expression', 'stance_phrase', 'register_specific_expression',
+                    'domain_specific_expression'
+                )),
+                text TEXT NOT NULL,
+                normalized_text TEXT NOT NULL UNIQUE,
+                meaning TEXT NOT NULL,
+                register TEXT NOT NULL,
+                target_level TEXT NOT NULL CHECK (target_level IN ('A1','A2','B1','B2','C1','C2')),
+                domain TEXT,
+                examples_json TEXT NOT NULL,
+                common_error TEXT,
+                origin TEXT NOT NULL CHECK (origin IN (
+                    'correction', 'better_expression', 'repair_event', 'writing_task', 'reading_session', 'manual'
+                )),
+                source_correction_id INTEGER REFERENCES correction(id) ON DELETE SET NULL,
+                source_expression_id INTEGER REFERENCES expression(id) ON DELETE SET NULL,
+                source_repair_event_id INTEGER REFERENCES repair_event(id) ON DELETE SET NULL,
+                source_writing_evaluation_id INTEGER REFERENCES writing_evaluation(id) ON DELETE SET NULL,
+                source_reading_session_attempt_id INTEGER REFERENCES reading_session_attempt(id) ON DELETE SET NULL,
+                productive_status TEXT NOT NULL DEFAULT 'not_tried' CHECK (productive_status IN (
+                    'not_tried', 'recognized', 'used_with_help', 'used_independently', 'automatic'
+                )),
+                review_item_id INTEGER REFERENCES review_item(id) ON DELETE SET NULL,
+                last_used_at INTEGER,
+                created_at INTEGER NOT NULL
+            );
+            INSERT INTO lexical_chunk_v13
+                (id, chunk_type, text, normalized_text, meaning, register, target_level, domain, examples_json,
+                 common_error, origin, source_correction_id, source_expression_id, source_repair_event_id,
+                 source_writing_evaluation_id, source_reading_session_attempt_id, productive_status,
+                 review_item_id, last_used_at, created_at)
+            SELECT
+                id, chunk_type, text, normalized_text, meaning, register, target_level, domain, examples_json,
+                common_error, origin, source_correction_id, source_expression_id, source_repair_event_id,
+                source_writing_evaluation_id, NULL, productive_status,
+                review_item_id, last_used_at, created_at
+            FROM lexical_chunk;
+            DROP TABLE lexical_chunk;
+            ALTER TABLE lexical_chunk_v13 RENAME TO lexical_chunk;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_lexical_chunk_normalized_text ON lexical_chunk(normalized_text);
+            CREATE INDEX IF NOT EXISTS idx_lexical_chunk_status ON lexical_chunk(productive_status);
+
+            CREATE TABLE review_item_v13 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL CHECK (type IN (
+                    'grammar_pattern', 'vocabulary', 'phrase', 'pronunciation_target', 'conversation_strategy'
+                )),
+                content TEXT NOT NULL,
+                source TEXT NOT NULL CHECK (source IN (
+                    'repair_event', 'session_summary', 'assessment_priority', 'writing_task', 'chunk', 'reading_session'
+                )),
+                source_repair_event_id INTEGER REFERENCES repair_event(id) ON DELETE SET NULL,
+                source_session_id INTEGER REFERENCES session(id) ON DELETE SET NULL,
+                source_assessment_id INTEGER REFERENCES assessment(id) ON DELETE SET NULL,
+                source_pronunciation_target_id INTEGER REFERENCES pronunciation_target(id) ON DELETE SET NULL,
+                source_writing_task_id INTEGER REFERENCES writing_task(id) ON DELETE SET NULL,
+                source_chunk_id INTEGER REFERENCES lexical_chunk(id) ON DELETE SET NULL,
+                source_reading_session_attempt_id INTEGER REFERENCES reading_session_attempt(id) ON DELETE SET NULL,
+                stage INTEGER NOT NULL DEFAULT 0 CHECK (stage BETWEEN 0 AND 5),
+                next_review_at INTEGER NOT NULL,
+                last_reviewed_at INTEGER,
+                review_count INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL
+            );
+            INSERT INTO review_item_v13
+                (id, type, content, source, source_repair_event_id, source_session_id, source_assessment_id,
+                 source_pronunciation_target_id, source_writing_task_id, source_chunk_id,
+                 source_reading_session_attempt_id, stage, next_review_at,
+                 last_reviewed_at, review_count, created_at)
+            SELECT
+                id, type, content, source, source_repair_event_id, source_session_id, source_assessment_id,
+                source_pronunciation_target_id, source_writing_task_id, source_chunk_id,
+                NULL, stage, next_review_at,
+                last_reviewed_at, review_count, created_at
+            FROM review_item;
+            DROP TABLE review_item;
+            ALTER TABLE review_item_v13 RENAME TO review_item;
+            CREATE INDEX IF NOT EXISTS idx_review_item_next_review_at ON review_item(next_review_at);
+            CREATE INDEX IF NOT EXISTS idx_review_item_type ON review_item(type);
+
+            PRAGMA foreign_keys = ON;",
+        )?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
 }
@@ -959,15 +1174,35 @@ pub(crate) fn open_connection(path: &Path) -> Result<Connection, HistoryCommandE
         )
     })?;
 
+    // Every command opens its own connection and calls `open_connection`, so
+    // without this lock, concurrent commands at startup can race on a single
+    // database file at once — both on the one-time WAL-mode conversion below
+    // (which needs an exclusive lock and can otherwise surface as a spurious
+    // "database is locked" before `busy_timeout` is even set on the losing
+    // connection) and, worse, on `migrate`'s multi-statement DDL, where nothing
+    // runs inside an explicit transaction, so two connections' statements can
+    // interleave and corrupt the schema while still letting `user_version`
+    // reach its final value. Serializing connection setup in-process closes
+    // both windows; the lock is only ever held briefly once a database is
+    // already up to date.
+    let _migration_guard = migration_lock()
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner());
+
     conn.execute_batch(
         "PRAGMA journal_mode = WAL;
          PRAGMA foreign_keys = ON;
          PRAGMA busy_timeout = 5000;",
     )?;
-
     migrate(&conn)?;
+    drop(_migration_guard);
 
     Ok(conn)
+}
+
+fn migration_lock() -> &'static Mutex<()> {
+    static LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+    LOCK.get_or_init(|| Mutex::new(()))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1179,6 +1414,7 @@ pub(crate) fn record_turn_pair(
                     source_expression_id: None,
                     source_repair_event_id: None,
                     source_writing_evaluation_id: None,
+                    source_reading_session_attempt_id: None,
                 },
                 now_ms,
             )?;
@@ -1218,6 +1454,7 @@ pub(crate) fn record_turn_pair(
                 source_expression_id: Some(expression_id),
                 source_repair_event_id: None,
                 source_writing_evaluation_id: None,
+                source_reading_session_attempt_id: None,
             },
             now_ms,
         )?;
@@ -1341,14 +1578,16 @@ pub(crate) fn insert_review_item(
     source_pronunciation_target_id: Option<i64>,
     source_writing_task_id: Option<i64>,
     source_chunk_id: Option<i64>,
+    source_reading_session_attempt_id: Option<i64>,
     now_ms: i64,
 ) -> rusqlite::Result<i64> {
     conn.execute(
         "INSERT INTO review_item
             (type, content, source, source_repair_event_id, source_session_id, source_assessment_id,
-             source_pronunciation_target_id, source_writing_task_id, source_chunk_id, stage, next_review_at,
+             source_pronunciation_target_id, source_writing_task_id, source_chunk_id,
+             source_reading_session_attempt_id, stage, next_review_at,
              last_reviewed_at, review_count, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, 0, ?10, NULL, 0, ?10)",
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, 0, ?11, NULL, 0, ?11)",
         params![
             review_item_type_str(item_type),
             content,
@@ -1359,6 +1598,7 @@ pub(crate) fn insert_review_item(
             source_pronunciation_target_id,
             source_writing_task_id,
             source_chunk_id,
+            source_reading_session_attempt_id,
             now_ms,
         ],
     )?;
@@ -1405,6 +1645,7 @@ fn chunk_origin_str(origin: ChunkOrigin) -> &'static str {
         ChunkOrigin::BetterExpression => "better_expression",
         ChunkOrigin::RepairEvent => "repair_event",
         ChunkOrigin::WritingTask => "writing_task",
+        ChunkOrigin::ReadingSession => "reading_session",
         ChunkOrigin::Manual => "manual",
     }
 }
@@ -1415,6 +1656,7 @@ fn parse_chunk_origin(value: &str) -> Result<ChunkOrigin, std::io::Error> {
         "better_expression" => Ok(ChunkOrigin::BetterExpression),
         "repair_event" => Ok(ChunkOrigin::RepairEvent),
         "writing_task" => Ok(ChunkOrigin::WritingTask),
+        "reading_session" => Ok(ChunkOrigin::ReadingSession),
         "manual" => Ok(ChunkOrigin::Manual),
         other => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
@@ -1551,8 +1793,9 @@ pub(crate) fn create_chunk_candidate(
         "INSERT INTO lexical_chunk
             (chunk_type, text, normalized_text, meaning, register, target_level, domain, examples_json,
              common_error, origin, source_correction_id, source_expression_id, source_repair_event_id,
-             source_writing_evaluation_id, productive_status, review_item_id, last_used_at, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, 'not_tried', NULL, NULL, ?15)",
+             source_writing_evaluation_id, source_reading_session_attempt_id, productive_status,
+             review_item_id, last_used_at, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 'not_tried', NULL, NULL, ?16)",
         params![
             lexical_chunk_type_str(input.chunk_type),
             input.text,
@@ -1568,6 +1811,7 @@ pub(crate) fn create_chunk_candidate(
             input.source_expression_id,
             input.source_repair_event_id,
             input.source_writing_evaluation_id,
+            input.source_reading_session_attempt_id,
             now_ms,
         ],
     )?;
@@ -1611,6 +1855,7 @@ pub(crate) fn promote_chunk_to_review(
         None,
         None,
         Some(chunk_id),
+        None,
         now_ms,
     )?;
     conn.execute(
@@ -1824,6 +2069,7 @@ fn insert_writing_evaluation_tx(
                 source_expression_id: None,
                 source_repair_event_id: None,
                 source_writing_evaluation_id: Some(evaluation_id),
+                source_reading_session_attempt_id: None,
             },
             now_ms,
         )?;
@@ -2058,6 +2304,260 @@ pub(crate) fn recent_writing_tasks(
         })
     })
     .collect()
+}
+
+// ---------------------------------------------------------------------
+// Reading session persistence (reading to writing)
+// ---------------------------------------------------------------------
+
+pub(crate) fn insert_reading_session_attempt(
+    conn: &Connection,
+    text_id: &str,
+    now_ms: i64,
+) -> rusqlite::Result<i64> {
+    conn.execute(
+        "INSERT INTO reading_session_attempt (text_id, status, created_at)
+         VALUES (?1, 'reading', ?2)",
+        params![text_id, now_ms],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub(crate) fn record_reading_comprehension_answer(
+    conn: &Connection,
+    attempt_id: i64,
+    is_correct: bool,
+    now_ms: i64,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE reading_session_attempt
+         SET comprehension_correct = ?1, comprehension_answered_at = ?2, status = 'comprehension_answered'
+         WHERE id = ?3",
+        params![is_correct as i64, now_ms, attempt_id],
+    )?;
+    Ok(())
+}
+
+pub(crate) fn record_reading_selected_chunks(
+    conn: &Connection,
+    attempt_id: i64,
+    chunk_ids: &[i64],
+) -> rusqlite::Result<()> {
+    let chunk_ids_json = serde_json::to_string(chunk_ids).unwrap_or_else(|_| "[]".to_string());
+    conn.execute(
+        "UPDATE reading_session_attempt
+         SET selected_chunk_ids_json = ?1, status = 'chunks_selected'
+         WHERE id = ?2",
+        params![chunk_ids_json, attempt_id],
+    )?;
+    Ok(())
+}
+
+fn insert_reading_evaluation_tx(
+    tx: &rusqlite::Transaction,
+    attempt_id: i64,
+    record: &reading::ReadingEvaluationRecord,
+    now_ms: i64,
+) -> rusqlite::Result<i64> {
+    tx.execute(
+        "INSERT INTO reading_session_evaluation
+            (reading_session_attempt_id, summary_fidelity, response_relevance, created_at)
+         VALUES (?1, ?2, ?3, ?4)",
+        params![
+            attempt_id,
+            summary_fidelity_str(record.summary_fidelity),
+            response_relevance_str(record.response_relevance),
+            now_ms,
+        ],
+    )?;
+    let evaluation_id = tx.last_insert_rowid();
+
+    for (position, issue) in record.priority_issues.iter().enumerate() {
+        tx.execute(
+            "INSERT INTO reading_session_priority_issue
+                (reading_session_evaluation_id, category, original, suggested, explanation, position)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                evaluation_id,
+                reading_issue_category_str(issue.category),
+                &issue.original,
+                &issue.suggested,
+                &issue.explanation,
+                position as i64,
+            ],
+        )?;
+    }
+    for (position, useful_chunk) in record.useful_chunks.iter().enumerate() {
+        tx.execute(
+            "INSERT INTO reading_session_useful_chunk
+                (reading_session_evaluation_id, chunk, register, example, position)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                evaluation_id,
+                &useful_chunk.chunk,
+                &useful_chunk.register,
+                &useful_chunk.example,
+                position as i64,
+            ],
+        )?;
+    }
+
+    Ok(evaluation_id)
+}
+
+pub(crate) fn record_reading_production_evaluation(
+    conn: &mut Connection,
+    attempt_id: i64,
+    summary_text: &str,
+    response_text: &str,
+    record: &reading::ReadingEvaluationRecord,
+    now_ms: i64,
+) -> rusqlite::Result<i64> {
+    let tx = conn.transaction()?;
+    tx.execute(
+        "UPDATE reading_session_attempt
+         SET summary_text = ?1, response_text = ?2, production_submitted_at = ?3, status = 'evaluated'
+         WHERE id = ?4",
+        params![summary_text, response_text, now_ms, attempt_id],
+    )?;
+    let evaluation_id = insert_reading_evaluation_tx(&tx, attempt_id, record, now_ms)?;
+    tx.commit()?;
+    Ok(evaluation_id)
+}
+
+fn reading_evaluation_by_attempt(
+    conn: &Connection,
+    attempt_id: i64,
+) -> rusqlite::Result<Option<(i64, reading::ReadingEvaluationRecord)>> {
+    let found = conn
+        .query_row(
+            "SELECT id, summary_fidelity, response_relevance FROM reading_session_evaluation
+             WHERE reading_session_attempt_id = ?1",
+            params![attempt_id],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )
+        .optional()?;
+
+    let Some((evaluation_id, summary_fidelity_raw, response_relevance_raw)) = found else {
+        return Ok(None);
+    };
+    let summary_fidelity = parse_summary_fidelity(&summary_fidelity_raw)
+        .map_err(|error| column_conversion_error(1, error))?;
+    let response_relevance = parse_response_relevance(&response_relevance_raw)
+        .map_err(|error| column_conversion_error(2, error))?;
+
+    let mut issue_statement = conn.prepare(
+        "SELECT category, original, suggested, explanation FROM reading_session_priority_issue
+         WHERE reading_session_evaluation_id = ?1 ORDER BY position ASC",
+    )?;
+    let priority_issues = issue_statement
+        .query_map(params![evaluation_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?
+        .map(|row| {
+            let (category, original, suggested, explanation) = row?;
+            Ok(reading::ReadingPriorityIssueRecord {
+                category: parse_reading_issue_category(&category)
+                    .map_err(|error| column_conversion_error(0, error))?,
+                original,
+                suggested,
+                explanation,
+            })
+        })
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    let mut chunk_statement = conn.prepare(
+        "SELECT chunk, register, example FROM reading_session_useful_chunk
+         WHERE reading_session_evaluation_id = ?1 ORDER BY position ASC",
+    )?;
+    let useful_chunks = chunk_statement
+        .query_map(params![evaluation_id], |row| {
+            Ok(reading::ReadingUsefulChunkRecord {
+                chunk: row.get(0)?,
+                register: row.get(1)?,
+                example: row.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    Ok(Some((
+        evaluation_id,
+        reading::ReadingEvaluationRecord {
+            summary_fidelity,
+            response_relevance,
+            priority_issues,
+            useful_chunks,
+        },
+    )))
+}
+
+pub(crate) fn reading_session_detail(
+    conn: &Connection,
+    attempt_id: i64,
+) -> rusqlite::Result<Option<reading::ReadingSessionDetail>> {
+    let core = conn
+        .query_row(
+            "SELECT text_id, status, comprehension_correct, selected_chunk_ids_json, summary_text,
+                    response_text, created_at
+             FROM reading_session_attempt WHERE id = ?1",
+            params![attempt_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, Option<i64>>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, Option<String>>(5)?,
+                    row.get::<_, i64>(6)?,
+                ))
+            },
+        )
+        .optional()?;
+
+    let Some((
+        text_id,
+        status,
+        comprehension_correct,
+        selected_chunk_ids_json,
+        summary_text,
+        response_text,
+        created_at,
+    )) = core
+    else {
+        return Ok(None);
+    };
+
+    let selected_chunk_ids: Vec<i64> = selected_chunk_ids_json
+        .as_deref()
+        .map(|json| serde_json::from_str(json).unwrap_or_default())
+        .unwrap_or_default();
+
+    let evaluation = reading_evaluation_by_attempt(conn, attempt_id)?
+        .map(|(id, record)| reading::reading_evaluation_result_from_record(id, record));
+
+    Ok(Some(reading::ReadingSessionDetail {
+        id: attempt_id,
+        text_id,
+        status: parse_reading_session_status(&status).map_err(|error| column_conversion_error(1, error))?,
+        comprehension_correct: comprehension_correct.map(|value| value != 0),
+        selected_chunk_ids,
+        summary_text,
+        response_text,
+        created_at,
+        evaluation,
+    }))
 }
 
 // ---------------------------------------------------------------------
@@ -3052,6 +3552,7 @@ pub async fn complete_session(
                     None,
                     None,
                     None,
+                    None,
                     created_at,
                 )?;
             }
@@ -3745,6 +4246,54 @@ mod tests {
         assert_eq!(version, SCHEMA_VERSION);
     }
 
+    /// Regression test for a real corruption: every command opens its own
+    /// connection via `open_connection`, so concurrent commands at app
+    /// startup used to race through `migrate`'s multi-statement DDL on
+    /// separate connections at once. That left a database whose
+    /// `user_version` claimed the final schema version while several tables
+    /// (`lexical_chunk`, `reading_session_attempt`, ...) were never actually
+    /// created. `open_connection`'s migration lock must prevent this.
+    #[test]
+    fn concurrent_open_connection_calls_on_a_fresh_database_do_not_corrupt_the_schema() {
+        let (_directory, path) = scratch_db();
+
+        let handles: Vec<_> = (0..8)
+            .map(|_| {
+                let path = path.clone();
+                std::thread::spawn(move || open_connection(&path).expect("connection must open"))
+            })
+            .collect();
+        for handle in handles {
+            handle.join().expect("thread must not panic");
+        }
+
+        let conn = Connection::open(&path).expect("connection must open");
+        let version: i32 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version must read");
+        assert_eq!(version, SCHEMA_VERSION);
+
+        for table in [
+            "lexical_chunk",
+            "lexical_chunk_attempt",
+            "reading_session_attempt",
+            "reading_session_evaluation",
+            "reading_session_priority_issue",
+            "reading_session_useful_chunk",
+            "review_item",
+            "writing_task",
+        ] {
+            let exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    params![table],
+                    |row| row.get(0),
+                )
+                .unwrap_or_else(|_| panic!("query for {table} must succeed"));
+            assert_eq!(exists, 1, "table {table} must exist after concurrent migration");
+        }
+    }
+
     #[test]
     fn migration_from_version_5_adds_pronunciation_tables_without_touching_existing_data() {
         let (_directory, path) = scratch_db();
@@ -4350,6 +4899,7 @@ mod tests {
             source_expression_id: None,
             source_repair_event_id: None,
             source_writing_evaluation_id: None,
+            source_reading_session_attempt_id: None,
         }
     }
 
@@ -4541,6 +5091,117 @@ mod tests {
         let summary = recent.iter().find(|task| task.id == task_id).expect("task must be listed");
         assert_eq!(summary.draft_overall_level, Some(CefrLevel::B1));
         assert_eq!(summary.rewrite_overall_level, Some(CefrLevel::B2));
+    }
+
+    #[test]
+    fn reading_session_round_trip_persists_attempt_chunk_and_review_item() {
+        let (_directory, path) = scratch_db();
+        let mut conn = open_connection(&path).expect("connection must open");
+
+        let attempt_id =
+            insert_reading_session_attempt(&conn, "professional-email-project-delay", 1_000)
+                .expect("attempt must insert");
+        record_reading_comprehension_answer(&conn, attempt_id, true, 1_100)
+            .expect("comprehension answer must persist");
+
+        let (chunk_id, _) = create_chunk_candidate(
+            &conn,
+            ChunkCandidateInput {
+                chunk_type: LexicalChunkType::Phrase,
+                text: "rather than rush it and risk",
+                meaning: "justifying caution over speed",
+                register: "professional",
+                target_level: CefrLevel::B2,
+                domain: None,
+                examples: &[],
+                common_error: None,
+                origin: ChunkOrigin::ReadingSession,
+                source_correction_id: None,
+                source_expression_id: None,
+                source_repair_event_id: None,
+                source_writing_evaluation_id: None,
+                source_reading_session_attempt_id: Some(attempt_id),
+            },
+            1_200,
+        )
+        .expect("chunk must insert");
+        record_reading_selected_chunks(&conn, attempt_id, &[chunk_id])
+            .expect("selected chunks must persist");
+
+        let saved_chunk = lexical_chunk_by_id(&conn, chunk_id)
+            .expect("chunk must query")
+            .expect("chunk must exist");
+        assert_eq!(saved_chunk.origin, ChunkOrigin::ReadingSession);
+
+        let evaluation = reading::ReadingEvaluationRecord {
+            summary_fidelity: reading::SummaryFidelity::Faithful,
+            response_relevance: reading::ResponseRelevance::Relevant,
+            priority_issues: vec![reading::ReadingPriorityIssueRecord {
+                category: reading::ReadingIssueCategory::Summary,
+                original: "the launch got faster".to_string(),
+                suggested: "the launch was delayed".to_string(),
+                explanation: "The summary reversed the direction of the change.".to_string(),
+            }],
+            useful_chunks: vec![reading::ReadingUsefulChunkRecord {
+                chunk: "rather than rush it and risk".to_string(),
+                register: "professional".to_string(),
+                example: "Rather than rush it and risk a shaky rollout, we pushed the date.".to_string(),
+            }],
+        };
+        record_reading_production_evaluation(
+            &mut conn,
+            attempt_id,
+            "Jordan tells Priya the launch is delayed.",
+            "That works for us, thanks for the update.",
+            &evaluation,
+            1_300,
+        )
+        .expect("evaluation must persist");
+
+        let review_item_id = insert_review_item(
+            &conn,
+            ReviewItemType::Phrase,
+            "rather than rush it and risk (e.g. \"...\")",
+            ReviewSource::ReadingSession,
+            None,
+            None,
+            None,
+            None,
+            None,
+            None,
+            Some(attempt_id),
+            1_300,
+        )
+        .expect("review item must insert");
+
+        let (source, source_reading_session_attempt_id): (String, Option<i64>) = conn
+            .query_row(
+                "SELECT source, source_reading_session_attempt_id FROM review_item WHERE id = ?1",
+                params![review_item_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("review_item must exist");
+        assert_eq!(source, "reading_session");
+        assert_eq!(source_reading_session_attempt_id, Some(attempt_id));
+
+        let detail = reading_session_detail(&conn, attempt_id)
+            .expect("detail must query")
+            .expect("attempt must exist");
+        assert_eq!(detail.status, reading::ReadingSessionStatus::Evaluated);
+        assert_eq!(detail.comprehension_correct, Some(true));
+        assert_eq!(detail.selected_chunk_ids, vec![chunk_id]);
+        assert_eq!(
+            detail.summary_text.as_deref(),
+            Some("Jordan tells Priya the launch is delayed.")
+        );
+        assert!(detail.evaluation.is_some());
+
+        let (_, saved_evaluation) = reading_evaluation_by_attempt(&conn, attempt_id)
+            .expect("evaluation must query")
+            .expect("evaluation must exist");
+        assert_eq!(saved_evaluation.summary_fidelity, reading::SummaryFidelity::Faithful);
+        assert_eq!(saved_evaluation.priority_issues.len(), 1);
+        assert_eq!(saved_evaluation.useful_chunks.len(), 1);
     }
 
     #[test]
@@ -4968,6 +5629,7 @@ mod tests {
             Some(target_id),
             None,
             None,
+            None,
             1_500,
         )
         .expect("review item must insert");
@@ -5341,6 +6003,7 @@ mod tests {
             ReviewSource::SessionSummary,
             None,
             Some(session_id),
+            None,
             None,
             None,
             None,

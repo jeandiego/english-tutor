@@ -10,7 +10,13 @@ export type LexicalChunkType =
   | "register_specific_expression"
   | "domain_specific_expression";
 
-export type ChunkOrigin = "correction" | "better_expression" | "repair_event" | "writing_task" | "manual";
+export type ChunkOrigin =
+  | "correction"
+  | "better_expression"
+  | "repair_event"
+  | "writing_task"
+  | "reading_session"
+  | "manual";
 
 export type ProductiveStatus =
   | "not_tried"

@@ -1,0 +1,51 @@
+{
+  "id": "professional-email-project-delay",
+  "title": "A Schedule Update",
+  "level": "B2",
+  "theme": "Workplace communication",
+  "textType": "professional_email",
+  "body": "Subject: Update on the Atlas integration timeline\n\nHi Priya,\n\nI'm writing to give you an update on the Atlas integration ahead of Friday's check-in. We ran into an unexpected issue with the authentication layer last week, and after digging into it with the team, it's clear we won't be able to hit the original delivery date.\n\nHere's where things stand: the core integration logic is done and tested, but the authentication handshake needs another eight to ten days of work before it's production-ready. Rather than rush it and risk a shaky rollout, we'd like to push the launch to the 24th.\n\nI know this isn't the news you were hoping for, especially with the client demo already on the calendar. To keep things moving, we can offer a staging environment walkthrough next week so your team can start testing the non-authenticated flows early.\n\nPlease let me know if this timeline works on your end, or if we should set up a call to talk through alternatives.\n\nBest,\nJordan",
+  "targetChunks": [
+    {
+      "text": "I'm writing to give you an update on...",
+      "meaning": "a standard opening line to introduce a status update",
+      "register": "professional",
+      "chunkType": "phrase"
+    },
+    {
+      "text": "we ran into an unexpected issue with...",
+      "meaning": "reporting an unplanned problem without assigning blame",
+      "register": "professional",
+      "chunkType": "phrase"
+    },
+    {
+      "text": "rather than rush it and risk...",
+      "meaning": "justifying caution over speed",
+      "register": "professional",
+      "chunkType": "phrase"
+    },
+    {
+      "text": "to keep things moving",
+      "meaning": "signaling continued progress despite a setback",
+      "register": "professional",
+      "chunkType": "phrase"
+    },
+    {
+      "text": "talk through alternatives",
+      "meaning": "discuss other options together",
+      "register": "professional",
+      "chunkType": "collocation"
+    }
+  ],
+  "comprehensionCheck": {
+    "question": "Why is the launch being delayed?",
+    "options": [
+      "The client asked for extra features.",
+      "The authentication layer needs more work.",
+      "The team is short-staffed."
+    ],
+    "correctOptionIndex": 1
+  },
+  "summaryPrompt": "Summarize this email in 80-120 words, covering the reason for the delay and the new proposal.",
+  "responsePrompt": "Write a short reply, as Priya, either accepting the new date or proposing an alternative, and justify your position."
+}
