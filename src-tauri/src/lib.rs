@@ -28,6 +28,7 @@ pub fn run() {
             commands::learner_profile::save_learner_profile_preferences,
             commands::learner_profile::apply_assessment_to_learner_profile,
             commands::learner_profile::apply_session_to_learner_profile,
+            commands::learner_profile::apply_writing_task_to_learner_profile,
             commands::listening::generate_comprehension_check,
             commands::listening::submit_listening_check_attempt,
             commands::pronunciation::list_pronunciation_targets,
@@ -56,6 +57,12 @@ pub fn run() {
             commands::tutor::load_tutor_setup,
             commands::tutor::save_tutor_settings,
             commands::tutor::generate_tutor_turn,
+            commands::writing::list_writing_task_types,
+            commands::writing::start_writing_task,
+            commands::writing::submit_writing_draft,
+            commands::writing::submit_writing_rewrite,
+            commands::writing::get_writing_task,
+            commands::writing::list_writing_tasks,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

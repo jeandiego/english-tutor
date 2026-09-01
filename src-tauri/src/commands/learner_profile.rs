@@ -90,6 +90,7 @@ impl From<LearnerProfileCommandError> for HistoryCommandError {
 pub enum ProgressNoteOrigin {
     Assessment,
     Session,
+    Writing,
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq)]
@@ -256,6 +257,14 @@ pub struct ApplySessionToLearnerProfileRequest {
     scenario_label: String,
     #[serde(default)]
     priorities: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ApplyWritingTaskToLearnerProfileRequest {
+    pub(crate) task_type_label: String,
+    pub(crate) draft_overall_level: CefrLevel,
+    pub(crate) rewrite_overall_level: CefrLevel,
 }
 
 // ---------------------------------------------------------------------
@@ -612,6 +621,36 @@ fn apply_session(
     profile
 }
 
+/// A writing task update never touches CEFR levels — same principle as
+/// `apply_session`. The draft/rewrite overall levels are an informal
+/// per-task practice signal, not a formal assessment result, so they stay
+/// confined to the progress note text rather than overwriting
+/// `dimension_levels`, which is assessment-owned.
+fn apply_writing_task(
+    mut profile: LearnerProfileData,
+    task_type_label: &str,
+    draft_overall_level: CefrLevel,
+    rewrite_overall_level: CefrLevel,
+    now_ms: i64,
+) -> LearnerProfileData {
+    let text = format!(
+        "Completed a {task_type_label} writing task — draft {}, rewrite {}.",
+        cefr_level_str(draft_overall_level),
+        cefr_level_str(rewrite_overall_level),
+    );
+
+    push_progress_note(
+        &mut profile,
+        ProgressNote {
+            text,
+            origin: ProgressNoteOrigin::Writing,
+            created_at: now_ms,
+        },
+    );
+
+    profile
+}
+
 const ADVANCE_AFTER_CORRECT: i64 = 3;
 const REGRESS_AFTER_MISSED: i64 = 2;
 
@@ -794,6 +833,7 @@ pub async fn apply_assessment_to_learner_profile(
                     None,
                     Some(assessment_id),
                     None,
+                    None,
                     created_at,
                 )?;
             }
@@ -827,6 +867,37 @@ pub async fn apply_session_to_learner_profile(
             profile,
             &request.scenario_label,
             &request.priorities,
+            now_ms(),
+        );
+        write_profile(&write_path, &updated)
+    })
+    .await
+    .map_err(|error| {
+        LearnerProfileCommandError::new(
+            "learner-profile-task-failed",
+            "The learner profile could not be updated.",
+            error.to_string(),
+        )
+    })??;
+
+    compose_profile_response(&app_handle).await
+}
+
+#[tauri::command]
+pub async fn apply_writing_task_to_learner_profile(
+    app_handle: AppHandle,
+    request: ApplyWritingTaskToLearnerProfileRequest,
+) -> Result<LearnerProfileResponse, LearnerProfileCommandError> {
+    let profile_path = config_path(&app_handle)?;
+    let write_path = profile_path.clone();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let profile = read_profile(&write_path)?;
+        let updated = apply_writing_task(
+            profile,
+            &request.task_type_label,
+            request.draft_overall_level,
+            request.rewrite_overall_level,
             now_ms(),
         );
         write_profile(&write_path, &updated)
@@ -968,6 +1039,35 @@ mod tests {
         assert_eq!(updated.progress_notes[0].origin, ProgressNoteOrigin::Session);
         assert!(updated.progress_notes[0].text.contains("Daily standup"));
         assert!(updated.progress_notes[0].text.contains("past tense accuracy"));
+    }
+
+    #[test]
+    fn apply_writing_task_appends_a_writing_origin_note_without_changing_levels() {
+        let mut profile = LearnerProfileData::default();
+        profile.current_level = Some(CefrLevel::B1);
+        profile
+            .dimension_levels
+            .insert(AssessmentCompetency::Fluency, CefrLevel::B1);
+
+        let updated = apply_writing_task(
+            profile,
+            "Professional email",
+            CefrLevel::B1,
+            CefrLevel::B2,
+            5_000,
+        );
+
+        // A writing task update never touches CEFR levels — that's assessment-owned.
+        assert_eq!(updated.current_level, Some(CefrLevel::B1));
+        assert_eq!(
+            updated.dimension_levels.get(&AssessmentCompetency::Fluency),
+            Some(&CefrLevel::B1)
+        );
+        assert_eq!(updated.progress_notes.len(), 1);
+        assert_eq!(updated.progress_notes[0].origin, ProgressNoteOrigin::Writing);
+        assert!(updated.progress_notes[0].text.contains("Professional email"));
+        assert!(updated.progress_notes[0].text.contains("B1"));
+        assert!(updated.progress_notes[0].text.contains("B2"));
     }
 
     #[test]

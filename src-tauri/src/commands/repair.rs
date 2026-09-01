@@ -581,6 +581,7 @@ pub async fn update_repair_event_outcome(
                         None,
                         None,
                         None,
+                        None,
                         now_ms(),
                     )?;
                 }

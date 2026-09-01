@@ -12,3 +12,4 @@ pub(crate) mod storage;
 pub(crate) mod transcription;
 pub(crate) mod tts;
 pub(crate) mod tutor;
+pub(crate) mod writing;

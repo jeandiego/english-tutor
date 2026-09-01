@@ -11,6 +11,7 @@ import { AppSidebar, type AppPage } from "./components/sidebar/AppSidebar";
 import { SessionsPage } from "./components/SessionsPage";
 import { SettingsPage } from "./components/SettingsPage";
 import { StoragePage } from "./components/StoragePage";
+import { WritingGymPage } from "./components/WritingGymPage";
 import type {
   TranscriptionDiagnostic,
   TutorDiagnostic,
@@ -65,6 +66,7 @@ const PAGE_HEADER: Record<AppPage, { eyebrow: string; title: string }> = {
   conversation: { eyebrow: "Conversation", title: "Live practice" },
   sessions: { eyebrow: "Sessions", title: "Choose a scenario" },
   assessment: { eyebrow: "Assessment", title: "Level check" },
+  writing: { eyebrow: "Writing", title: "Writing gym" },
   history: { eyebrow: "History", title: "Past conversations" },
   progress: { eyebrow: "My Progress", title: "Learning trends" },
   pronunciation: { eyebrow: "Pronunciation", title: "Practice a phrase" },
@@ -149,6 +151,14 @@ function App() {
             : !tutorReady
               ? "Open Settings to complete local tutor setup"
               : undefined;
+  const writingDisabledHint =
+    healthState.status !== "ready"
+      ? "Writing feedback is available when the desktop runtime is ready"
+      : tutorState.status === "checking"
+        ? "Writing feedback is available after the local tutor check"
+        : !tutorReady
+          ? "Open Settings to complete local tutor setup"
+          : undefined;
   const transcriptionDiagnostic: TranscriptionDiagnostic =
     transcriptionState.status === "checking" ||
     (transcriptionState.status === "loaded" && transcriptionState.saving)
@@ -313,6 +323,11 @@ function App() {
               queryKey: assessmentKeys.latest(),
             })
           }
+        />
+      ) : activePage === "writing" ? (
+        <WritingGymPage
+          disabled={healthState.status !== "ready" || !tutorReady}
+          disabledHint={writingDisabledHint}
         />
       ) : activePage === "history" ? (
         <HistoryPage

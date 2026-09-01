@@ -55,6 +55,7 @@ pub enum ReviewSource {
     RepairEvent,
     SessionSummary,
     AssessmentPriority,
+    WritingTask,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]

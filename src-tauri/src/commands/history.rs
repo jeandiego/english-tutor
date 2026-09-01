@@ -13,13 +13,17 @@ use super::listening::ListeningCheckType;
 use super::pronunciation::{self, PronunciationProblemCategory, PronunciationTargetSource};
 use super::repair::{RepairIntensity, RepairMode, RepairOutcome, RepairPriority};
 use super::review::{self, ReviewItemType, ReviewOutcome, ReviewSource};
+use super::writing::{
+    self, WritingDimension, WritingEvaluationRecord, WritingEvaluationStage, WritingTaskStatus,
+    WritingTaskType,
+};
 use super::tutor::{
     BetterExpression, CorrectionCategory, CorrectionSeverity, TutorCorrection, TutorMessage,
     TutorMessageRole,
 };
 
 const DB_FILE_NAME: &str = "history.sqlite3";
-const SCHEMA_VERSION: i32 = 10;
+const SCHEMA_VERSION: i32 = 11;
 const ALL_TIME_CATEGORY_LIMIT: i64 = 100_000;
 const DEFAULT_LIST_LIMIT: i64 = 10;
 const MAX_LIST_LIMIT: i64 = 100;
@@ -349,6 +353,7 @@ fn review_source_str(source: ReviewSource) -> &'static str {
         ReviewSource::RepairEvent => "repair_event",
         ReviewSource::SessionSummary => "session_summary",
         ReviewSource::AssessmentPriority => "assessment_priority",
+        ReviewSource::WritingTask => "writing_task",
     }
 }
 
@@ -357,6 +362,7 @@ fn parse_review_source(value: &str) -> Result<ReviewSource, std::io::Error> {
         "repair_event" => Ok(ReviewSource::RepairEvent),
         "session_summary" => Ok(ReviewSource::SessionSummary),
         "assessment_priority" => Ok(ReviewSource::AssessmentPriority),
+        "writing_task" => Ok(ReviewSource::WritingTask),
         other => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             format!("unknown review source: {other}"),
@@ -382,6 +388,75 @@ fn parse_review_outcome(value: &str) -> Result<ReviewOutcome, std::io::Error> {
         other => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             format!("unknown review outcome: {other}"),
+        )),
+    }
+}
+
+fn writing_task_type_str(task_type: WritingTaskType) -> &'static str {
+    match task_type {
+        WritingTaskType::ProfessionalEmail => "professional_email",
+        WritingTaskType::OpinionParagraph => "opinion_paragraph",
+        WritingTaskType::TechnicalExplanation => "technical_explanation",
+        WritingTaskType::Summary => "summary",
+        WritingTaskType::Recommendation => "recommendation",
+        WritingTaskType::ShortArgument => "short_argument",
+    }
+}
+
+fn parse_writing_task_type(value: &str) -> Result<WritingTaskType, std::io::Error> {
+    match value {
+        "professional_email" => Ok(WritingTaskType::ProfessionalEmail),
+        "opinion_paragraph" => Ok(WritingTaskType::OpinionParagraph),
+        "technical_explanation" => Ok(WritingTaskType::TechnicalExplanation),
+        "summary" => Ok(WritingTaskType::Summary),
+        "recommendation" => Ok(WritingTaskType::Recommendation),
+        "short_argument" => Ok(WritingTaskType::ShortArgument),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown writing task type: {other}"),
+        )),
+    }
+}
+
+fn parse_writing_task_status(value: &str) -> Result<WritingTaskStatus, std::io::Error> {
+    match value {
+        "drafting" => Ok(WritingTaskStatus::Drafting),
+        "draft_evaluated" => Ok(WritingTaskStatus::DraftEvaluated),
+        "rewrite_evaluated" => Ok(WritingTaskStatus::RewriteEvaluated),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown writing task status: {other}"),
+        )),
+    }
+}
+
+fn writing_evaluation_stage_str(stage: WritingEvaluationStage) -> &'static str {
+    match stage {
+        WritingEvaluationStage::Draft => "draft",
+        WritingEvaluationStage::Rewrite => "rewrite",
+    }
+}
+
+fn writing_dimension_str(dimension: WritingDimension) -> &'static str {
+    match dimension {
+        WritingDimension::TaskAchievement => "task_achievement",
+        WritingDimension::CoherenceCohesion => "coherence_cohesion",
+        WritingDimension::LexicalResource => "lexical_resource",
+        WritingDimension::Grammar => "grammar",
+        WritingDimension::RegisterTone => "register_tone",
+    }
+}
+
+fn parse_writing_dimension(value: &str) -> Result<WritingDimension, std::io::Error> {
+    match value {
+        "task_achievement" => Ok(WritingDimension::TaskAchievement),
+        "coherence_cohesion" => Ok(WritingDimension::CoherenceCohesion),
+        "lexical_resource" => Ok(WritingDimension::LexicalResource),
+        "grammar" => Ok(WritingDimension::Grammar),
+        "register_tone" => Ok(WritingDimension::RegisterTone),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown writing dimension: {other}"),
         )),
     }
 }
@@ -663,6 +738,108 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
             ALTER TABLE correction_new RENAME TO correction;
             CREATE INDEX IF NOT EXISTS idx_correction_turn ON correction(turn_id);
             CREATE INDEX IF NOT EXISTS idx_correction_category ON correction(category);",
+        )?;
+    }
+
+    if current_version < 11 {
+        conn.execute_batch(
+            "CREATE TABLE writing_task (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                task_type TEXT NOT NULL CHECK (task_type IN (
+                    'professional_email', 'opinion_paragraph', 'technical_explanation',
+                    'summary', 'recommendation', 'short_argument'
+                )),
+                target_level TEXT NOT NULL CHECK (target_level IN ('A1', 'A2', 'B1', 'B2', 'C1', 'C2')),
+                draft_text TEXT,
+                draft_submitted_at INTEGER,
+                rewrite_text TEXT,
+                rewrite_submitted_at INTEGER,
+                status TEXT NOT NULL DEFAULT 'drafting' CHECK (status IN (
+                    'drafting', 'draft_evaluated', 'rewrite_evaluated'
+                )),
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_writing_task_created_at ON writing_task(created_at);
+
+            CREATE TABLE writing_evaluation (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                writing_task_id INTEGER NOT NULL REFERENCES writing_task(id) ON DELETE CASCADE,
+                stage TEXT NOT NULL CHECK (stage IN ('draft', 'rewrite')),
+                overall_level TEXT NOT NULL CHECK (overall_level IN ('A1', 'A2', 'B1', 'B2', 'C1', 'C2')),
+                rewrite_instruction TEXT NOT NULL,
+                created_at INTEGER NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_writing_evaluation_task ON writing_evaluation(writing_task_id);
+
+            CREATE TABLE writing_dimension_score (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                writing_evaluation_id INTEGER NOT NULL REFERENCES writing_evaluation(id) ON DELETE CASCADE,
+                dimension TEXT NOT NULL CHECK (dimension IN (
+                    'task_achievement', 'coherence_cohesion', 'lexical_resource', 'grammar', 'register_tone'
+                )),
+                level TEXT NOT NULL CHECK (level IN ('A1', 'A2', 'B1', 'B2', 'C1', 'C2')),
+                evidence TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_writing_dimension_score_evaluation ON writing_dimension_score(writing_evaluation_id);
+
+            CREATE TABLE writing_priority_issue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                writing_evaluation_id INTEGER NOT NULL REFERENCES writing_evaluation(id) ON DELETE CASCADE,
+                category TEXT NOT NULL,
+                original TEXT NOT NULL,
+                suggested TEXT NOT NULL,
+                explanation TEXT NOT NULL,
+                position INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_writing_priority_issue_evaluation ON writing_priority_issue(writing_evaluation_id);
+
+            CREATE TABLE writing_useful_chunk (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                writing_evaluation_id INTEGER NOT NULL REFERENCES writing_evaluation(id) ON DELETE CASCADE,
+                chunk TEXT NOT NULL,
+                register TEXT NOT NULL,
+                example TEXT NOT NULL,
+                position INTEGER NOT NULL DEFAULT 0
+            );
+            CREATE INDEX IF NOT EXISTS idx_writing_useful_chunk_evaluation ON writing_useful_chunk(writing_evaluation_id);
+
+            PRAGMA foreign_keys = OFF;
+
+            CREATE TABLE review_item_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                type TEXT NOT NULL CHECK (type IN (
+                    'grammar_pattern', 'vocabulary', 'phrase', 'pronunciation_target', 'conversation_strategy'
+                )),
+                content TEXT NOT NULL,
+                source TEXT NOT NULL CHECK (source IN (
+                    'repair_event', 'session_summary', 'assessment_priority', 'writing_task'
+                )),
+                source_repair_event_id INTEGER REFERENCES repair_event(id) ON DELETE SET NULL,
+                source_session_id INTEGER REFERENCES session(id) ON DELETE SET NULL,
+                source_assessment_id INTEGER REFERENCES assessment(id) ON DELETE SET NULL,
+                source_pronunciation_target_id INTEGER REFERENCES pronunciation_target(id) ON DELETE SET NULL,
+                source_writing_task_id INTEGER REFERENCES writing_task(id) ON DELETE SET NULL,
+                stage INTEGER NOT NULL DEFAULT 0 CHECK (stage BETWEEN 0 AND 5),
+                next_review_at INTEGER NOT NULL,
+                last_reviewed_at INTEGER,
+                review_count INTEGER NOT NULL DEFAULT 0,
+                created_at INTEGER NOT NULL
+            );
+            INSERT INTO review_item_new
+                (id, type, content, source, source_repair_event_id, source_session_id, source_assessment_id,
+                 source_pronunciation_target_id, source_writing_task_id, stage, next_review_at, last_reviewed_at,
+                 review_count, created_at)
+            SELECT
+                id, type, content, source, source_repair_event_id, source_session_id, source_assessment_id,
+                source_pronunciation_target_id, NULL, stage, next_review_at, last_reviewed_at,
+                review_count, created_at
+            FROM review_item;
+            DROP TABLE review_item;
+            ALTER TABLE review_item_new RENAME TO review_item;
+            CREATE INDEX IF NOT EXISTS idx_review_item_next_review_at ON review_item(next_review_at);
+            CREATE INDEX IF NOT EXISTS idx_review_item_type ON review_item(type);
+
+            PRAGMA foreign_keys = ON;",
         )?;
     }
 
@@ -1012,13 +1189,15 @@ pub(crate) fn insert_review_item(
     source_session_id: Option<i64>,
     source_assessment_id: Option<i64>,
     source_pronunciation_target_id: Option<i64>,
+    source_writing_task_id: Option<i64>,
     now_ms: i64,
 ) -> rusqlite::Result<i64> {
     conn.execute(
         "INSERT INTO review_item
             (type, content, source, source_repair_event_id, source_session_id, source_assessment_id,
-             source_pronunciation_target_id, stage, next_review_at, last_reviewed_at, review_count, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, NULL, 0, ?8)",
+             source_pronunciation_target_id, source_writing_task_id, stage, next_review_at, last_reviewed_at,
+             review_count, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, 0, ?9, NULL, 0, ?9)",
         params![
             review_item_type_str(item_type),
             content,
@@ -1027,10 +1206,325 @@ pub(crate) fn insert_review_item(
             source_session_id,
             source_assessment_id,
             source_pronunciation_target_id,
+            source_writing_task_id,
             now_ms,
         ],
     )?;
     Ok(conn.last_insert_rowid())
+}
+
+// ---------------------------------------------------------------------
+// Writing task persistence (writing gym)
+// ---------------------------------------------------------------------
+
+pub(crate) fn insert_writing_task(
+    conn: &Connection,
+    task_type: WritingTaskType,
+    target_level: CefrLevel,
+    now_ms: i64,
+) -> rusqlite::Result<i64> {
+    conn.execute(
+        "INSERT INTO writing_task (task_type, target_level, status, created_at)
+         VALUES (?1, ?2, 'drafting', ?3)",
+        params![
+            writing_task_type_str(task_type),
+            cefr_level_str(target_level),
+            now_ms,
+        ],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+fn insert_writing_evaluation_tx(
+    tx: &rusqlite::Transaction,
+    writing_task_id: i64,
+    stage: WritingEvaluationStage,
+    record: &WritingEvaluationRecord,
+    now_ms: i64,
+) -> rusqlite::Result<i64> {
+    tx.execute(
+        "INSERT INTO writing_evaluation (writing_task_id, stage, overall_level, rewrite_instruction, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5)",
+        params![
+            writing_task_id,
+            writing_evaluation_stage_str(stage),
+            cefr_level_str(record.overall_level),
+            &record.rewrite_instruction,
+            now_ms,
+        ],
+    )?;
+    let evaluation_id = tx.last_insert_rowid();
+
+    for dimension in &record.dimensions {
+        tx.execute(
+            "INSERT INTO writing_dimension_score (writing_evaluation_id, dimension, level, evidence)
+             VALUES (?1, ?2, ?3, ?4)",
+            params![
+                evaluation_id,
+                writing_dimension_str(dimension.dimension),
+                cefr_level_str(dimension.level),
+                &dimension.evidence,
+            ],
+        )?;
+    }
+    for (position, issue) in record.priority_issues.iter().enumerate() {
+        tx.execute(
+            "INSERT INTO writing_priority_issue
+                (writing_evaluation_id, category, original, suggested, explanation, position)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+            params![
+                evaluation_id,
+                writing_dimension_str(issue.category),
+                &issue.original,
+                &issue.suggested,
+                &issue.explanation,
+                position as i64,
+            ],
+        )?;
+    }
+    for (position, chunk) in record.useful_chunks.iter().enumerate() {
+        tx.execute(
+            "INSERT INTO writing_useful_chunk (writing_evaluation_id, chunk, register, example, position)
+             VALUES (?1, ?2, ?3, ?4, ?5)",
+            params![
+                evaluation_id,
+                &chunk.chunk,
+                &chunk.register,
+                &chunk.example,
+                position as i64,
+            ],
+        )?;
+    }
+
+    Ok(evaluation_id)
+}
+
+pub(crate) fn record_writing_draft_evaluation(
+    conn: &mut Connection,
+    writing_task_id: i64,
+    draft_text: &str,
+    record: &WritingEvaluationRecord,
+    now_ms: i64,
+) -> rusqlite::Result<i64> {
+    let tx = conn.transaction()?;
+    tx.execute(
+        "UPDATE writing_task SET draft_text = ?1, draft_submitted_at = ?2, status = 'draft_evaluated' WHERE id = ?3",
+        params![draft_text, now_ms, writing_task_id],
+    )?;
+    let evaluation_id =
+        insert_writing_evaluation_tx(&tx, writing_task_id, WritingEvaluationStage::Draft, record, now_ms)?;
+    tx.commit()?;
+    Ok(evaluation_id)
+}
+
+pub(crate) fn record_writing_rewrite_evaluation(
+    conn: &mut Connection,
+    writing_task_id: i64,
+    rewrite_text: &str,
+    record: &WritingEvaluationRecord,
+    now_ms: i64,
+) -> rusqlite::Result<i64> {
+    let tx = conn.transaction()?;
+    tx.execute(
+        "UPDATE writing_task SET rewrite_text = ?1, rewrite_submitted_at = ?2, status = 'rewrite_evaluated' WHERE id = ?3",
+        params![rewrite_text, now_ms, writing_task_id],
+    )?;
+    let evaluation_id =
+        insert_writing_evaluation_tx(&tx, writing_task_id, WritingEvaluationStage::Rewrite, record, now_ms)?;
+    tx.commit()?;
+    Ok(evaluation_id)
+}
+
+pub(crate) fn writing_evaluation_by_stage(
+    conn: &Connection,
+    writing_task_id: i64,
+    stage: WritingEvaluationStage,
+) -> rusqlite::Result<Option<(i64, WritingEvaluationRecord)>> {
+    let found = conn
+        .query_row(
+            "SELECT id, overall_level, rewrite_instruction FROM writing_evaluation
+             WHERE writing_task_id = ?1 AND stage = ?2",
+            params![writing_task_id, writing_evaluation_stage_str(stage)],
+            |row| {
+                Ok((
+                    row.get::<_, i64>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                ))
+            },
+        )
+        .optional()?;
+
+    let Some((evaluation_id, overall_level_raw, rewrite_instruction)) = found else {
+        return Ok(None);
+    };
+    let overall_level =
+        parse_cefr_level(&overall_level_raw).map_err(|error| column_conversion_error(1, error))?;
+
+    let mut dimension_statement = conn.prepare(
+        "SELECT dimension, level, evidence FROM writing_dimension_score WHERE writing_evaluation_id = ?1",
+    )?;
+    let dimensions = dimension_statement
+        .query_map(params![evaluation_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+            ))
+        })?
+        .map(|row| {
+            let (dimension, level, evidence) = row?;
+            Ok(writing::DimensionScoreRecord {
+                dimension: parse_writing_dimension(&dimension)
+                    .map_err(|error| column_conversion_error(0, error))?,
+                level: parse_cefr_level(&level).map_err(|error| column_conversion_error(1, error))?,
+                evidence,
+            })
+        })
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    let mut issue_statement = conn.prepare(
+        "SELECT category, original, suggested, explanation FROM writing_priority_issue
+         WHERE writing_evaluation_id = ?1 ORDER BY position ASC",
+    )?;
+    let priority_issues = issue_statement
+        .query_map(params![evaluation_id], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+            ))
+        })?
+        .map(|row| {
+            let (category, original, suggested, explanation) = row?;
+            Ok(writing::PriorityIssueRecord {
+                category: parse_writing_dimension(&category)
+                    .map_err(|error| column_conversion_error(0, error))?,
+                original,
+                suggested,
+                explanation,
+            })
+        })
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    let mut chunk_statement = conn.prepare(
+        "SELECT chunk, register, example FROM writing_useful_chunk
+         WHERE writing_evaluation_id = ?1 ORDER BY position ASC",
+    )?;
+    let useful_chunks = chunk_statement
+        .query_map(params![evaluation_id], |row| {
+            Ok(writing::UsefulChunkRecord {
+                chunk: row.get(0)?,
+                register: row.get(1)?,
+                example: row.get(2)?,
+            })
+        })?
+        .collect::<rusqlite::Result<Vec<_>>>()?;
+
+    Ok(Some((
+        evaluation_id,
+        WritingEvaluationRecord {
+            overall_level,
+            rewrite_instruction,
+            dimensions,
+            priority_issues,
+            useful_chunks,
+        },
+    )))
+}
+
+fn writing_evaluation_overall_level(
+    conn: &Connection,
+    writing_task_id: i64,
+    stage: WritingEvaluationStage,
+) -> rusqlite::Result<Option<CefrLevel>> {
+    conn.query_row(
+        "SELECT overall_level FROM writing_evaluation WHERE writing_task_id = ?1 AND stage = ?2",
+        params![writing_task_id, writing_evaluation_stage_str(stage)],
+        |row| row.get::<_, String>(0),
+    )
+    .optional()?
+    .map(|value| parse_cefr_level(&value).map_err(|error| column_conversion_error(0, error)))
+    .transpose()
+}
+
+pub(crate) fn writing_task_detail(
+    conn: &Connection,
+    writing_task_id: i64,
+) -> rusqlite::Result<Option<writing::WritingTaskDetail>> {
+    let core = conn
+        .query_row(
+            "SELECT task_type, target_level, status, draft_text, rewrite_text, created_at
+             FROM writing_task WHERE id = ?1",
+            params![writing_task_id],
+            |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3)?,
+                    row.get::<_, Option<String>>(4)?,
+                    row.get::<_, i64>(5)?,
+                ))
+            },
+        )
+        .optional()?;
+
+    let Some((task_type, target_level, status, draft_text, rewrite_text, created_at)) = core else {
+        return Ok(None);
+    };
+
+    let draft_evaluation = writing_evaluation_by_stage(conn, writing_task_id, WritingEvaluationStage::Draft)?
+        .map(|(id, record)| writing::evaluation_result_from_record(id, WritingEvaluationStage::Draft, record, None));
+    let rewrite_evaluation = writing_evaluation_by_stage(conn, writing_task_id, WritingEvaluationStage::Rewrite)?
+        .map(|(id, record)| {
+            writing::evaluation_result_from_record(id, WritingEvaluationStage::Rewrite, record, None)
+        });
+
+    Ok(Some(writing::WritingTaskDetail {
+        id: writing_task_id,
+        task_type: parse_writing_task_type(&task_type).map_err(|error| column_conversion_error(0, error))?,
+        target_level: parse_cefr_level(&target_level).map_err(|error| column_conversion_error(1, error))?,
+        status: parse_writing_task_status(&status).map_err(|error| column_conversion_error(2, error))?,
+        draft_text,
+        rewrite_text,
+        created_at,
+        draft_evaluation,
+        rewrite_evaluation,
+    }))
+}
+
+pub(crate) fn recent_writing_tasks(
+    conn: &Connection,
+    limit: i64,
+) -> rusqlite::Result<Vec<writing::WritingTaskSummary>> {
+    let mut statement = conn.prepare(
+        "SELECT id, task_type, status, created_at FROM writing_task ORDER BY created_at DESC LIMIT ?1",
+    )?;
+    let rows = statement.query_map(params![limit], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, i64>(3)?,
+        ))
+    })?;
+
+    rows.map(|row| {
+        let (id, task_type, status, created_at) = row?;
+        let draft_overall_level = writing_evaluation_overall_level(conn, id, WritingEvaluationStage::Draft)?;
+        let rewrite_overall_level = writing_evaluation_overall_level(conn, id, WritingEvaluationStage::Rewrite)?;
+        Ok(writing::WritingTaskSummary {
+            id,
+            task_type: parse_writing_task_type(&task_type).map_err(|error| column_conversion_error(1, error))?,
+            status: parse_writing_task_status(&status).map_err(|error| column_conversion_error(2, error))?,
+            draft_overall_level,
+            rewrite_overall_level,
+            created_at,
+        })
+    })
+    .collect()
 }
 
 // ---------------------------------------------------------------------
@@ -2021,6 +2515,7 @@ pub async fn complete_session(
                     Some(session_id),
                     None,
                     None,
+                    None,
                     created_at,
                 )?;
             }
@@ -2900,6 +3395,23 @@ mod tests {
                     category TEXT NOT NULL CHECK (category IN ('grammar', 'vocabulary', 'naturalness', 'clarity')),
                     severity TEXT NOT NULL CHECK (severity IN ('minor', 'important'))
                 );
+                CREATE TABLE review_item (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type TEXT NOT NULL CHECK (type IN (
+                        'grammar_pattern', 'vocabulary', 'phrase', 'pronunciation_target', 'conversation_strategy'
+                    )),
+                    content TEXT NOT NULL,
+                    source TEXT NOT NULL CHECK (source IN ('repair_event', 'session_summary', 'assessment_priority')),
+                    source_repair_event_id INTEGER,
+                    source_session_id INTEGER,
+                    source_assessment_id INTEGER,
+                    source_pronunciation_target_id INTEGER,
+                    stage INTEGER NOT NULL DEFAULT 0 CHECK (stage BETWEEN 0 AND 5),
+                    next_review_at INTEGER NOT NULL,
+                    last_reviewed_at INTEGER,
+                    review_count INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL
+                );
                 INSERT INTO session (started_at, ended_at) VALUES (1000, 2000);",
             )
             .expect("v7 session table must create");
@@ -2959,6 +3471,23 @@ mod tests {
                     explanation TEXT NOT NULL,
                     category TEXT NOT NULL CHECK (category IN ('grammar', 'vocabulary', 'naturalness', 'clarity')),
                     severity TEXT NOT NULL CHECK (severity IN ('minor', 'important'))
+                );
+                CREATE TABLE review_item (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type TEXT NOT NULL CHECK (type IN (
+                        'grammar_pattern', 'vocabulary', 'phrase', 'pronunciation_target', 'conversation_strategy'
+                    )),
+                    content TEXT NOT NULL,
+                    source TEXT NOT NULL CHECK (source IN ('repair_event', 'session_summary', 'assessment_priority')),
+                    source_repair_event_id INTEGER,
+                    source_session_id INTEGER,
+                    source_assessment_id INTEGER,
+                    source_pronunciation_target_id INTEGER,
+                    stage INTEGER NOT NULL DEFAULT 0 CHECK (stage BETWEEN 0 AND 5),
+                    next_review_at INTEGER NOT NULL,
+                    last_reviewed_at INTEGER,
+                    review_count INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL
                 );
                 INSERT INTO session (started_at, ended_at) VALUES (1000, 2000);
                 INSERT INTO turn (session_id, role, text, timestamp) VALUES (1, 'user', 'hello', 1500);",
@@ -3024,6 +3553,23 @@ mod tests {
                 );
                 CREATE INDEX idx_correction_turn ON correction(turn_id);
                 CREATE INDEX idx_correction_category ON correction(category);
+                CREATE TABLE review_item (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type TEXT NOT NULL CHECK (type IN (
+                        'grammar_pattern', 'vocabulary', 'phrase', 'pronunciation_target', 'conversation_strategy'
+                    )),
+                    content TEXT NOT NULL,
+                    source TEXT NOT NULL CHECK (source IN ('repair_event', 'session_summary', 'assessment_priority')),
+                    source_repair_event_id INTEGER,
+                    source_session_id INTEGER,
+                    source_assessment_id INTEGER,
+                    source_pronunciation_target_id INTEGER,
+                    stage INTEGER NOT NULL DEFAULT 0 CHECK (stage BETWEEN 0 AND 5),
+                    next_review_at INTEGER NOT NULL,
+                    last_reviewed_at INTEGER,
+                    review_count INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL
+                );
                 INSERT INTO session (started_at, ended_at) VALUES (1000, 2000);
                 INSERT INTO turn (session_id, role, text, timestamp) VALUES (1, 'user', 'hello', 1500);
                 INSERT INTO correction (turn_id, original, correction, explanation, category, severity)
@@ -3064,6 +3610,188 @@ mod tests {
             [],
         )
         .expect("register category must now be accepted");
+    }
+
+    #[test]
+    fn migration_from_version_10_adds_writing_tables_and_extends_review_item_source() {
+        let (_directory, path) = scratch_db();
+
+        let review_item_id = {
+            let conn = Connection::open(&path).expect("connection must open");
+            conn.execute_batch(
+                "CREATE TABLE session (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    started_at INTEGER NOT NULL,
+                    ended_at INTEGER NOT NULL
+                );
+                CREATE TABLE repair_event (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT
+                );
+                CREATE TABLE assessment (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT
+                );
+                CREATE TABLE pronunciation_target (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT
+                );
+                CREATE TABLE review_item (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type TEXT NOT NULL CHECK (type IN (
+                        'grammar_pattern', 'vocabulary', 'phrase', 'pronunciation_target', 'conversation_strategy'
+                    )),
+                    content TEXT NOT NULL,
+                    source TEXT NOT NULL CHECK (source IN ('repair_event', 'session_summary', 'assessment_priority')),
+                    source_repair_event_id INTEGER REFERENCES repair_event(id) ON DELETE SET NULL,
+                    source_session_id INTEGER REFERENCES session(id) ON DELETE SET NULL,
+                    source_assessment_id INTEGER REFERENCES assessment(id) ON DELETE SET NULL,
+                    stage INTEGER NOT NULL DEFAULT 0 CHECK (stage BETWEEN 0 AND 5),
+                    next_review_at INTEGER NOT NULL,
+                    last_reviewed_at INTEGER,
+                    review_count INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL,
+                    source_pronunciation_target_id INTEGER REFERENCES pronunciation_target(id) ON DELETE SET NULL
+                );
+                CREATE TABLE review_event (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    review_item_id INTEGER NOT NULL REFERENCES review_item(id) ON DELETE CASCADE,
+                    session_id INTEGER REFERENCES session(id) ON DELETE SET NULL,
+                    outcome TEXT NOT NULL CHECK (outcome IN ('remembered', 'partially_remembered', 'missed', 'skipped')),
+                    previous_stage INTEGER NOT NULL,
+                    new_stage INTEGER NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                INSERT INTO review_item
+                    (type, content, source, stage, next_review_at, last_reviewed_at, review_count, created_at)
+                VALUES
+                    ('grammar_pattern', 'past tense forms', 'repair_event', 0, 1000, NULL, 0, 1000);",
+            )
+            .expect("v10 review_item tables must create");
+            let review_item_id = conn.last_insert_rowid();
+            conn.pragma_update(None, "user_version", 10)
+                .expect("version must set");
+            review_item_id
+        };
+
+        let conn = open_connection(&path).expect("connection must upgrade");
+        let version: i32 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version must read");
+        assert_eq!(version, SCHEMA_VERSION);
+
+        for table in [
+            "writing_task",
+            "writing_evaluation",
+            "writing_dimension_score",
+            "writing_priority_issue",
+            "writing_useful_chunk",
+        ] {
+            let exists: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    params![table],
+                    |row| row.get(0),
+                )
+                .expect("sqlite_master must query");
+            assert_eq!(exists, 1, "table {table} must exist after migration");
+        }
+
+        let (content, source): (String, String) = conn
+            .query_row(
+                "SELECT content, source FROM review_item WHERE id = ?1",
+                params![review_item_id],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("pre-existing review_item row must survive migration");
+        assert_eq!(content, "past tense forms");
+        assert_eq!(source, "repair_event");
+
+        let task_id = insert_writing_task(&conn, WritingTaskType::ProfessionalEmail, CefrLevel::B2, 2_000)
+            .expect("writing task must insert");
+        conn.execute(
+            "INSERT INTO review_item
+                (type, content, source, source_writing_task_id, stage, next_review_at, last_reviewed_at, review_count, created_at)
+             VALUES ('vocabulary', 'extensive experience', 'writing_task', ?1, 0, 2000, NULL, 0, 2000)",
+            params![task_id],
+        )
+        .expect("writing_task must now be accepted as a review_item source");
+    }
+
+    fn sample_writing_evaluation(overall_level: CefrLevel) -> WritingEvaluationRecord {
+        WritingEvaluationRecord {
+            overall_level,
+            rewrite_instruction: "Focus on professional collocations.".to_string(),
+            dimensions: vec![
+                writing::DimensionScoreRecord {
+                    dimension: WritingDimension::TaskAchievement,
+                    level: overall_level,
+                    evidence: "States the purpose clearly.".to_string(),
+                },
+                writing::DimensionScoreRecord {
+                    dimension: WritingDimension::LexicalResource,
+                    level: overall_level,
+                    evidence: "Uses varied vocabulary.".to_string(),
+                },
+            ],
+            priority_issues: vec![writing::PriorityIssueRecord {
+                category: WritingDimension::LexicalResource,
+                original: "I have much experience".to_string(),
+                suggested: "I have extensive experience".to_string(),
+                explanation: "More natural professional collocation.".to_string(),
+            }],
+            useful_chunks: vec![writing::UsefulChunkRecord {
+                chunk: "I have extensive experience with...".to_string(),
+                register: "professional".to_string(),
+                example: "I have extensive experience with React.".to_string(),
+            }],
+        }
+    }
+
+    #[test]
+    fn writing_task_round_trip_persists_draft_and_rewrite_evaluations() {
+        let (_directory, path) = scratch_db();
+        let mut conn = open_connection(&path).expect("connection must open");
+
+        let task_id = insert_writing_task(&conn, WritingTaskType::OpinionParagraph, CefrLevel::B2, 1_000)
+            .expect("writing task must insert");
+
+        let draft_evaluation = sample_writing_evaluation(CefrLevel::B1);
+        record_writing_draft_evaluation(&mut conn, task_id, "I have much experience.", &draft_evaluation, 1_500)
+            .expect("draft evaluation must persist");
+
+        let rewrite_evaluation = sample_writing_evaluation(CefrLevel::B2);
+        record_writing_rewrite_evaluation(
+            &mut conn,
+            task_id,
+            "I have extensive experience.",
+            &rewrite_evaluation,
+            2_000,
+        )
+        .expect("rewrite evaluation must persist");
+
+        let detail = writing_task_detail(&conn, task_id)
+            .expect("detail must query")
+            .expect("task must exist");
+        assert_eq!(detail.task_type, WritingTaskType::OpinionParagraph);
+        assert_eq!(detail.status, WritingTaskStatus::RewriteEvaluated);
+        assert_eq!(detail.draft_text.as_deref(), Some("I have much experience."));
+        assert_eq!(detail.rewrite_text.as_deref(), Some("I have extensive experience."));
+
+        let (_, draft_record) = writing_evaluation_by_stage(&conn, task_id, WritingEvaluationStage::Draft)
+            .expect("draft evaluation must query")
+            .expect("draft evaluation must exist");
+        assert_eq!(draft_record.overall_level, CefrLevel::B1);
+        assert_eq!(draft_record.dimensions.len(), 2);
+        assert_eq!(draft_record.priority_issues.len(), 1);
+        assert_eq!(draft_record.useful_chunks.len(), 1);
+
+        let (_, rewrite_record) = writing_evaluation_by_stage(&conn, task_id, WritingEvaluationStage::Rewrite)
+            .expect("rewrite evaluation must query")
+            .expect("rewrite evaluation must exist");
+        assert_eq!(rewrite_record.overall_level, CefrLevel::B2);
+
+        let recent = recent_writing_tasks(&conn, 10).expect("recent tasks must list");
+        let summary = recent.iter().find(|task| task.id == task_id).expect("task must be listed");
+        assert_eq!(summary.draft_overall_level, Some(CefrLevel::B1));
+        assert_eq!(summary.rewrite_overall_level, Some(CefrLevel::B2));
     }
 
     #[test]
@@ -3489,6 +4217,7 @@ mod tests {
             None,
             None,
             Some(target_id),
+            None,
             1_500,
         )
         .expect("review item must insert");
@@ -3562,7 +4291,24 @@ mod tests {
                     created_at INTEGER NOT NULL
                 );
                 INSERT INTO pronunciation_target (phrase, source, created_at)
-                    VALUES ('I walked to the store', 'session_summary', 1000);",
+                    VALUES ('I walked to the store', 'session_summary', 1000);
+                CREATE TABLE review_item (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    type TEXT NOT NULL CHECK (type IN (
+                        'grammar_pattern', 'vocabulary', 'phrase', 'pronunciation_target', 'conversation_strategy'
+                    )),
+                    content TEXT NOT NULL,
+                    source TEXT NOT NULL CHECK (source IN ('repair_event', 'session_summary', 'assessment_priority')),
+                    source_repair_event_id INTEGER,
+                    source_session_id INTEGER,
+                    source_assessment_id INTEGER,
+                    source_pronunciation_target_id INTEGER,
+                    stage INTEGER NOT NULL DEFAULT 0 CHECK (stage BETWEEN 0 AND 5),
+                    next_review_at INTEGER NOT NULL,
+                    last_reviewed_at INTEGER,
+                    review_count INTEGER NOT NULL DEFAULT 0,
+                    created_at INTEGER NOT NULL
+                );",
             )
             .expect("v6 pronunciation_target table must create");
             conn.pragma_update(None, "user_version", 6)
@@ -3845,6 +4591,7 @@ mod tests {
             ReviewSource::SessionSummary,
             None,
             Some(session_id),
+            None,
             None,
             None,
             4_000,

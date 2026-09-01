@@ -7,7 +7,11 @@ export type ReviewItemType =
   | "pronunciation_target"
   | "conversation_strategy";
 
-export type ReviewSource = "repair_event" | "session_summary" | "assessment_priority";
+export type ReviewSource =
+  | "repair_event"
+  | "session_summary"
+  | "assessment_priority"
+  | "writing_task";
 
 export type ReviewOutcome = "remembered" | "partially_remembered" | "missed" | "skipped";
 

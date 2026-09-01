@@ -8,6 +8,7 @@ import {
   IconMessage,
   IconMessageCircle2,
   IconMicrophone,
+  IconPencil,
   IconPlus,
   IconSettings,
 } from "@tabler/icons-react";
@@ -46,6 +47,7 @@ export type AppPage =
   | "conversation"
   | "sessions"
   | "assessment"
+  | "writing"
   | "history"
   | "progress"
   | "pronunciation"
@@ -61,6 +63,7 @@ const NAV_ITEMS: {
   { page: "conversation", label: "Conversation", icon: IconMessageCircle2, alwaysEnabled: true },
   { page: "sessions", label: "Sessions", icon: IconListDetails },
   { page: "assessment", label: "Assessment", icon: IconClipboardCheck },
+  { page: "writing", label: "Writing", icon: IconPencil },
   { page: "history", label: "History", icon: IconHistory },
   { page: "progress", label: "My Progress", icon: IconChartBar },
   { page: "pronunciation", label: "Pronunciation", icon: IconMicrophone },

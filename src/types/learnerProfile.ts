@@ -19,7 +19,7 @@ export type PronunciationTarget = {
   label: string;
 };
 
-export type ProgressNoteOrigin = "assessment" | "session";
+export type ProgressNoteOrigin = "assessment" | "session" | "writing";
 
 export type ProgressNote = {
   text: string;
