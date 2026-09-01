@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   CreateManualLexicalChunkRequest,
+  ImportScenarioPackVocabularyRequest,
   LexicalChunk,
   PromoteLexicalChunkRequest,
   RecordLexicalChunkAttemptRequest,
@@ -53,6 +54,16 @@ export async function createManualLexicalChunk(
 ): Promise<LexicalChunk> {
   try {
     return await invoke<LexicalChunk>("create_manual_lexical_chunk", { request });
+  } catch (error) {
+    throw toChunkError(error);
+  }
+}
+
+export async function importScenarioPackVocabulary(
+  request: ImportScenarioPackVocabularyRequest,
+): Promise<LexicalChunk[]> {
+  try {
+    return await invoke<LexicalChunk[]>("import_scenario_pack_vocabulary", { request });
   } catch (error) {
     throw toChunkError(error);
   }

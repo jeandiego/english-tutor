@@ -11,8 +11,7 @@ import { PronunciationPracticePage } from "./components/PronunciationPracticePag
 import { ReadingToWritingPage } from "./components/ReadingToWritingPage";
 import { AppSidebar, type AppPage } from "./components/sidebar/AppSidebar";
 import { SessionsPage } from "./components/SessionsPage";
-import { SettingsPage } from "./components/SettingsPage";
-import { StoragePage } from "./components/StoragePage";
+import { SettingsModal, type SettingsSectionId } from "./components/settings/SettingsModal";
 import { WritingGymPage } from "./components/WritingGymPage";
 import type {
   TranscriptionDiagnostic,
@@ -74,13 +73,13 @@ const PAGE_HEADER: Record<AppPage, { eyebrow: string; title: string }> = {
   history: { eyebrow: "History", title: "Past conversations" },
   progress: { eyebrow: "My Progress", title: "Learning trends" },
   pronunciation: { eyebrow: "Pronunciation", title: "Practice a phrase" },
-  storage: { eyebrow: "Storage", title: "Local database" },
-  settings: { eyebrow: "Settings", title: "Runtime & voice" },
 };
 
 function App() {
   const [activePage, setActivePage] = useState<AppPage>("conversation");
   const [focusSessionId, setFocusSessionId] = useState<number | undefined>();
+  const [settingsModalOpen, setSettingsModalOpen] = useState(false);
+  const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("transcription");
   const queryClient = useQueryClient();
   const latestAssessmentQuery = useQuery({
     queryKey: assessmentKeys.latest(),
@@ -136,13 +135,6 @@ function App() {
     conversation.state.status === "transcribing" ||
     conversation.thinking ||
     conversation.speaking;
-  const settingsNeedsAttention =
-    transcriptionState.status === "error" ||
-    (transcriptionState.status === "loaded" &&
-      transcriptionState.setup.preflight.status !== "ready") ||
-    tutorState.status === "error" ||
-    (tutorState.status === "loaded" &&
-      tutorState.setup.preflight.status !== "ready");
   const voiceDisabledHint =
     healthState.status !== "ready"
       ? "Voice input is available when the desktop runtime is ready"
@@ -227,6 +219,13 @@ function App() {
     setActivePage(page);
   };
 
+  const openSettings = (section?: SettingsSectionId) => {
+    if (section) {
+      setSettingsSection(section);
+    }
+    setSettingsModalOpen(true);
+  };
+
   const handleContinue = (payload: ConversationContinuePayload) => {
     const result = liveConversation.requestSwitch(
       payload.resume,
@@ -255,9 +254,8 @@ function App() {
           setFocusSessionId(sessionId);
           setActivePage("history");
         }}
-        onOpenSettings={() => navigate("settings")}
+        onOpenSettings={openSettings}
         onSelectVoice={(provider, voiceId) => void selectTtsVoice(provider, voiceId)}
-        settingsNeedsAttention={settingsNeedsAttention}
         transcription={transcriptionDiagnostic}
         ttsState={ttsState}
         tutor={tutorDiagnostic}
@@ -337,6 +335,9 @@ function App() {
         <ReadingToWritingPage
           disabled={healthState.status !== "ready" || !tutorReady}
           disabledHint={writingDisabledHint}
+          repairIntensity={repairIntensity}
+          speechDisabled={healthState.status !== "ready" || !transcriptionReady}
+          speechDisabledHint={voiceDisabledHint}
         />
       ) : activePage === "chunks" ? (
         <ChunkBankPage
@@ -351,41 +352,42 @@ function App() {
         />
       ) : activePage === "progress" ? (
         <ProgressPage />
-      ) : activePage === "pronunciation" ? (
+      ) : (
         <PronunciationPracticePage
           disabled={healthState.status !== "ready" || !transcriptionReady}
           disabledHint={voiceDisabledHint}
-        />
-      ) : activePage === "storage" ? (
-        <StoragePage />
-      ) : (
-        <SettingsPage
-          onTranscriptionDraftChange={setSettingsDraft}
-          onTranscriptionReset={resetSettingsDraft}
-          onTranscriptionRetry={reloadTranscriptionSetup}
-          onTranscriptionSave={saveSettings}
-          onTtsDraftChange={setTtsSettingsDraft}
-          onTtsReset={resetTtsSettingsDraft}
-          onTtsRetry={reloadTtsSetup}
-          onTtsSave={saveTtsSettings}
-          onTutorDraftChange={setTutorSettingsDraft}
-          onTutorReset={resetTutorSettingsDraft}
-          onTutorRetry={reloadTutorSetup}
-          onTutorSave={saveTutorSettings}
-          transcriptionDirty={settingsDirty}
-          transcriptionDraft={settingsDraft}
-          transcriptionState={transcriptionState}
-          ttsDirty={ttsSettingsDirty}
-          ttsDraft={ttsSettingsDraft}
-          ttsState={ttsState}
-          tutorDirty={tutorSettingsDirty}
-          tutorDraft={tutorSettingsDraft}
-          tutorState={tutorState}
         />
       )}
           </ErrorBoundary>
         </div>
       </SidebarInset>
+      <SettingsModal
+        onOpenChange={setSettingsModalOpen}
+        onSectionChange={setSettingsSection}
+        onTranscriptionDraftChange={setSettingsDraft}
+        onTranscriptionReset={resetSettingsDraft}
+        onTranscriptionRetry={reloadTranscriptionSetup}
+        onTranscriptionSave={saveSettings}
+        onTtsDraftChange={setTtsSettingsDraft}
+        onTtsReset={resetTtsSettingsDraft}
+        onTtsRetry={reloadTtsSetup}
+        onTtsSave={saveTtsSettings}
+        onTutorDraftChange={setTutorSettingsDraft}
+        onTutorReset={resetTutorSettingsDraft}
+        onTutorRetry={reloadTutorSetup}
+        onTutorSave={saveTutorSettings}
+        open={settingsModalOpen}
+        section={settingsSection}
+        transcriptionDirty={settingsDirty}
+        transcriptionDraft={settingsDraft}
+        transcriptionState={transcriptionState}
+        ttsDirty={ttsSettingsDirty}
+        ttsDraft={ttsSettingsDraft}
+        ttsState={ttsState}
+        tutorDirty={tutorSettingsDirty}
+        tutorDraft={tutorSettingsDraft}
+        tutorState={tutorState}
+      />
       <AlertDialog
         onOpenChange={(open) => {
           if (!open) {

@@ -26,7 +26,7 @@ use super::tutor::{
 };
 
 const DB_FILE_NAME: &str = "history.sqlite3";
-const SCHEMA_VERSION: i32 = 13;
+const SCHEMA_VERSION: i32 = 15;
 const ALL_TIME_CATEGORY_LIMIT: i64 = 100_000;
 const DEFAULT_LIST_LIMIT: i64 = 10;
 const MAX_LIST_LIMIT: i64 = 100;
@@ -1151,6 +1151,69 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    if current_version < 14 {
+        conn.execute_batch(
+            "PRAGMA foreign_keys = OFF;
+
+            CREATE TABLE lexical_chunk_v14 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chunk_type TEXT NOT NULL CHECK (chunk_type IN (
+                    'single_word', 'collocation', 'phrase', 'discourse_marker',
+                    'hedging_expression', 'stance_phrase', 'register_specific_expression',
+                    'domain_specific_expression'
+                )),
+                text TEXT NOT NULL,
+                normalized_text TEXT NOT NULL UNIQUE,
+                meaning TEXT NOT NULL,
+                register TEXT NOT NULL,
+                target_level TEXT NOT NULL CHECK (target_level IN ('A1','A2','B1','B2','C1','C2')),
+                domain TEXT,
+                examples_json TEXT NOT NULL,
+                common_error TEXT,
+                origin TEXT NOT NULL CHECK (origin IN (
+                    'correction', 'better_expression', 'repair_event', 'writing_task', 'reading_session',
+                    'manual', 'scenario_pack'
+                )),
+                source_correction_id INTEGER REFERENCES correction(id) ON DELETE SET NULL,
+                source_expression_id INTEGER REFERENCES expression(id) ON DELETE SET NULL,
+                source_repair_event_id INTEGER REFERENCES repair_event(id) ON DELETE SET NULL,
+                source_writing_evaluation_id INTEGER REFERENCES writing_evaluation(id) ON DELETE SET NULL,
+                source_reading_session_attempt_id INTEGER REFERENCES reading_session_attempt(id) ON DELETE SET NULL,
+                source_scenario_pack_id TEXT,
+                productive_status TEXT NOT NULL DEFAULT 'not_tried' CHECK (productive_status IN (
+                    'not_tried', 'recognized', 'used_with_help', 'used_independently', 'automatic'
+                )),
+                review_item_id INTEGER REFERENCES review_item(id) ON DELETE SET NULL,
+                last_used_at INTEGER,
+                created_at INTEGER NOT NULL
+            );
+            INSERT INTO lexical_chunk_v14
+                (id, chunk_type, text, normalized_text, meaning, register, target_level, domain, examples_json,
+                 common_error, origin, source_correction_id, source_expression_id, source_repair_event_id,
+                 source_writing_evaluation_id, source_reading_session_attempt_id, source_scenario_pack_id,
+                 productive_status, review_item_id, last_used_at, created_at)
+            SELECT
+                id, chunk_type, text, normalized_text, meaning, register, target_level, domain, examples_json,
+                common_error, origin, source_correction_id, source_expression_id, source_repair_event_id,
+                source_writing_evaluation_id, source_reading_session_attempt_id, NULL,
+                productive_status, review_item_id, last_used_at, created_at
+            FROM lexical_chunk;
+            DROP TABLE lexical_chunk;
+            ALTER TABLE lexical_chunk_v14 RENAME TO lexical_chunk;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_lexical_chunk_normalized_text ON lexical_chunk(normalized_text);
+            CREATE INDEX IF NOT EXISTS idx_lexical_chunk_status ON lexical_chunk(productive_status);
+
+            PRAGMA foreign_keys = ON;",
+        )?;
+    }
+
+    if current_version < 15 {
+        conn.execute_batch(
+            "ALTER TABLE reading_session_attempt ADD COLUMN spoken_response_text TEXT;
+            ALTER TABLE reading_session_attempt ADD COLUMN spoken_response_submitted_at INTEGER;",
+        )?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
 }
@@ -1415,6 +1478,7 @@ pub(crate) fn record_turn_pair(
                     source_repair_event_id: None,
                     source_writing_evaluation_id: None,
                     source_reading_session_attempt_id: None,
+                    source_scenario_pack_id: None,
                 },
                 now_ms,
             )?;
@@ -1455,6 +1519,7 @@ pub(crate) fn record_turn_pair(
                 source_repair_event_id: None,
                 source_writing_evaluation_id: None,
                 source_reading_session_attempt_id: None,
+                source_scenario_pack_id: None,
             },
             now_ms,
         )?;
@@ -1647,6 +1712,7 @@ fn chunk_origin_str(origin: ChunkOrigin) -> &'static str {
         ChunkOrigin::WritingTask => "writing_task",
         ChunkOrigin::ReadingSession => "reading_session",
         ChunkOrigin::Manual => "manual",
+        ChunkOrigin::ScenarioPack => "scenario_pack",
     }
 }
 
@@ -1658,6 +1724,7 @@ fn parse_chunk_origin(value: &str) -> Result<ChunkOrigin, std::io::Error> {
         "writing_task" => Ok(ChunkOrigin::WritingTask),
         "reading_session" => Ok(ChunkOrigin::ReadingSession),
         "manual" => Ok(ChunkOrigin::Manual),
+        "scenario_pack" => Ok(ChunkOrigin::ScenarioPack),
         other => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             format!("unknown chunk origin: {other}"),
@@ -1793,9 +1860,9 @@ pub(crate) fn create_chunk_candidate(
         "INSERT INTO lexical_chunk
             (chunk_type, text, normalized_text, meaning, register, target_level, domain, examples_json,
              common_error, origin, source_correction_id, source_expression_id, source_repair_event_id,
-             source_writing_evaluation_id, source_reading_session_attempt_id, productive_status,
-             review_item_id, last_used_at, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, 'not_tried', NULL, NULL, ?16)",
+             source_writing_evaluation_id, source_reading_session_attempt_id, source_scenario_pack_id,
+             productive_status, review_item_id, last_used_at, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 'not_tried', NULL, NULL, ?17)",
         params![
             lexical_chunk_type_str(input.chunk_type),
             input.text,
@@ -1812,6 +1879,7 @@ pub(crate) fn create_chunk_candidate(
             input.source_repair_event_id,
             input.source_writing_evaluation_id,
             input.source_reading_session_attempt_id,
+            input.source_scenario_pack_id,
             now_ms,
         ],
     )?;
@@ -2070,6 +2138,7 @@ fn insert_writing_evaluation_tx(
                 source_repair_event_id: None,
                 source_writing_evaluation_id: Some(evaluation_id),
                 source_reading_session_attempt_id: None,
+                source_scenario_pack_id: None,
             },
             now_ms,
         )?;
@@ -2425,6 +2494,21 @@ pub(crate) fn record_reading_production_evaluation(
     Ok(evaluation_id)
 }
 
+pub(crate) fn record_reading_spoken_response(
+    conn: &Connection,
+    attempt_id: i64,
+    spoken_response_text: &str,
+    now_ms: i64,
+) -> rusqlite::Result<()> {
+    conn.execute(
+        "UPDATE reading_session_attempt
+         SET spoken_response_text = ?1, spoken_response_submitted_at = ?2
+         WHERE id = ?3",
+        params![spoken_response_text, now_ms, attempt_id],
+    )?;
+    Ok(())
+}
+
 fn reading_evaluation_by_attempt(
     conn: &Connection,
     attempt_id: i64,
@@ -2509,7 +2593,7 @@ pub(crate) fn reading_session_detail(
     let core = conn
         .query_row(
             "SELECT text_id, status, comprehension_correct, selected_chunk_ids_json, summary_text,
-                    response_text, created_at
+                    response_text, created_at, spoken_response_text, spoken_response_submitted_at
              FROM reading_session_attempt WHERE id = ?1",
             params![attempt_id],
             |row| {
@@ -2521,6 +2605,8 @@ pub(crate) fn reading_session_detail(
                     row.get::<_, Option<String>>(4)?,
                     row.get::<_, Option<String>>(5)?,
                     row.get::<_, i64>(6)?,
+                    row.get::<_, Option<String>>(7)?,
+                    row.get::<_, Option<i64>>(8)?,
                 ))
             },
         )
@@ -2534,6 +2620,8 @@ pub(crate) fn reading_session_detail(
         summary_text,
         response_text,
         created_at,
+        spoken_response_text,
+        spoken_response_submitted_at,
     )) = core
     else {
         return Ok(None);
@@ -2557,6 +2645,8 @@ pub(crate) fn reading_session_detail(
         response_text,
         created_at,
         evaluation,
+        spoken_response_text,
+        spoken_response_submitted_at,
     }))
 }
 
@@ -4884,6 +4974,80 @@ mod tests {
         .expect("'chunk' must now be accepted as a review_item source");
     }
 
+    #[test]
+    fn migration_from_version_13_adds_scenario_pack_source_to_lexical_chunk() {
+        let (_directory, path) = scratch_db();
+
+        {
+            let conn = Connection::open(&path).expect("connection must open");
+            conn.execute_batch(
+                "CREATE TABLE correction (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE expression (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE repair_event (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE writing_evaluation (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE reading_session_attempt (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE review_item (id INTEGER PRIMARY KEY AUTOINCREMENT);
+                CREATE TABLE lexical_chunk (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chunk_type TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    normalized_text TEXT NOT NULL UNIQUE,
+                    meaning TEXT NOT NULL,
+                    register TEXT NOT NULL,
+                    target_level TEXT NOT NULL,
+                    domain TEXT,
+                    examples_json TEXT NOT NULL,
+                    common_error TEXT,
+                    origin TEXT NOT NULL CHECK (origin IN (
+                        'correction', 'better_expression', 'repair_event', 'writing_task', 'reading_session', 'manual'
+                    )),
+                    source_correction_id INTEGER REFERENCES correction(id) ON DELETE SET NULL,
+                    source_expression_id INTEGER REFERENCES expression(id) ON DELETE SET NULL,
+                    source_repair_event_id INTEGER REFERENCES repair_event(id) ON DELETE SET NULL,
+                    source_writing_evaluation_id INTEGER REFERENCES writing_evaluation(id) ON DELETE SET NULL,
+                    source_reading_session_attempt_id INTEGER REFERENCES reading_session_attempt(id) ON DELETE SET NULL,
+                    productive_status TEXT NOT NULL DEFAULT 'not_tried',
+                    review_item_id INTEGER REFERENCES review_item(id) ON DELETE SET NULL,
+                    last_used_at INTEGER,
+                    created_at INTEGER NOT NULL
+                );
+                INSERT INTO lexical_chunk
+                    (chunk_type, text, normalized_text, meaning, register, target_level, examples_json, origin, created_at)
+                VALUES
+                    ('phrase', 'give up', 'give up', 'to stop trying', 'neutral', 'B1', '[]', 'manual', 1000);",
+            )
+            .expect("v13 lexical_chunk table must create");
+            conn.pragma_update(None, "user_version", 13)
+                .expect("version must set");
+        }
+
+        let conn = open_connection(&path).expect("connection must upgrade");
+        let version: i32 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version must read");
+        assert_eq!(version, SCHEMA_VERSION);
+
+        let (text, source_scenario_pack_id): (String, Option<String>) = conn
+            .query_row(
+                "SELECT text, source_scenario_pack_id FROM lexical_chunk WHERE normalized_text = 'give up'",
+                [],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .expect("pre-existing lexical_chunk row must survive migration");
+        assert_eq!(text, "give up");
+        assert_eq!(source_scenario_pack_id, None);
+
+        conn.execute(
+            "INSERT INTO lexical_chunk
+                (chunk_type, text, normalized_text, meaning, register, target_level, examples_json, origin,
+                 source_scenario_pack_id, created_at)
+             VALUES ('phrase', 'flag a blocker', 'flag a blocker', 'raise a blocking issue', 'professional', 'B1',
+                 '[]', 'scenario_pack', 'daily-standup', 2000)",
+            [],
+        )
+        .expect("'scenario_pack' origin and source_scenario_pack_id must now be accepted");
+    }
+
     fn sample_chunk_input(text: &'static str) -> ChunkCandidateInput<'static> {
         ChunkCandidateInput {
             chunk_type: chunk::infer_chunk_type(text),
@@ -4900,6 +5064,7 @@ mod tests {
             source_repair_event_id: None,
             source_writing_evaluation_id: None,
             source_reading_session_attempt_id: None,
+            source_scenario_pack_id: None,
         }
     }
 
@@ -5121,6 +5286,7 @@ mod tests {
                 source_repair_event_id: None,
                 source_writing_evaluation_id: None,
                 source_reading_session_attempt_id: Some(attempt_id),
+                source_scenario_pack_id: None,
             },
             1_200,
         )
@@ -5195,6 +5361,8 @@ mod tests {
             Some("Jordan tells Priya the launch is delayed.")
         );
         assert!(detail.evaluation.is_some());
+        assert_eq!(detail.spoken_response_text, None);
+        assert_eq!(detail.spoken_response_submitted_at, None);
 
         let (_, saved_evaluation) = reading_evaluation_by_attempt(&conn, attempt_id)
             .expect("evaluation must query")
@@ -5202,6 +5370,69 @@ mod tests {
         assert_eq!(saved_evaluation.summary_fidelity, reading::SummaryFidelity::Faithful);
         assert_eq!(saved_evaluation.priority_issues.len(), 1);
         assert_eq!(saved_evaluation.useful_chunks.len(), 1);
+
+        record_reading_spoken_response(&conn, attempt_id, "I think the launch got pushed back.", 1_400)
+            .expect("spoken response must persist");
+        let detail_after_spoken_response = reading_session_detail(&conn, attempt_id)
+            .expect("detail must query")
+            .expect("attempt must exist");
+        assert_eq!(
+            detail_after_spoken_response.spoken_response_text.as_deref(),
+            Some("I think the launch got pushed back.")
+        );
+        assert_eq!(detail_after_spoken_response.spoken_response_submitted_at, Some(1_400));
+    }
+
+    #[test]
+    fn migration_from_version_14_adds_spoken_response_columns_to_reading_session_attempt() {
+        let (_directory, path) = scratch_db();
+
+        let attempt_id = {
+            let conn = Connection::open(&path).expect("connection must open");
+            conn.execute_batch(
+                "CREATE TABLE reading_session_attempt (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    text_id TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'reading',
+                    comprehension_correct INTEGER,
+                    comprehension_answered_at INTEGER,
+                    selected_chunk_ids_json TEXT,
+                    summary_text TEXT,
+                    response_text TEXT,
+                    production_submitted_at INTEGER,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE TABLE reading_session_evaluation (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    reading_session_attempt_id INTEGER NOT NULL,
+                    summary_fidelity TEXT NOT NULL,
+                    response_relevance TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                INSERT INTO reading_session_attempt (text_id, status, created_at)
+                VALUES ('professional-email-project-delay', 'evaluated', 1000);",
+            )
+            .expect("v14 reading_session_attempt table must create");
+            let attempt_id = conn.last_insert_rowid();
+            conn.pragma_update(None, "user_version", 14)
+                .expect("version must set");
+            attempt_id
+        };
+
+        let conn = open_connection(&path).expect("connection must upgrade");
+        let version: i32 = conn
+            .query_row("PRAGMA user_version", [], |row| row.get(0))
+            .expect("version must read");
+        assert_eq!(version, SCHEMA_VERSION);
+
+        let detail = reading_session_detail(&conn, attempt_id)
+            .expect("detail must query")
+            .expect("attempt must exist");
+        assert_eq!(detail.spoken_response_text, None);
+        assert_eq!(detail.spoken_response_submitted_at, None);
+
+        record_reading_spoken_response(&conn, attempt_id, "a spoken take on the update", 2_000)
+            .expect("spoken response must persist after migration");
     }
 
     #[test]

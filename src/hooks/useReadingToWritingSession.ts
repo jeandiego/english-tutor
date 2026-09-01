@@ -65,6 +65,7 @@ export function useReadingToWritingSession({
   >();
   const [selectedChunks, setSelectedChunks] = useState<LexicalChunk[]>([]);
   const [evaluation, setEvaluation] = useState<ReadingEvaluationResult | undefined>();
+  const [responseText, setResponseText] = useState<string | undefined>();
   const [error, setError] = useState<ReadingError | undefined>();
 
   const engineRef = useRef<Engine | null>(null);
@@ -176,6 +177,7 @@ export function useReadingToWritingSession({
         return;
       }
       setEvaluation(result);
+      setResponseText(responseText);
       setStatus("feedback");
       void queryClient.invalidateQueries({ queryKey: readingKeys.all });
     } catch (productionError: unknown) {
@@ -190,6 +192,7 @@ export function useReadingToWritingSession({
     setComprehensionResult(undefined);
     setSelectedChunks([]);
     setEvaluation(undefined);
+    setResponseText(undefined);
     setError(undefined);
   }
 
@@ -199,6 +202,8 @@ export function useReadingToWritingSession({
     comprehensionResult,
     selectedChunks,
     evaluation,
+    responseText,
+    attemptId: engineRef.current?.attemptId,
     error,
     selectText,
     submitComprehensionAnswer,

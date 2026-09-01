@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useReadingSpokenResponse } from "../hooks/useReadingSpokenResponse";
 import { useReadingToWritingSession } from "../hooks/useReadingToWritingSession";
 import { READING_TEXT_CATALOG } from "../reading/loadReadingTexts";
 import { readingTextTypeLabel } from "../types/reading";
@@ -7,6 +8,7 @@ import type {
   ReadingTargetChunk,
   ReadingText,
 } from "../types/reading";
+import type { RepairIntensity } from "../types/repair";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
@@ -15,11 +17,14 @@ import { Checkbox } from "./ui/checkbox";
 import { Field, FieldLabel, FieldLegend, FieldSet } from "./ui/field";
 import { InputGroup, InputGroupTextarea } from "./ui/input-group";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
-import { Tooltip, TooltipContent, TooltipTrigger } from "./ui/tooltip";
+import { TalkControl } from "./TalkControl";
 
 type ReadingToWritingPageProps = {
   disabled: boolean;
   disabledHint?: string;
+  repairIntensity?: RepairIntensity;
+  speechDisabled: boolean;
+  speechDisabledHint?: string;
 };
 
 const MIN_ACCEPTED_CHUNKS = 3;
@@ -284,12 +289,96 @@ const RELEVANCE_LABELS: Record<ReadingEvaluationResult["responseRelevance"], str
   off_topic: "Off topic",
 };
 
+function SpokenResponseSection({
+  attemptId,
+  disabled,
+  disabledHint,
+  repairIntensity,
+  writtenResponseText,
+}: {
+  attemptId: number | undefined;
+  disabled: boolean;
+  disabledHint?: string;
+  repairIntensity?: RepairIntensity;
+  writtenResponseText: string | undefined;
+}) {
+  const spokenResponse = useReadingSpokenResponse({
+    attemptId,
+    enabled: !disabled,
+    repairIntensity,
+  });
+  const { state } = spokenResponse;
+
+  return (
+    <div className="flex flex-col gap-2">
+      <TalkControl
+        disabled={disabled || attemptId === undefined}
+        disabledHint={disabledHint}
+        onEnd={spokenResponse.pushToTalk.end}
+        onStart={spokenResponse.pushToTalk.begin}
+        state={spokenResponse.pushToTalk.state}
+      />
+
+      {state.status === "submitting" && <ThinkingStatus label="Saving your spoken response" />}
+
+      {state.status === "submitted" && (
+        <div className="flex flex-col gap-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="flex flex-col gap-1 rounded-[var(--radius-cards)] bg-card p-3 shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
+              <span className="text-caption text-muted-foreground">Written response</span>
+              <p className="text-body text-foreground">{writtenResponseText}</p>
+            </div>
+            <div className="flex flex-col gap-1 rounded-[var(--radius-cards)] bg-card p-3 shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
+              <span className="text-caption text-muted-foreground">Spoken response</span>
+              <p className="text-body text-foreground">{state.transcript}</p>
+            </div>
+          </div>
+
+          {state.repair?.shouldIntervene && (
+            <div className="flex flex-col gap-1.5 rounded-[var(--radius-cards)] bg-card p-3 shadow-[0_1px_2px_rgba(0,0,0,0.08)]">
+              {state.repair.original && (
+                <p className="text-body">
+                  <span className="text-muted-foreground">You said </span>
+                  <span className="text-foreground">“{state.repair.original}”</span>
+                </p>
+              )}
+              {state.repair.suggested && (
+                <p className="text-body">
+                  <span className="text-muted-foreground">Better </span>
+                  <span className="font-medium text-success">“{state.repair.suggested}”</span>
+                </p>
+              )}
+              {state.repair.microExplanation && (
+                <p className="text-caption text-muted-foreground">{state.repair.microExplanation}</p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {state.status === "error" && (
+        <p className="text-caption text-destructive">{state.error.message}</p>
+      )}
+    </div>
+  );
+}
+
 function FeedbackView({
+  attemptId,
   evaluation,
   onStartNewSession,
+  repairIntensity,
+  speechDisabled,
+  speechDisabledHint,
+  writtenResponseText,
 }: {
+  attemptId: number | undefined;
   evaluation: ReadingEvaluationResult;
   onStartNewSession: () => void;
+  repairIntensity?: RepairIntensity;
+  speechDisabled: boolean;
+  speechDisabledHint?: string;
+  writtenResponseText: string | undefined;
 }) {
   return (
     <div className="flex flex-col gap-4">
@@ -347,24 +436,35 @@ function FeedbackView({
         </ul>
       </div>
 
+      <div className="flex flex-col gap-2">
+        <h3 className="text-body-lg font-medium text-foreground">
+          Speak your response (optional)
+        </h3>
+        <SpokenResponseSection
+          attemptId={attemptId}
+          disabled={speechDisabled}
+          disabledHint={speechDisabledHint}
+          repairIntensity={repairIntensity}
+          writtenResponseText={writtenResponseText}
+        />
+      </div>
+
       <div className="flex items-center gap-2">
         <Button onClick={onStartNewSession} type="button" variant="outline">
           Start a new session
         </Button>
-        <Tooltip>
-          <TooltipTrigger render={<span className="inline-block w-fit" />}>
-            <Button disabled type="button" variant="ghost">
-              Speak your response (optional)
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>Coming soon — spoken responses aren't wired up yet.</TooltipContent>
-        </Tooltip>
       </div>
     </div>
   );
 }
 
-export function ReadingToWritingPage({ disabled, disabledHint }: ReadingToWritingPageProps) {
+export function ReadingToWritingPage({
+  disabled,
+  disabledHint,
+  repairIntensity,
+  speechDisabled,
+  speechDisabledHint,
+}: ReadingToWritingPageProps) {
   const session = useReadingToWritingSession();
   const texts = READING_TEXT_CATALOG.texts;
 
@@ -428,7 +528,15 @@ export function ReadingToWritingPage({ disabled, disabledHint }: ReadingToWritin
         )}
 
         {session.status === "feedback" && session.evaluation && (
-          <FeedbackView evaluation={session.evaluation} onStartNewSession={session.reset} />
+          <FeedbackView
+            attemptId={session.attemptId}
+            evaluation={session.evaluation}
+            onStartNewSession={session.reset}
+            repairIntensity={repairIntensity}
+            speechDisabled={speechDisabled}
+            speechDisabledHint={speechDisabledHint}
+            writtenResponseText={session.responseText}
+          />
         )}
 
         {session.status === "error" && session.error && (

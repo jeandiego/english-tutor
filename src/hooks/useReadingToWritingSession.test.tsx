@@ -102,6 +102,8 @@ function ReadingSessionHarness({
       {session.error && <p data-testid="error">{session.error.message}</p>}
       {session.evaluation && <p data-testid="evaluation-id">{session.evaluation.id}</p>}
       <p data-testid="selected-count">{session.selectedChunks.length}</p>
+      <p data-testid="attempt-id">{session.attemptId ?? ""}</p>
+      <p data-testid="response-text">{session.responseText ?? ""}</p>
       <button onClick={() => void session.selectText(TEXT)} type="button">
         Select text
       </button>
@@ -148,9 +150,13 @@ describe("useReadingToWritingSession", () => {
     fireEvent.click(screen.getByRole("button", { name: "Submit production" }));
     await waitFor(() => expect(screen.getByTestId("status")).toHaveTextContent("feedback"));
     expect(screen.getByTestId("evaluation-id")).toHaveTextContent("1");
+    expect(screen.getByTestId("attempt-id")).toHaveTextContent("10");
+    expect(screen.getByTestId("response-text")).toHaveTextContent("A short response.");
 
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
     expect(screen.getByTestId("status")).toHaveTextContent("catalog");
+    expect(screen.getByTestId("attempt-id")).toHaveTextContent("");
+    expect(screen.getByTestId("response-text")).toHaveTextContent("");
   });
 
   it("rejects a chunk selection outside the 3-5 range without calling the backend", async () => {

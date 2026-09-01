@@ -92,3 +92,9 @@ Pare quando os cenários iniciais estiverem migrados para packs validados, carre
 
 Não implemente pronúncia, listening progression ou importação remota de packs neste slice.
 
+## Addendum (slice 23) — `targetVocabulary`
+
+Cada pack aceita um campo opcional `targetVocabulary`: um array de itens de vocabulário-alvo, no mesmo formato de `CreateManualLexicalChunkRequest` (`chunkType`, `text`, `meaning`, `register`, `targetLevel`, e opcionalmente `domain`, `examples`, `commonError`). O campo é preenchido manualmente por pack — não é obrigatório, e nem todos os packs precisam ter um.
+
+Quando o usuário favorita um pack ou inicia uma sessão com ele, os itens de `targetVocabulary` viram candidatos a `LexicalChunk` (origem `scenario_pack`), reaproveitando a deduplicação por `normalized_text` do slice 21. Ver `docs/done/23-scenario-pack-chunk-vocabulary.md`.
+

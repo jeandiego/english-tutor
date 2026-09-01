@@ -1,5 +1,5 @@
-import { IconChevronDown } from "@tabler/icons-react";
-import { useState } from "react";
+import { IconChevronDown, IconSettings } from "@tabler/icons-react";
+import { useState, type ReactNode } from "react";
 import {
   Popover,
   PopoverContent,
@@ -7,6 +7,7 @@ import {
 } from "./ui/popover";
 import { cn } from "../lib/utils";
 import type { HealthState } from "../types/runtime";
+import type { SettingsSectionId } from "./settings/SettingsModal";
 
 export type TranscriptionDiagnostic = {
   status: "checking" | "ready" | "error";
@@ -25,7 +26,7 @@ type SystemDiagnosticsProps = {
   healthState: HealthState;
   transcription: TranscriptionDiagnostic;
   tutor: TutorDiagnostic;
-  onOpenSettings: () => void;
+  onOpenSettings: (section?: SettingsSectionId) => void;
 };
 
 type Status = "checking" | "ready" | "error";
@@ -62,37 +63,6 @@ function compactStatus(status: Status, message: string, runtime: "transcription"
   return compactMessage.charAt(0).toUpperCase() + compactMessage.slice(1);
 }
 
-type RuntimeCopyProps = {
-  label: string;
-  message: string;
-  statusText: string;
-  meta?: string;
-};
-
-function RuntimeCopy({ label, message, statusText, meta }: RuntimeCopyProps) {
-  const statusIsFullMessage = statusText === message;
-
-  return (
-    <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-      <p aria-hidden="true" className="text-caption font-medium text-muted-foreground">
-        {label}
-      </p>
-      <p className="truncate text-body text-foreground">
-        {!statusIsFullMessage && <span className="sr-only">{message}</span>}
-        <span aria-hidden={statusIsFullMessage ? undefined : "true"}>{statusText}</span>
-        {meta && (
-          <>
-            <span aria-hidden="true" className="text-muted-foreground">
-              {" · "}
-            </span>
-            <span className="text-muted-foreground">{meta}</span>
-          </>
-        )}
-      </p>
-    </div>
-  );
-}
-
 function overallStatusOf(statuses: Status[]): Status {
   if (statuses.some((status) => status === "error")) {
     return "error";
@@ -117,6 +87,55 @@ function summaryLabelFor(overall: Status, errorCount: number): string {
   return errorCount > 1 ? `${errorCount} issues` : "1 issue";
 }
 
+type DiagnosticRowProps = {
+  status: Status;
+  label: string;
+  message: string;
+  statusText: string;
+  meta?: string;
+  action?: { label: string; onClick: () => void };
+  detail?: ReactNode;
+};
+
+function DiagnosticRow({ status, label, message, statusText, meta, action, detail }: DiagnosticRowProps) {
+  const statusIsFullMessage = statusText === message;
+
+  return (
+    <div
+      aria-live={status === "error" ? "assertive" : "polite"}
+      className="flex flex-col gap-1 py-1.5 first:pt-0 last:pb-0"
+    >
+      <div className="flex items-center gap-2">
+        <StatusDot status={status} />
+        <span className="shrink-0 text-caption font-medium text-muted-foreground">{label}</span>
+        <span className="min-w-0 flex-1 truncate text-body text-foreground">
+          {!statusIsFullMessage && <span className="sr-only">{message}</span>}
+          <span aria-hidden={statusIsFullMessage ? undefined : "true"}>{statusText}</span>
+          {meta && (
+            <>
+              <span aria-hidden="true" className="text-muted-foreground">
+                {" · "}
+              </span>
+              <span className="text-muted-foreground">{meta}</span>
+            </>
+          )}
+        </span>
+        {action && (
+          <button
+            aria-label={action.label}
+            className="shrink-0 text-caption font-medium text-primary hover:underline"
+            onClick={action.onClick}
+            type="button"
+          >
+            Settings
+          </button>
+        )}
+      </div>
+      {detail && <div className="pl-4 text-caption text-muted-foreground">{detail}</div>}
+    </div>
+  );
+}
+
 export function SystemDiagnostics({
   healthState,
   transcription,
@@ -128,13 +147,16 @@ export function SystemDiagnostics({
   const errorCount = statuses.filter((status) => status === "error").length;
   const summaryLabel = summaryLabelFor(overall, errorCount);
   const [manualOpen, setManualOpen] = useState(() => overall !== "ready");
-  const expanded = manualOpen
+  const expanded = manualOpen;
 
   return (
     <Popover open={expanded} onOpenChange={setManualOpen}>
       <PopoverTrigger
         aria-label={`System status: ${summaryLabel}`}
-        className={cn("flex w-full items-center gap-2 rounded-[8px] px-2 py-1.5 text-left text-body hover:bg-foreground/5", { 'bg-destructive/5 hover:bg-destructive/10 border-destructive/24 border': overall !== 'ready'})}
+        className={cn(
+          "flex h-8 w-full items-center gap-2 rounded-md px-2 text-left text-body hover:bg-foreground/5",
+          overall !== "ready" && "border border-destructive/24 bg-destructive/5 hover:bg-destructive/10",
+        )}
       >
         <StatusDot status={overall} />
         <span className="min-w-0 flex-1 truncate text-foreground">{summaryLabel}</span>
@@ -146,15 +168,9 @@ export function SystemDiagnostics({
         />
       </PopoverTrigger>
 
-      <PopoverContent align="start" aria-label="System status details" side="right">
-        <div
-          className="flex items-start gap-2 py-1"
-          aria-live={healthState.status === "error" ? "assertive" : "polite"}
-        >
-          <div className="pt-1.5">
-            <StatusDot status={healthState.status} />
-          </div>
-          <RuntimeCopy
+      <PopoverContent align="start" aria-label="System status details" className="w-72 gap-0 p-2" side="right">
+        <div className="flex flex-col divide-y divide-border">
+          <DiagnosticRow
             label="Desktop"
             message={
               healthState.status === "checking"
@@ -163,6 +179,12 @@ export function SystemDiagnostics({
                   ? "Desktop runtime ready"
                   : "Desktop runtime unavailable"
             }
+            meta={
+              healthState.status === "ready"
+                ? `${healthState.health.operatingSystem} · ${healthState.health.architecture}`
+                : undefined
+            }
+            status={healthState.status}
             statusText={
               healthState.status === "checking"
                 ? "Checking"
@@ -170,70 +192,52 @@ export function SystemDiagnostics({
                   ? "Ready"
                   : "Unavailable"
             }
-            meta={
-              healthState.status === "ready"
-                ? `${healthState.health.operatingSystem} · ${healthState.health.architecture}`
-                : undefined
+            detail={
+              healthState.status === "error" ? (
+                <div className="flex flex-col gap-0.5">
+                  <span>Restart the desktop app and try again.</span>
+                  <details>
+                    <summary className="cursor-pointer">Details</summary>
+                    <code className="block whitespace-pre-wrap">{healthState.message}</code>
+                  </details>
+                </div>
+              ) : undefined
             }
           />
-          {healthState.status === "error" && (
-            <div className="flex flex-col gap-1 text-caption text-muted-foreground">
-              <span>Restart the desktop app and try again.</span>
-              <details>
-                <summary className="cursor-pointer">Details</summary>
-                <code className="block whitespace-pre-wrap">{healthState.message}</code>
-              </details>
-            </div>
-          )}
-        </div>
 
-        <div
-          className="flex items-start gap-2 border-t border-border py-1 pt-2"
-          aria-live={transcription.status === "error" ? "assertive" : "polite"}
-        >
-          <div className="pt-1.5">
-            <StatusDot status={transcription.status} />
-          </div>
-          <RuntimeCopy
+          <DiagnosticRow
+            action={
+              transcription.canOpenSettings
+                ? { label: "Open transcription settings", onClick: () => onOpenSettings("transcription") }
+                : undefined
+            }
             label="Transcription"
             message={transcription.message}
+            status={transcription.status}
             statusText={compactStatus(transcription.status, transcription.message, "transcription")}
           />
-          {transcription.canOpenSettings && (
-            <button
-              aria-label="Open transcription settings"
-              className="shrink-0 text-caption font-medium text-primary hover:underline"
-              onClick={onOpenSettings}
-              type="button"
-            >
-              Open settings
-            </button>
-          )}
-        </div>
 
-        <div
-          className="flex items-start gap-2 border-t border-border py-1 pt-2"
-          aria-live={tutor.status === "error" ? "assertive" : "polite"}
-        >
-          <div className="pt-1.5">
-            <StatusDot status={tutor.status} />
-          </div>
-          <RuntimeCopy
+          <DiagnosticRow
+            action={
+              tutor.canOpenSettings
+                ? { label: "Open tutor settings", onClick: () => onOpenSettings("tutor") }
+                : undefined
+            }
             label="Tutor"
             message={tutor.message}
-            statusText={compactStatus(tutor.status, tutor.message, "tutor")}
             meta={tutor.status === "ready" ? tutor.meta : undefined}
+            status={tutor.status}
+            statusText={compactStatus(tutor.status, tutor.message, "tutor")}
           />
-          {tutor.canOpenSettings && (
-            <button
-              aria-label="Open tutor settings"
-              className="shrink-0 text-caption font-medium text-primary hover:underline"
-              onClick={onOpenSettings}
-              type="button"
-            >
-              Open settings
-            </button>
-          )}
+
+          <button
+            className="flex items-center gap-2 py-1.5 text-left text-caption font-medium text-muted-foreground hover:text-foreground"
+            onClick={() => onOpenSettings()}
+            type="button"
+          >
+            <IconSettings className="size-3.5 shrink-0" />
+            Manage settings
+          </button>
         </div>
       </PopoverContent>
     </Popover>

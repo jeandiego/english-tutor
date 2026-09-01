@@ -521,6 +521,10 @@ pub struct ReadingSessionDetail {
     pub(crate) created_at: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub(crate) evaluation: Option<ReadingEvaluationResult>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) spoken_response_text: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) spoken_response_submitted_at: Option<i64>,
 }
 
 // ---------------------------------------------------------------------
@@ -630,6 +634,7 @@ pub async fn accept_reading_chunks(
                     source_repair_event_id: None,
                     source_writing_evaluation_id: None,
                     source_reading_session_attempt_id: Some(attempt_id),
+                    source_scenario_pack_id: None,
                 },
                 now,
             )?;
@@ -727,6 +732,37 @@ pub async fn submit_reading_production(
     .await?;
 
     Ok(reading_evaluation_result_from_record(evaluation_id, evaluation))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct SubmitReadingSpokenResponseRequest {
+    attempt_id: i64,
+    spoken_response_text: String,
+}
+
+#[tauri::command]
+pub async fn submit_reading_spoken_response(
+    app_handle: AppHandle,
+    request: SubmitReadingSpokenResponseRequest,
+) -> Result<(), ReadingCommandError> {
+    if request.spoken_response_text.trim().is_empty() {
+        return Err(ReadingCommandError::new(
+            "empty-spoken-response",
+            "The spoken response was empty.",
+            "spokenResponseText was empty",
+        ));
+    }
+    let path = history::db_path(&app_handle)?;
+    let attempt_id = request.attempt_id;
+    let spoken_response_text = request.spoken_response_text.trim().to_string();
+    let now = now_ms();
+    run_blocking(move || -> Result<(), ReadingCommandError> {
+        let conn = history::open_connection(&path)?;
+        history::record_reading_spoken_response(&conn, attempt_id, &spoken_response_text, now)?;
+        Ok(())
+    })
+    .await
 }
 
 #[tauri::command]

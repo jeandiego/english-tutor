@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { CefrLevel } from "./assessment";
+import type { LexicalChunkType } from "./chunk";
 import type { ReviewItemType } from "./review";
 
 const CEFR_LEVELS: [CefrLevel, ...CefrLevel[]] = ["A1", "A2", "B1", "B2", "C1", "C2"];
@@ -9,6 +10,16 @@ const REVIEW_ITEM_TYPES: [ReviewItemType, ...ReviewItemType[]] = [
   "phrase",
   "pronunciation_target",
   "conversation_strategy",
+];
+const LEXICAL_CHUNK_TYPES: [LexicalChunkType, ...LexicalChunkType[]] = [
+  "single_word",
+  "collocation",
+  "phrase",
+  "discourse_marker",
+  "hedging_expression",
+  "stance_phrase",
+  "register_specific_expression",
+  "domain_specific_expression",
 ];
 
 const nonEmptyString = z.string().trim().min(1);
@@ -23,6 +34,17 @@ export const scenarioPackVariationSchema = z.object({
 export const scenarioPackReviewItemSchema = z.object({
   content: nonEmptyString,
   type: z.enum(REVIEW_ITEM_TYPES),
+});
+
+export const scenarioPackVocabularyItemSchema = z.object({
+  chunkType: z.enum(LEXICAL_CHUNK_TYPES),
+  text: nonEmptyString,
+  meaning: nonEmptyString,
+  register: nonEmptyString,
+  targetLevel: z.enum(CEFR_LEVELS),
+  domain: nonEmptyString.optional(),
+  examples: z.array(nonEmptyString).optional(),
+  commonError: nonEmptyString.optional(),
 });
 
 export const scenarioPackSchema = z.object({
@@ -44,6 +66,7 @@ export const scenarioPackSchema = z.object({
   suggestedReviewItems: z.array(scenarioPackReviewItemSchema).min(1),
   focusPlaceholder: nonEmptyString,
   variations: z.array(scenarioPackVariationSchema).optional(),
+  targetVocabulary: z.array(scenarioPackVocabularyItemSchema).optional(),
 });
 
 export type ScenarioPackVariation = z.infer<typeof scenarioPackVariationSchema>;

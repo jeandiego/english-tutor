@@ -119,6 +119,8 @@ export type ReadingSessionDetail = {
   responseText?: string;
   createdAt: number;
   evaluation?: ReadingEvaluationResult;
+  spokenResponseText?: string;
+  spokenResponseSubmittedAt?: number;
 };
 
 export type StartReadingSessionRequest = {
@@ -151,6 +153,11 @@ export type SubmitReadingProductionRequest = {
   responsePrompt: string;
   summaryText: string;
   responseText: string;
+};
+
+export type SubmitReadingSpokenResponseRequest = {
+  attemptId: number;
+  spokenResponseText: string;
 };
 
 export function readingTextTypeLabel(textType: ReadingTextType): string {

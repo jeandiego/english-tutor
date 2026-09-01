@@ -8,6 +8,7 @@ import type {
   StartReadingSessionRequest,
   SubmitReadingComprehensionAnswerRequest,
   SubmitReadingProductionRequest,
+  SubmitReadingSpokenResponseRequest,
 } from "../types/reading";
 import type { LexicalChunk } from "../types/chunk";
 
@@ -90,6 +91,16 @@ export async function submitReadingProduction(
 ): Promise<ReadingEvaluationResult> {
   try {
     return await invoke<ReadingEvaluationResult>("submit_reading_production", { request });
+  } catch (error) {
+    throw toReadingError(error);
+  }
+}
+
+export async function submitReadingSpokenResponse(
+  request: SubmitReadingSpokenResponseRequest,
+): Promise<void> {
+  try {
+    await invoke<void>("submit_reading_spoken_response", { request });
   } catch (error) {
     throw toReadingError(error);
   }

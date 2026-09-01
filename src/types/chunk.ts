@@ -16,7 +16,8 @@ export type ChunkOrigin =
   | "repair_event"
   | "writing_task"
   | "reading_session"
-  | "manual";
+  | "manual"
+  | "scenario_pack";
 
 export type ProductiveStatus =
   | "not_tried"
@@ -60,6 +61,22 @@ export type CreateManualLexicalChunkRequest = {
   domain?: string;
   examples?: string[];
   commonError?: string;
+};
+
+export type ScenarioPackVocabularyItem = {
+  chunkType: LexicalChunkType;
+  text: string;
+  meaning: string;
+  register: string;
+  targetLevel: CefrLevel;
+  domain?: string;
+  examples?: string[];
+  commonError?: string;
+};
+
+export type ImportScenarioPackVocabularyRequest = {
+  packId: string;
+  items: ScenarioPackVocabularyItem[];
 };
 
 export type PromoteLexicalChunkRequest = {

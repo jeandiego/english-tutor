@@ -51,5 +51,31 @@
     { "content": "edge case (noun) — an unusual input that could break the code", "type": "vocabulary" },
     { "content": "First conditional for proposing technical approaches", "type": "grammar_pattern" }
   ],
-  "focusPlaceholder": "e.g. a specific kind of problem (algorithms, debugging, design)"
+  "focusPlaceholder": "e.g. a specific kind of problem (algorithms, debugging, design)",
+  "targetVocabulary": [
+    {
+      "chunkType": "phrase",
+      "text": "weigh the trade-offs",
+      "meaning": "consider the pros and cons of an approach before deciding",
+      "register": "professional",
+      "targetLevel": "B2",
+      "examples": ["Let's weigh the trade-offs between caching this and just recomputing it every time."]
+    },
+    {
+      "chunkType": "phrase",
+      "text": "walk me through",
+      "meaning": "explain something step by step",
+      "register": "professional",
+      "targetLevel": "B1",
+      "examples": ["Can you walk me through how this function handles the empty-array case?"]
+    },
+    {
+      "chunkType": "collocation",
+      "text": "push back on",
+      "meaning": "respectfully disagree with or question something",
+      "register": "professional",
+      "targetLevel": "B2",
+      "examples": ["I want to push back on that approach — it won't scale well."]
+    }
+  ]
 }

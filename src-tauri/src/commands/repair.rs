@@ -595,6 +595,7 @@ pub async fn update_repair_event_outcome(
                             source_repair_event_id: Some(request.event_id),
                             source_writing_evaluation_id: None,
                             source_reading_session_attempt_id: None,
+                            source_scenario_pack_id: None,
                         },
                         now_ms(),
                     )?;

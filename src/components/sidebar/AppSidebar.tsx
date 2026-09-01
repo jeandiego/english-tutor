@@ -3,7 +3,6 @@ import {
   IconBooks,
   IconChartBar,
   IconClipboardCheck,
-  IconDatabase,
   IconHistory,
   IconListDetails,
   IconMessage,
@@ -11,7 +10,6 @@ import {
   IconMicrophone,
   IconPencil,
   IconPlus,
-  IconSettings,
   IconVocabulary,
 } from "@tabler/icons-react";
 import {
@@ -40,6 +38,7 @@ import { historyKeys } from "../../queryKeys/history";
 import { conversationTitleFor } from "../../sessions/conversationTitle";
 import { scenarioLabelFor } from "../../sessions/loadPacks";
 import { relativeTimeFor } from "../../lib/relativeTime";
+import type { SettingsSectionId } from "../settings/SettingsModal";
 import type { SessionSummary } from "../../types/history";
 import type { HealthState } from "../../types/runtime";
 import type { TtsProviderId, TtsSetupState } from "../../types/tts";
@@ -54,9 +53,7 @@ export type AppPage =
   | "chunks"
   | "history"
   | "progress"
-  | "pronunciation"
-  | "storage"
-  | "settings";
+  | "pronunciation";
 
 const NAV_ITEMS: {
   page: AppPage;
@@ -64,18 +61,16 @@ const NAV_ITEMS: {
   icon: typeof IconMessageCircle2;
   alwaysEnabled?: boolean;
 }[] = [
-  { page: "conversation", label: "Conversation", icon: IconMessageCircle2, alwaysEnabled: true },
-  { page: "sessions", label: "Sessions", icon: IconListDetails },
-  { page: "assessment", label: "Assessment", icon: IconClipboardCheck },
-  { page: "writing", label: "Writing", icon: IconPencil },
-  { page: "reading", label: "Reading to Writing", icon: IconBooks },
-  { page: "chunks", label: "Chunk bank", icon: IconVocabulary },
-  { page: "history", label: "History", icon: IconHistory },
-  { page: "progress", label: "My Progress", icon: IconChartBar },
-  { page: "pronunciation", label: "Pronunciation", icon: IconMicrophone },
-  { page: "storage", label: "Storage", icon: IconDatabase },
-  { page: "settings", label: "Settings", icon: IconSettings },
-];
+    { page: "conversation", label: "Conversation", icon: IconMessageCircle2, alwaysEnabled: true },
+    { page: "sessions", label: "Sessions", icon: IconListDetails },
+    { page: "assessment", label: "Assessment", icon: IconClipboardCheck },
+    { page: "writing", label: "Writing", icon: IconPencil },
+    { page: "reading", label: "Reading to Writing", icon: IconBooks },
+    { page: "chunks", label: "Chunk bank", icon: IconVocabulary },
+    { page: "history", label: "History", icon: IconHistory },
+    { page: "progress", label: "My Progress", icon: IconChartBar },
+    { page: "pronunciation", label: "Pronunciation", icon: IconMicrophone },
+  ];
 
 const RECENT_CONVERSATIONS_LIMIT = 8;
 
@@ -94,11 +89,10 @@ type AppSidebarProps = {
   activePage: AppPage;
   onNavigate: (page: AppPage) => void;
   navigationDisabled: boolean;
-  settingsNeedsAttention: boolean;
   healthState: HealthState;
   transcription: TranscriptionDiagnostic;
   tutor: TutorDiagnostic;
-  onOpenSettings: () => void;
+  onOpenSettings: (section?: SettingsSectionId) => void;
   onOpenSession: (sessionId: number) => void;
   estimatedLevel?: string;
   ttsState: TtsSetupState;
@@ -109,7 +103,6 @@ export function AppSidebar({
   activePage,
   onNavigate,
   navigationDisabled,
-  settingsNeedsAttention,
   healthState,
   transcription,
   tutor,
@@ -125,11 +118,17 @@ export function AppSidebar({
   });
 
   return (
-    <Sidebar>
+    <Sidebar
+      style={
+        {
+          "--sidebar-width": '14rem',
+        } as React.CSSProperties
+      }
+    >
       <SidebarHeader className="mt-10!">
         <SidebarMenu>
           <VoiceSwitcher
-            onOpenSettings={onOpenSettings}
+            onOpenSettings={() => onOpenSettings("voice")}
             onSelectVoice={onSelectVoice}
             ttsState={ttsState}
           />
@@ -143,23 +142,10 @@ export function AppSidebar({
                 isActive={activePage === item.page}
                 onClick={() => onNavigate(item.page)}
                 tooltip={item.label}
-                aria-label={
-                  item.page === "settings" && settingsNeedsAttention
-                    ? "Settings, needs attention"
-                    : undefined
-                }
               >
                 <item.icon />
                 <span>{item.label}</span>
               </SidebarMenuButton>
-              {item.page === "settings" && settingsNeedsAttention && (
-                <SidebarMenuBadge>
-                  <span
-                    aria-hidden="true"
-                    className="block size-1.5 rounded-full bg-destructive"
-                  />
-                </SidebarMenuBadge>
-              )}
             </SidebarMenuItem>
           ))}
         </SidebarMenu>

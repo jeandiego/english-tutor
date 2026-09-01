@@ -98,4 +98,45 @@ describe("loadPacksFrom", () => {
     expect(catalog.errors).toHaveLength(1);
     expect(catalog.errors[0]?.message).toContain("Duplicate pack id");
   });
+
+  it("accepts a pack with a valid targetVocabulary field", () => {
+    const modules = {
+      "./packs/valid.json": {
+        default: {
+          ...validPack,
+          targetVocabulary: [
+            {
+              chunkType: "phrase",
+              text: "do a thing",
+              meaning: "to perform an action",
+              register: "neutral",
+              targetLevel: "B1",
+            },
+          ],
+        },
+      },
+    };
+
+    const catalog = loadPacksFrom(modules);
+
+    expect(catalog.errors).toEqual([]);
+    expect(catalog.packs[0]?.targetVocabulary).toHaveLength(1);
+    expect(catalog.packs[0]?.targetVocabulary?.[0]?.text).toBe("do a thing");
+  });
+
+  it("reports a malformed targetVocabulary entry as an error", () => {
+    const modules = {
+      "./packs/broken.json": {
+        default: {
+          ...validPack,
+          targetVocabulary: [{ text: "do a thing" }],
+        },
+      },
+    };
+
+    const catalog = loadPacksFrom(modules);
+
+    expect(catalog.packs).toHaveLength(0);
+    expect(catalog.errors).toHaveLength(1);
+  });
 });

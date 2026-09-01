@@ -297,10 +297,10 @@ describe("Pako shell", () => {
     expect(await screen.findByText("Local tutor ready")).toBeInTheDocument();
     expect(screen.getByText("macos · aarch64")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
-    expect(screen.getByRole("button", { name: "Settings" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /system status/i })).toBeInTheDocument();
   });
 
-  it("keeps setup details off the conversation page and opens Settings", async () => {
+  it("keeps setup details off the conversation page and opens the settings modal", async () => {
     getRuntimeHealthMock.mockResolvedValue(readyHealth());
     loadTranscriptionSetupMock.mockResolvedValue(incompleteSetup);
 
@@ -319,12 +319,11 @@ describe("Pako shell", () => {
       screen.getByRole("button", { name: "Open transcription settings" }),
     );
 
-    expect(await screen.findByRole("heading", { name: "Local runtimes" })).toBeInTheDocument();
+    expect(await screen.findByText("Local transcription")).toBeInTheDocument();
     expect(screen.getByText("Set the Whisper executable path.")).toBeInTheDocument();
     expect(screen.getByText("Set the Whisper model path.")).toBeInTheDocument();
     expect(screen.getByLabelText("Whisper executable")).toBeInTheDocument();
     expect(screen.getByLabelText("Whisper model")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /hold to talk/i })).not.toBeInTheDocument();
   });
 
   it("retries a failed settings load from the Settings page", async () => {
@@ -356,15 +355,17 @@ describe("Pako shell", () => {
 
     render(<App />);
     fireEvent.click(
-      await screen.findByRole("button", { name: /settings, needs attention/i }),
+      await screen.findByRole("button", { name: "Open transcription settings" }),
     );
     fireEvent.change(await screen.findByLabelText("Whisper executable"), {
       target: { value: "/custom/whisper-cli" },
     });
 
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     fireEvent.click(screen.getByRole("button", { name: "Conversation" }));
+    fireEvent.click(screen.getByRole("button", { name: /system status/i }));
     fireEvent.click(
-      screen.getByRole("button", { name: /settings, needs attention/i }),
+      screen.getByRole("button", { name: "Open transcription settings" }),
     );
 
     expect(screen.getByLabelText("Whisper executable")).toHaveValue(
@@ -379,7 +380,7 @@ describe("Pako shell", () => {
 
     render(<App />);
     fireEvent.click(
-      await screen.findByRole("button", { name: /settings, needs attention/i }),
+      await screen.findByRole("button", { name: "Open transcription settings" }),
     );
     const whisperInput = await screen.findByLabelText("Whisper executable");
     fireEvent.change(whisperInput, {
@@ -398,6 +399,7 @@ describe("Pako shell", () => {
       }),
     );
     expect(await screen.findByText("Ready")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: "Close" }));
     fireEvent.click(screen.getByRole("button", { name: "Conversation" }));
     expect(screen.getByRole("button", { name: /hold to talk/i })).toBeEnabled();
   });
@@ -409,7 +411,7 @@ describe("Pako shell", () => {
 
     render(<App />);
     fireEvent.click(
-      await screen.findByRole("button", { name: /settings, needs attention/i }),
+      await screen.findByRole("button", { name: "Open transcription settings" }),
     );
     fireEvent.change(await screen.findByLabelText("Whisper executable"), {
       target: { value: "/custom/whisper-cli" },

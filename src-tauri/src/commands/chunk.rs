@@ -33,6 +33,7 @@ pub enum ChunkOrigin {
     WritingTask,
     ReadingSession,
     Manual,
+    ScenarioPack,
 }
 
 /// Declaration order is the productive ladder — derived `Ord` gives us
@@ -174,9 +175,10 @@ pub struct LexicalChunk {
 }
 
 /// Bundles every field a chunk-candidate creation needs, regardless of
-/// which of the four sources is calling — keeps `create_chunk_candidate`'s
-/// call sites (persist_turn, repair.rs, writing.rs, manual add) readable
-/// instead of each passing a dozen positional arguments.
+/// which of the sources is calling — keeps `create_chunk_candidate`'s
+/// call sites (persist_turn, repair.rs, writing.rs, manual add, scenario
+/// pack import) readable instead of each passing a dozen positional
+/// arguments.
 pub(crate) struct ChunkCandidateInput<'a> {
     pub(crate) chunk_type: LexicalChunkType,
     pub(crate) text: &'a str,
@@ -192,6 +194,7 @@ pub(crate) struct ChunkCandidateInput<'a> {
     pub(crate) source_repair_event_id: Option<i64>,
     pub(crate) source_writing_evaluation_id: Option<i64>,
     pub(crate) source_reading_session_attempt_id: Option<i64>,
+    pub(crate) source_scenario_pack_id: Option<&'a str>,
 }
 
 // ---------------------------------------------------------------------
@@ -212,6 +215,29 @@ pub struct CreateManualLexicalChunkRequest {
     examples: Vec<String>,
     #[serde(default)]
     common_error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ScenarioPackVocabularyItemInput {
+    chunk_type: LexicalChunkType,
+    text: String,
+    meaning: String,
+    register: String,
+    target_level: CefrLevel,
+    #[serde(default)]
+    domain: Option<String>,
+    #[serde(default)]
+    examples: Vec<String>,
+    #[serde(default)]
+    common_error: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ImportScenarioPackVocabularyRequest {
+    pack_id: String,
+    items: Vec<ScenarioPackVocabularyItemInput>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -327,6 +353,7 @@ pub async fn create_manual_lexical_chunk(
                 source_repair_event_id: None,
                 source_writing_evaluation_id: None,
                 source_reading_session_attempt_id: None,
+                source_scenario_pack_id: None,
             },
             now_ms(),
         )?;
@@ -343,6 +370,59 @@ pub async fn create_manual_lexical_chunk(
         ChunkCommandError::new(
             "chunk-task-failed",
             "The chunk could not be saved.",
+            error.to_string(),
+        )
+    })?
+}
+
+#[tauri::command]
+pub async fn import_scenario_pack_vocabulary(
+    app_handle: AppHandle,
+    request: ImportScenarioPackVocabularyRequest,
+) -> Result<Vec<LexicalChunk>, ChunkCommandError> {
+    let path = history::db_path(&app_handle)?;
+    tauri::async_runtime::spawn_blocking(move || -> Result<Vec<LexicalChunk>, ChunkCommandError> {
+        let conn = history::open_connection(&path)?;
+        let now = now_ms();
+        let mut chunks = Vec::with_capacity(request.items.len());
+        for item in &request.items {
+            let (chunk_id, _created) = history::create_chunk_candidate(
+                &conn,
+                ChunkCandidateInput {
+                    chunk_type: item.chunk_type,
+                    text: &item.text,
+                    meaning: &item.meaning,
+                    register: &item.register,
+                    target_level: item.target_level,
+                    domain: item.domain.as_deref(),
+                    examples: &item.examples,
+                    common_error: item.common_error.as_deref(),
+                    origin: ChunkOrigin::ScenarioPack,
+                    source_correction_id: None,
+                    source_expression_id: None,
+                    source_repair_event_id: None,
+                    source_writing_evaluation_id: None,
+                    source_reading_session_attempt_id: None,
+                    source_scenario_pack_id: Some(&request.pack_id),
+                },
+                now,
+            )?;
+            let chunk = history::lexical_chunk_by_id(&conn, chunk_id)?.ok_or_else(|| {
+                ChunkCommandError::new(
+                    "chunk-task-failed",
+                    "The chunk could not be saved.",
+                    format!("lexical_chunk {chunk_id} not found after insert"),
+                )
+            })?;
+            chunks.push(chunk);
+        }
+        Ok(chunks)
+    })
+    .await
+    .map_err(|error| {
+        ChunkCommandError::new(
+            "chunk-task-failed",
+            "The scenario pack vocabulary could not be imported.",
             error.to_string(),
         )
     })?

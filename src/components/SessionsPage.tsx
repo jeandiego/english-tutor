@@ -3,6 +3,7 @@ import { IconStar, IconStarFilled } from "@tabler/icons-react";
 import { useEffect, useMemo, useState } from "react";
 import type { CefrLevel } from "../types/assessment";
 import { useFavoritePacks } from "../hooks/useFavoritePacks";
+import { useImportScenarioPackVocabulary } from "../hooks/useImportScenarioPackVocabulary";
 import { useSessionRun } from "../hooks/useSessionRun";
 import { getLearnerProfile } from "../native/learnerProfile";
 import { listDueReviewItems } from "../native/review";
@@ -142,6 +143,7 @@ function SessionCatalog({
   const [focus, setFocus] = useState("");
   const [durationPresetId, setDurationPresetId] = useState<DurationPresetId>("standard");
   const { isFavorite, toggleFavorite, favoriteIds } = useFavoritePacks();
+  const importVocabulary = useImportScenarioPackVocabulary();
 
   useEffect(() => {
     if (defaultDifficulty) {
@@ -204,6 +206,9 @@ function SessionCatalog({
                 className="absolute right-3 top-3 text-muted-foreground hover:text-foreground"
                 onClick={(event) => {
                   event.stopPropagation();
+                  if (!isFavorite(pack.id)) {
+                    void importVocabulary(pack);
+                  }
                   toggleFavorite(pack.id);
                 }}
                 type="button"
@@ -307,13 +312,14 @@ function SessionCatalog({
               <Button
                 className="w-fit"
                 disabled={disabled}
-                onClick={() =>
+                onClick={() => {
+                  void importVocabulary(selectedPack);
                   onStart(toSessionSource(selectedPack, selectedVariationId), {
                     difficulty,
                     focus: focus.trim() || undefined,
                     durationPresetId,
-                  })
-                }
+                  });
+                }}
                 type="button"
               >
                 Start session

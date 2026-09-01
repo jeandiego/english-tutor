@@ -54,5 +54,31 @@
       "type": "grammar_pattern"
     }
   ],
-  "focusPlaceholder": "e.g. talking about a specific project or blocker"
+  "focusPlaceholder": "e.g. talking about a specific project or blocker",
+  "targetVocabulary": [
+    {
+      "chunkType": "phrase",
+      "text": "flag a blocker",
+      "meaning": "raise an issue that's stopping progress",
+      "register": "professional",
+      "targetLevel": "B1",
+      "examples": ["I want to flag a blocker before we move on — the API keys still haven't arrived."]
+    },
+    {
+      "chunkType": "collocation",
+      "text": "wrap up",
+      "meaning": "finish something off",
+      "register": "professional",
+      "targetLevel": "A2",
+      "examples": ["I'm just wrapping up the last bit of testing today."]
+    },
+    {
+      "chunkType": "phrase",
+      "text": "follow up on",
+      "meaning": "check on the status of something later",
+      "register": "professional",
+      "targetLevel": "B1",
+      "examples": ["I'll follow up on that ticket once the reviewer gets back to me."]
+    }
+  ]
 }

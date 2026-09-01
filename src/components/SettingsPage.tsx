@@ -1,7 +1,6 @@
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
-import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
-import { Card, CardContent, CardHeader } from "./ui/card";
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
 import {
   Field,
   FieldContent,
@@ -29,30 +28,6 @@ import type {
 import { TTS_PROVIDER_LABELS, type TtsProviderId, type TtsSettings, type TtsSetupState } from "../types/tts";
 import type { RepairIntensity, TutorSettings, TutorSetupState } from "../types/tutor";
 import type { ListeningAccentFocus, VoiceGenderPreference } from "../types/listening";
-
-type SettingsPageProps = {
-  transcriptionState: TranscriptionSetupState;
-  transcriptionDraft: TranscriptionSettings;
-  transcriptionDirty: boolean;
-  onTranscriptionDraftChange: (settings: TranscriptionSettings) => void;
-  onTranscriptionReset: () => void;
-  onTranscriptionRetry: () => Promise<void>;
-  onTranscriptionSave: () => Promise<void>;
-  tutorState: TutorSetupState;
-  tutorDraft: TutorSettings;
-  tutorDirty: boolean;
-  onTutorDraftChange: (settings: TutorSettings) => void;
-  onTutorReset: () => void;
-  onTutorRetry: () => Promise<void>;
-  onTutorSave: () => Promise<void>;
-  ttsState: TtsSetupState;
-  ttsDraft: TtsSettings;
-  ttsDirty: boolean;
-  onTtsDraftChange: (settings: TtsSettings) => void;
-  onTtsReset: () => void;
-  onTtsRetry: () => Promise<void>;
-  onTtsSave: () => Promise<void>;
-};
 
 const REPAIR_INTENSITY_OPTIONS: Array<{
   value: RepairIntensity;
@@ -104,59 +79,6 @@ const DEPENDENCY_NAMES: Record<DependencyCheck["dependency"], string> = {
   ffmpegExecutable: "Audio conversion",
 };
 
-function isTranscriptionReady(state: TranscriptionSetupState) {
-  return (
-    state.status === "loaded" &&
-    !state.saving &&
-    state.setup.preflight.status === "ready"
-  );
-}
-
-function isTutorReady(state: TutorSetupState) {
-  return (
-    state.status === "loaded" &&
-    !state.saving &&
-    state.setup.preflight.status === "ready"
-  );
-}
-
-function overallStatus(
-  transcriptionState: TranscriptionSetupState,
-  tutorState: TutorSetupState,
-) {
-  if (
-    transcriptionState.status === "checking" ||
-    tutorState.status === "checking" ||
-    (transcriptionState.status === "loaded" && transcriptionState.saving) ||
-    (tutorState.status === "loaded" && tutorState.saving)
-  ) {
-    return { label: "Checking", visual: "checking" as const };
-  }
-
-  if (isTranscriptionReady(transcriptionState) && isTutorReady(tutorState)) {
-    return { label: "Ready", visual: "ready" as const };
-  }
-
-  return { label: "Needs setup", visual: "error" as const };
-}
-
-function StatusBadge({ status }: { status: ReturnType<typeof overallStatus> }) {
-  return (
-    <Badge
-      role="status"
-      variant={
-        status.visual === "ready"
-          ? "success"
-          : status.visual === "error"
-            ? "destructive"
-            : "secondary"
-      }
-    >
-      {status.label}
-    </Badge>
-  );
-}
-
 function DependencyDot({ ready }: { ready: boolean }) {
   return (
     <span
@@ -193,14 +115,12 @@ function SettingsSection({
   children: React.ReactNode;
 }) {
   return (
-    <Card aria-labelledby={titleId} className="rounded-xl">
+    <Card aria-labelledby={titleId} className="rounded-lg" size="sm">
       <CardHeader>
-        <h3 className="text-subheading font-medium text-foreground" id={titleId}>
-          {title}
-        </h3>
-        <p className="text-body text-muted-foreground">{description}</p>
+        <CardTitle id={titleId}>{title}</CardTitle>
+        <CardDescription>{description}</CardDescription>
       </CardHeader>
-      <CardContent className="flex flex-col gap-4">{children}</CardContent>
+      <CardContent className="flex flex-col gap-3">{children}</CardContent>
     </Card>
   );
 }
@@ -221,7 +141,7 @@ function FormFooter({
   savingLabel: string;
 }) {
   return (
-    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+    <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border pt-3">
       <p className="text-caption text-muted-foreground">{note}</p>
       <div className="flex gap-2">
         <Button
@@ -240,7 +160,17 @@ function FormFooter({
   );
 }
 
-export function SettingsPage({
+type TranscriptionSettingsSectionProps = {
+  transcriptionState: TranscriptionSetupState;
+  transcriptionDraft: TranscriptionSettings;
+  transcriptionDirty: boolean;
+  onTranscriptionDraftChange: (settings: TranscriptionSettings) => void;
+  onTranscriptionReset: () => void;
+  onTranscriptionRetry: () => Promise<void>;
+  onTranscriptionSave: () => Promise<void>;
+};
+
+export function TranscriptionSettingsSection({
   transcriptionState,
   transcriptionDraft,
   transcriptionDirty,
@@ -248,68 +178,16 @@ export function SettingsPage({
   onTranscriptionReset,
   onTranscriptionRetry,
   onTranscriptionSave,
-  tutorState,
-  tutorDraft,
-  tutorDirty,
-  onTutorDraftChange,
-  onTutorReset,
-  onTutorRetry,
-  onTutorSave,
-  ttsState,
-  ttsDraft,
-  ttsDirty,
-  onTtsDraftChange,
-  onTtsReset,
-  onTtsRetry,
-  onTtsSave,
-}: SettingsPageProps) {
+}: TranscriptionSettingsSectionProps) {
   const transcriptionSetup =
-    transcriptionState.status === "loaded"
-      ? transcriptionState.setup
-      : undefined;
+    transcriptionState.status === "loaded" ? transcriptionState.setup : undefined;
   const transcriptionSaving =
     transcriptionState.status === "loaded" && transcriptionState.saving;
   const transcriptionSaveError =
-    transcriptionState.status === "loaded"
-      ? transcriptionState.saveError
-      : undefined;
-  const tutorSetup = tutorState.status === "loaded" ? tutorState.setup : undefined;
-  const tutorSaving = tutorState.status === "loaded" && tutorState.saving;
-  const tutorSaveError =
-    tutorState.status === "loaded" ? tutorState.saveError : undefined;
-  const ttsSetup = ttsState.status === "loaded" ? ttsState.setup : undefined;
-  const ttsSaving = ttsState.status === "loaded" && ttsState.saving;
-  const ttsSaveError = ttsState.status === "loaded" ? ttsState.saveError : undefined;
-  const selectedProvider = ttsSetup?.providers.find(
-    (provider) => provider.id === ttsDraft.provider,
-  );
-  const status = overallStatus(transcriptionState, tutorState);
-
-  const learnerProfile = useLearnerProfile();
-  const listeningSaving =
-    learnerProfile.state.status === "loaded" && learnerProfile.state.saving;
-  const listeningSaveError =
-    learnerProfile.state.status === "loaded" ? learnerProfile.state.saveError : undefined;
+    transcriptionState.status === "loaded" ? transcriptionState.saveError : undefined;
 
   return (
-    <section
-      aria-labelledby="settings-title"
-      className="min-h-0 flex-1 overflow-y-auto"
-    >
-      <div className="mx-auto flex w-full max-w-2xl flex-col gap-8 p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-subheading font-semibold text-foreground" id="settings-title">
-            Local runtimes
-          </h2>
-          <p className="text-body text-muted-foreground">
-            Configure the on-device tools that transcribe your speech and power
-            the English tutor. Audio and transcripts stay on this Mac.
-          </p>
-        </div>
-        <StatusBadge status={status} />
-      </div>
-
+    <div className="flex flex-col gap-4">
       <SettingsSection
         description="All three dependencies must pass before voice input is enabled."
         title="Local transcription"
@@ -330,7 +208,7 @@ export function SettingsPage({
         {transcriptionSetup && (
           <div className="flex flex-col divide-y divide-border">
             {transcriptionSetup.preflight.checks.map((check) => (
-              <div className="flex gap-3 py-3 first:pt-0 last:pb-0" key={check.dependency}>
+              <div className="flex gap-3 py-2 first:pt-0 last:pb-0" key={check.dependency}>
                 <DependencyDot ready={check.status === "ready"} />
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <p className="text-body font-medium text-foreground">
@@ -362,7 +240,7 @@ export function SettingsPage({
               void onTranscriptionSave();
             }}
           >
-            <FieldGroup>
+            <FieldGroup className="gap-4">
               <Field orientation="responsive">
                 <FieldLabel htmlFor="whisper-executable-path">Whisper executable</FieldLabel>
                 <FieldContent>
@@ -448,7 +326,36 @@ export function SettingsPage({
           </form>
         </SettingsSection>
       )}
+    </div>
+  );
+}
 
+type TutorSettingsSectionProps = {
+  tutorState: TutorSetupState;
+  tutorDraft: TutorSettings;
+  tutorDirty: boolean;
+  onTutorDraftChange: (settings: TutorSettings) => void;
+  onTutorReset: () => void;
+  onTutorRetry: () => Promise<void>;
+  onTutorSave: () => Promise<void>;
+};
+
+export function TutorSettingsSection({
+  tutorState,
+  tutorDraft,
+  tutorDirty,
+  onTutorDraftChange,
+  onTutorReset,
+  onTutorRetry,
+  onTutorSave,
+}: TutorSettingsSectionProps) {
+  const tutorSetup = tutorState.status === "loaded" ? tutorState.setup : undefined;
+  const tutorSaving = tutorState.status === "loaded" && tutorState.saving;
+  const tutorSaveError =
+    tutorState.status === "loaded" ? tutorState.saveError : undefined;
+
+  return (
+    <div className="flex flex-col gap-4">
       <SettingsSection
         description="Ollama must be running with the configured model installed locally."
         title="Local tutor"
@@ -514,7 +421,7 @@ export function SettingsPage({
               void onTutorSave();
             }}
           >
-            <FieldGroup>
+            <FieldGroup className="gap-4">
               <Field orientation="responsive">
                 <FieldLabel htmlFor="ollama-base-url">Ollama URL</FieldLabel>
                 <FieldContent>
@@ -655,7 +562,38 @@ export function SettingsPage({
           </form>
         </SettingsSection>
       )}
+    </div>
+  );
+}
 
+type VoiceSettingsSectionProps = {
+  ttsState: TtsSetupState;
+  ttsDraft: TtsSettings;
+  ttsDirty: boolean;
+  onTtsDraftChange: (settings: TtsSettings) => void;
+  onTtsReset: () => void;
+  onTtsRetry: () => Promise<void>;
+  onTtsSave: () => Promise<void>;
+};
+
+export function VoiceSettingsSection({
+  ttsState,
+  ttsDraft,
+  ttsDirty,
+  onTtsDraftChange,
+  onTtsReset,
+  onTtsRetry,
+  onTtsSave,
+}: VoiceSettingsSectionProps) {
+  const ttsSetup = ttsState.status === "loaded" ? ttsState.setup : undefined;
+  const ttsSaving = ttsState.status === "loaded" && ttsState.saving;
+  const ttsSaveError = ttsState.status === "loaded" ? ttsState.saveError : undefined;
+  const selectedProvider = ttsSetup?.providers.find(
+    (provider) => provider.id === ttsDraft.provider,
+  );
+
+  return (
+    <div className="flex flex-col gap-4">
       <SettingsSection
         description="macOS speech works out of the box. Kokoro and ElevenLabs are optional."
         title="Voice"
@@ -676,7 +614,7 @@ export function SettingsPage({
         {ttsSetup && (
           <div className="flex flex-col divide-y divide-border">
             {ttsSetup.providers.map((provider) => (
-              <div className="flex gap-3 py-3 first:pt-0 last:pb-0" key={provider.id}>
+              <div className="flex gap-3 py-2 first:pt-0 last:pb-0" key={provider.id}>
                 <DependencyDot ready={provider.availability.available} />
                 <div className="flex min-w-0 flex-1 flex-col gap-0.5">
                   <p className="text-body font-medium text-foreground">{provider.label}</p>
@@ -710,7 +648,7 @@ export function SettingsPage({
               void onTtsSave();
             }}
           >
-            <FieldGroup>
+            <FieldGroup className="gap-4">
               <Field orientation="responsive">
                 <FieldLabel htmlFor="tts-provider">Provider</FieldLabel>
                 <FieldContent>
@@ -924,133 +862,146 @@ export function SettingsPage({
           </form>
         </SettingsSection>
       )}
+    </div>
+  );
+}
 
-      {learnerProfile.state.status === "loaded" && (
-        <SettingsSection
-          description="Adapts the tutor's voice and pacing to your listening focus. Difficulty moves itself as comprehension checks land during sessions, but you can override it here."
-          title="Listening"
-          titleId="listening-settings-title"
+export function ListeningSettingsSection() {
+  const learnerProfile = useLearnerProfile();
+  const listeningSaving =
+    learnerProfile.state.status === "loaded" && learnerProfile.state.saving;
+  const listeningSaveError =
+    learnerProfile.state.status === "loaded" ? learnerProfile.state.saveError : undefined;
+
+  if (learnerProfile.state.status !== "loaded") {
+    return null;
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+      <SettingsSection
+        description="Adapts the tutor's voice and pacing to your listening focus. Difficulty moves itself as comprehension checks land during sessions, but you can override it here."
+        title="Listening"
+        titleId="listening-settings-title"
+      >
+        <form
+          onSubmit={(event) => {
+            event.preventDefault();
+            learnerProfile.save();
+          }}
         >
-          <form
-            onSubmit={(event) => {
-              event.preventDefault();
-              learnerProfile.save();
-            }}
-          >
-            <FieldGroup>
-              <Field orientation="responsive">
-                <FieldLabel htmlFor="listening-accent-focus">Accent focus</FieldLabel>
-                <FieldContent>
-                  <Select
-                    disabled={listeningSaving}
-                    onValueChange={(value) =>
-                      learnerProfile.setDraft({
-                        ...learnerProfile.draft,
-                        accentFocus:
-                          value === "none" ? undefined : (value as ListeningAccentFocus),
-                      })
-                    }
-                    value={learnerProfile.draft.accentFocus ?? "none"}
-                  >
-                    <SelectTrigger className="w-full" id="listening-accent-focus">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="none">No preference</SelectItem>
-                      {(Object.keys(ACCENT_FOCUS_LABELS) as ListeningAccentFocus[]).map(
-                        (focus) => (
-                          <SelectItem key={focus} value={focus}>
-                            {ACCENT_FOCUS_LABELS[focus]}
-                          </SelectItem>
-                        ),
-                      )}
-                    </SelectContent>
-                  </Select>
-                  <FieldDescription className="text-xs text-muted-foreground/62">
-                    Drives which installed voice is picked for sessions when a match exists.
-                  </FieldDescription>
-                </FieldContent>
-              </Field>
-
-              <Field orientation="responsive">
-                <FieldLabel htmlFor="listening-voice-gender">Voice gender preference</FieldLabel>
-                <FieldContent>
-                  <Select
-                    disabled={listeningSaving}
-                    onValueChange={(value) =>
-                      learnerProfile.setDraft({
-                        ...learnerProfile.draft,
-                        voiceGenderPref: value as VoiceGenderPreference,
-                      })
-                    }
-                    value={learnerProfile.draft.voiceGenderPref}
-                  >
-                    <SelectTrigger className="w-full" id="listening-voice-gender">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(Object.keys(VOICE_GENDER_PREF_LABELS) as VoiceGenderPreference[]).map(
-                        (pref) => (
-                          <SelectItem key={pref} value={pref}>
-                            {VOICE_GENDER_PREF_LABELS[pref]}
-                          </SelectItem>
-                        ),
-                      )}
-                    </SelectContent>
-                  </Select>
-                </FieldContent>
-              </Field>
-
-              <Field orientation="responsive">
-                <FieldLabel htmlFor="listening-stage">Listening difficulty</FieldLabel>
-                <FieldContent>
-                  <Select
-                    disabled={listeningSaving}
-                    onValueChange={(value) =>
-                      learnerProfile.setDraft({
-                        ...learnerProfile.draft,
-                        listeningStage: Number(value),
-                      })
-                    }
-                    value={String(learnerProfile.draft.listeningStage)}
-                  >
-                    <SelectTrigger className="w-full" id="listening-stage">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {LISTENING_STAGE_LABELS.map((label, stage) => (
-                        <SelectItem key={stage} value={String(stage)}>
-                          {label}
+          <FieldGroup className="gap-4">
+            <Field orientation="responsive">
+              <FieldLabel htmlFor="listening-accent-focus">Accent focus</FieldLabel>
+              <FieldContent>
+                <Select
+                  disabled={listeningSaving}
+                  onValueChange={(value) =>
+                    learnerProfile.setDraft({
+                      ...learnerProfile.draft,
+                      accentFocus:
+                        value === "none" ? undefined : (value as ListeningAccentFocus),
+                    })
+                  }
+                  value={learnerProfile.draft.accentFocus ?? "none"}
+                >
+                  <SelectTrigger className="w-full" id="listening-accent-focus">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">No preference</SelectItem>
+                    {(Object.keys(ACCENT_FOCUS_LABELS) as ListeningAccentFocus[]).map(
+                      (focus) => (
+                        <SelectItem key={focus} value={focus}>
+                          {ACCENT_FOCUS_LABELS[focus]}
                         </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                  <FieldDescription className="text-xs text-muted-foreground/62">
-                    Advances after a few correct comprehension checks, and eases back after
-                    missed ones.
-                  </FieldDescription>
-                </FieldContent>
-              </Field>
-            </FieldGroup>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>
+                <FieldDescription className="text-xs text-muted-foreground/62">
+                  Drives which installed voice is picked for sessions when a match exists.
+                </FieldDescription>
+              </FieldContent>
+            </Field>
 
-            {listeningSaveError && (
-              <p className="mt-4 text-caption text-destructive" role="alert">
-                {listeningSaveError}
-              </p>
-            )}
+            <Field orientation="responsive">
+              <FieldLabel htmlFor="listening-voice-gender">Voice gender preference</FieldLabel>
+              <FieldContent>
+                <Select
+                  disabled={listeningSaving}
+                  onValueChange={(value) =>
+                    learnerProfile.setDraft({
+                      ...learnerProfile.draft,
+                      voiceGenderPref: value as VoiceGenderPreference,
+                    })
+                  }
+                  value={learnerProfile.draft.voiceGenderPref}
+                >
+                  <SelectTrigger className="w-full" id="listening-voice-gender">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {(Object.keys(VOICE_GENDER_PREF_LABELS) as VoiceGenderPreference[]).map(
+                      (pref) => (
+                        <SelectItem key={pref} value={pref}>
+                          {VOICE_GENDER_PREF_LABELS[pref]}
+                        </SelectItem>
+                      ),
+                    )}
+                  </SelectContent>
+                </Select>
+              </FieldContent>
+            </Field>
 
-            <FormFooter
-              dirty={learnerProfile.dirty}
-              note="Applies to guided sessions started after saving."
-              onReset={learnerProfile.reset}
-              saveLabel="Save listening settings"
-              saving={listeningSaving}
-              savingLabel="Saving…"
-            />
-          </form>
-        </SettingsSection>
-      )}
-      </div>
-    </section>
+            <Field orientation="responsive">
+              <FieldLabel htmlFor="listening-stage">Listening difficulty</FieldLabel>
+              <FieldContent>
+                <Select
+                  disabled={listeningSaving}
+                  onValueChange={(value) =>
+                    learnerProfile.setDraft({
+                      ...learnerProfile.draft,
+                      listeningStage: Number(value),
+                    })
+                  }
+                  value={String(learnerProfile.draft.listeningStage)}
+                >
+                  <SelectTrigger className="w-full" id="listening-stage">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LISTENING_STAGE_LABELS.map((label, stage) => (
+                      <SelectItem key={stage} value={String(stage)}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <FieldDescription className="text-xs text-muted-foreground/62">
+                  Advances after a few correct comprehension checks, and eases back after
+                  missed ones.
+                </FieldDescription>
+              </FieldContent>
+            </Field>
+          </FieldGroup>
+
+          {listeningSaveError && (
+            <p className="mt-4 text-caption text-destructive" role="alert">
+              {listeningSaveError}
+            </p>
+          )}
+
+          <FormFooter
+            dirty={learnerProfile.dirty}
+            note="Applies to guided sessions started after saving."
+            onReset={learnerProfile.reset}
+            saveLabel="Save listening settings"
+            saving={listeningSaving}
+            savingLabel="Saving…"
+          />
+        </form>
+      </SettingsSection>
+    </div>
   );
 }

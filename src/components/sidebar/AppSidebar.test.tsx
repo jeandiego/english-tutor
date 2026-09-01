@@ -32,7 +32,6 @@ function renderSidebar(onOpenSession = vi.fn()) {
         onOpenSession={onOpenSession}
         onOpenSettings={vi.fn()}
         onSelectVoice={vi.fn()}
-        settingsNeedsAttention={false}
         transcription={{ status: "checking", message: "", canOpenSettings: false }}
         tutor={{ status: "checking", message: "", canOpenSettings: false }}
         ttsState={{ status: "checking" }}
