@@ -44,7 +44,7 @@ export function TopBar({ eyebrow, title, onNewSession, newSessionDisabled }: Top
           <span className="mx-1.5 text-muted-foreground">·</span>
           {title}
         </span>
-        <Button
+        {/* <Button
           disabled={newSessionDisabled}
           onClick={onNewSession}
           size="sm"
@@ -53,7 +53,7 @@ export function TopBar({ eyebrow, title, onNewSession, newSessionDisabled }: Top
         >
           <IconSquareRoundedPlusFilled />
           New session
-        </Button>
+        </Button> */}
       </div>
     </header>
   );

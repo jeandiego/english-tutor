@@ -55,7 +55,8 @@ export type AppPage =
   | "dictionary"
   | "history"
   | "progress"
-  | "pronunciation";
+  | "pronunciation"
+  | "journey";
 
 const NAV_ITEMS: {
   page: AppPage;

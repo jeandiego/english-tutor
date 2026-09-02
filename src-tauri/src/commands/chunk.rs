@@ -175,6 +175,18 @@ pub struct LexicalChunk {
     pub(crate) created_at: i64,
 }
 
+/// Lightweight row for feed/list views (e.g. the journey checkpoint feed)
+/// that just need what happened, not the full chunk record.
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct LexicalChunkAttemptSummary {
+    pub(crate) id: i64,
+    pub(crate) chunk_id: i64,
+    pub(crate) chunk_text: String,
+    pub(crate) outcome: ReviewOutcome,
+    pub(crate) created_at: i64,
+}
+
 /// Bundles every field a chunk-candidate creation needs, regardless of
 /// which of the sources is calling — keeps `create_chunk_candidate`'s
 /// call sites (persist_turn, repair.rs, writing.rs, manual add, scenario

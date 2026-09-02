@@ -3,6 +3,7 @@ pub(crate) mod chunk;
 pub(crate) mod dictionary;
 pub(crate) mod health;
 pub(crate) mod history;
+pub(crate) mod journey;
 pub(crate) mod learner_profile;
 pub(crate) mod listening;
 pub(crate) mod pronunciation;

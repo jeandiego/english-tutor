@@ -21,7 +21,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
-import { IconLayoutSidebar, IconLayoutSidebarFilled } from "@tabler/icons-react"
+import { IconLayoutSidebar, IconLayoutSidebarFilled, IconLayoutSidebarRight, IconLayoutSidebarRightFilled } from "@tabler/icons-react"
 
 const SIDEBAR_COOKIE_NAME = "sidebar_state"
 const SIDEBAR_COOKIE_MAX_AGE = 60 * 60 * 24 * 7
@@ -252,9 +252,12 @@ function Sidebar({
 function SidebarTrigger({
   className,
   onClick,
+  side = "left",
   ...props
-}: React.ComponentProps<typeof Button>) {
+}: React.ComponentProps<typeof Button> & { side?: "left" | "right" }) {
   const { toggleSidebar, open } = useSidebar()
+  const IconFilled = side === "left" ? IconLayoutSidebarFilled : IconLayoutSidebarRightFilled
+  const IconOutline = side === "left" ? IconLayoutSidebar : IconLayoutSidebarRight
 
   return (
     <Button
@@ -271,13 +274,13 @@ function SidebarTrigger({
     >
 
       <div className="relative size-4">
-        <IconLayoutSidebarFilled
+        <IconFilled
           className={cn(
             "absolute inset-0 transition-opacity duration-300 ease-in-out",
             open ? "opacity-100" : "opacity-0"
           )}
         />
-        <IconLayoutSidebar
+        <IconOutline
           className={cn(
             "absolute inset-0 transition-opacity duration-300 ease-in-out",
             open ? "opacity-0" : "opacity-100"

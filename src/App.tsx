@@ -1,24 +1,25 @@
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState, type CSSProperties } from "react";
+import { lazy, Suspense, useState, type CSSProperties } from "react";
 import { ErrorBoundary, getErrorMessage, type FallbackProps } from "react-error-boundary";
 import { AssessmentPage } from "./components/AssessmentPage";
 import { ChunkBankPage } from "./components/ChunkBankPage";
 import { ConversationControls } from "./components/ConversationControls";
 import { ConversationStage } from "./components/ConversationStage";
+import { DictionarySidebar } from "./components/dictionary/DictionarySidebar";
 import { DictionaryPage } from "./components/DictionaryPage";
 import { HistoryPage } from "./components/HistoryPage";
 import { ProgressPage } from "./components/ProgressPage";
 import { PronunciationPracticePage } from "./components/PronunciationPracticePage";
 import { ReadingToWritingPage } from "./components/ReadingToWritingPage";
-import { AppSidebar, type AppPage } from "./components/sidebar/AppSidebar";
 import { SessionsPage } from "./components/SessionsPage";
 import { SettingsModal, type SettingsSectionId } from "./components/settings/SettingsModal";
-import { WritingGymPage } from "./components/WritingGymPage";
+import { AppSidebar, type AppPage } from "./components/sidebar/AppSidebar";
 import type {
   TranscriptionDiagnostic,
   TutorDiagnostic,
 } from "./components/SystemDiagnostics";
 import { TopBar } from "./components/TopBar";
+import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -29,10 +30,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "./components/ui/alert-dialog";
-import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { Button } from "./components/ui/button";
 import { SidebarInset, SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
-import { DictionarySidebar } from "./components/dictionary/DictionarySidebar";
+import { WritingGymPage } from "./components/WritingGymPage";
 import { DictionarySidebarProvider } from "./hooks/useDictionarySidebar";
 import { useLiveConversation } from "./hooks/useLiveConversation";
 import { useRuntimeSetup } from "./hooks/useRuntimeSetup";
@@ -41,6 +41,13 @@ import { SIDEBAR_WIDTH_PX } from "./lib/layout";
 import { getLatestAssessment } from "./native/assessment";
 import { assessmentKeys } from "./queryKeys/assessment";
 import type { ConversationContinuePayload } from "./types/history";
+import { IconRoute } from "@tabler/icons-react";
+
+// Pulls in three.js/@react-three — code-split so its ~500KB stays out of
+// the initial bundle and only loads when the user opens the journey page.
+const JourneyPage = lazy(() =>
+  import("./components/JourneyPage").then((module) => ({ default: module.JourneyPage })),
+);
 
 function PageErrorFallback({ error, resetErrorBoundary }: FallbackProps) {
   const message = getErrorMessage(error);
@@ -77,6 +84,7 @@ const PAGE_HEADER: Record<AppPage, { eyebrow: string; title: string }> = {
   history: { eyebrow: "History", title: "Past conversations" },
   progress: { eyebrow: "My Progress", title: "Learning trends" },
   pronunciation: { eyebrow: "Pronunciation", title: "Practice a phrase" },
+  journey: { eyebrow: "Journey", title: "Your path" },
 };
 
 function App() {
@@ -366,6 +374,22 @@ function App() {
               />
             ) : activePage === "progress" ? (
               <ProgressPage />
+            ) : activePage === "journey" ? (
+              <Suspense
+                fallback={
+                  <div className="flex min-h-0 flex-1 items-center justify-center">
+                    <p className="text-caption text-muted-foreground">Loading your journey…</p>
+                  </div>
+                }
+              >
+                <JourneyPage
+                  estimatedLevel={estimatedLevel}
+                  onOpenConversation={(sessionId) => {
+                    setFocusSessionId(sessionId);
+                    setActivePage("history");
+                  }}
+                />
+              </Suspense>
             ) : (
               <PronunciationPracticePage
                 disabled={healthState.status !== "ready" || !transcriptionReady}
@@ -436,10 +460,21 @@ function App() {
             </AlertDialog>
           </SidebarProvider>
         </SidebarInset>
+        <Button
+          aria-label="Journey"
+          aria-pressed={activePage === "journey"}
+          className="fixed top-1.5 right-11 z-40 text-foreground/60 hover:bg-transparent hover:text-foreground aria-pressed:text-primary"
+          onClick={() => navigate("journey")}
+          size="icon-sm"
+          variant="ghost"
+        >
+          <IconRoute />
+        </Button>
         <SidebarTrigger
           className="fixed top-1.5 right-3 z-40 text-foreground/60 hover:bg-transparent hover:text-foreground"
           size="icon-sm"
           variant="ghost"
+          side="right"
         />
         <DictionarySidebar />
       </SidebarProvider>

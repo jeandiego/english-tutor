@@ -1,6 +1,6 @@
 // Shared with the SidebarProvider's --sidebar-width (see App.tsx) so the
 // fixed title-bar chrome can track the sidebar's expanded width exactly.
-export const SIDEBAR_WIDTH_PX = 196;
+export const SIDEBAR_WIDTH_PX = 224;
 
 // Height of the fixed title-bar strip (TopBar). Kept in sync with the
 // macOS traffic-light inset in src-tauri/tauri.conf.json — the dots are

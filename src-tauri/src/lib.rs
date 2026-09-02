@@ -33,6 +33,7 @@ pub fn run() {
             commands::history::get_session_detail,
             commands::history::list_correction_category_counts,
             commands::history::list_recent_expressions,
+            commands::journey::list_journey_checkpoints,
             commands::learner_profile::get_learner_profile,
             commands::learner_profile::save_learner_profile_preferences,
             commands::learner_profile::apply_assessment_to_learner_profile,

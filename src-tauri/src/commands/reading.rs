@@ -527,6 +527,21 @@ pub struct ReadingSessionDetail {
     pub(crate) spoken_response_submitted_at: Option<i64>,
 }
 
+/// Lightweight row for feed/list views (e.g. the journey checkpoint feed)
+/// that don't need the full evaluation record.
+#[derive(Clone, Debug, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+pub struct ReadingSessionSummary {
+    pub(crate) id: i64,
+    pub(crate) text_id: String,
+    pub(crate) status: ReadingSessionStatus,
+    pub(crate) created_at: i64,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) summary_fidelity: Option<SummaryFidelity>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub(crate) response_relevance: Option<ResponseRelevance>,
+}
+
 // ---------------------------------------------------------------------
 // Commands
 // ---------------------------------------------------------------------

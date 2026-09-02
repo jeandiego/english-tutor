@@ -151,7 +151,7 @@ function WritingComposer({
   );
 }
 
-function DimensionScores({ dimensions }: { dimensions: DimensionScoreResult[] }) {
+export function DimensionScores({ dimensions }: { dimensions: DimensionScoreResult[] }) {
   return (
     <ul className="flex flex-col divide-y divide-border">
       {dimensions.map((score) => (
@@ -167,7 +167,7 @@ function DimensionScores({ dimensions }: { dimensions: DimensionScoreResult[] })
   );
 }
 
-function PriorityIssues({ issues }: { issues: PriorityIssueResult[] }) {
+export function PriorityIssues({ issues }: { issues: PriorityIssueResult[] }) {
   return (
     <ul aria-label="Priority issues" className="flex flex-col gap-3">
       {issues.map((issue, index) => (
@@ -191,7 +191,7 @@ function PriorityIssues({ issues }: { issues: PriorityIssueResult[] }) {
   );
 }
 
-function UsefulChunks({ chunks }: { chunks: UsefulChunkResult[] }) {
+export function UsefulChunks({ chunks }: { chunks: UsefulChunkResult[] }) {
   return (
     <ul aria-label="Useful chunks" className="flex flex-col gap-3">
       {chunks.map((chunk, index) => (

@@ -9,10 +9,10 @@ export function DictionarySidebar() {
   const { lookups, dismissLookup } = useDictionarySidebar();
 
   return (
-    <Sidebar collapsible="offcanvas" side="right">
-      <SidebarHeader className="flex flex-row items-center justify-between gap-2 border-b border-sidebar-border px-3 py-2">
-        <span className="text-caption font-medium text-sidebar-foreground">Dictionary</span>
-        <SidebarTrigger />
+    <Sidebar variant="sidebar" collapsible="offcanvas" side="right" className="z-99">
+      <SidebarHeader className="flex flex-row items-center justify-between gap-2 border-b border-sidebar-border px-3 h-10">
+        <span className="text-caption text-xs font-medium text-sidebar-foreground">Dictionary</span>
+        <SidebarTrigger side="right" size="icon-sm" variant="ghost" className="hover:bg-transparent text-foreground/60 hover:text-foreground" />
       </SidebarHeader>
       <SidebarContent className="gap-3 p-3">
         {lookups.length === 0 ? (

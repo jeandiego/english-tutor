@@ -156,17 +156,17 @@ pub struct SessionStart {
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct SessionSummary {
-    id: i64,
-    started_at: i64,
-    ended_at: i64,
+    pub(crate) id: i64,
+    pub(crate) started_at: i64,
+    pub(crate) ended_at: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    mode: Option<String>,
+    pub(crate) mode: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    topic: Option<String>,
-    turn_count: i64,
-    status: SessionRunStatus,
+    pub(crate) topic: Option<String>,
+    pub(crate) turn_count: i64,
+    pub(crate) status: SessionRunStatus,
     #[serde(skip_serializing_if = "Option::is_none")]
-    difficulty: Option<CefrLevel>,
+    pub(crate) difficulty: Option<CefrLevel>,
     #[serde(skip_serializing_if = "Option::is_none")]
     summary: Option<super::session::SessionSummaryPayload>,
     #[serde(skip_serializing_if = "Option::is_none")]
@@ -2066,6 +2066,39 @@ pub(crate) fn record_lexical_chunk_attempt(
     })
 }
 
+pub(crate) fn recent_lexical_chunk_attempts(
+    conn: &Connection,
+    limit: i64,
+) -> rusqlite::Result<Vec<chunk::LexicalChunkAttemptSummary>> {
+    let mut statement = conn.prepare(
+        "SELECT a.id, a.lexical_chunk_id, c.text, a.outcome, a.created_at
+         FROM lexical_chunk_attempt a
+         JOIN lexical_chunk c ON c.id = a.lexical_chunk_id
+         ORDER BY a.created_at DESC LIMIT ?1",
+    )?;
+    let rows = statement.query_map(params![limit], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, i64>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, String>(3)?,
+            row.get::<_, i64>(4)?,
+        ))
+    })?;
+
+    rows.map(|row| {
+        let (id, chunk_id, chunk_text, outcome, created_at) = row?;
+        Ok(chunk::LexicalChunkAttemptSummary {
+            id,
+            chunk_id,
+            chunk_text,
+            outcome: parse_review_outcome(&outcome).map_err(|error| column_conversion_error(3, error))?,
+            created_at,
+        })
+    })
+    .collect()
+}
+
 fn apply_outcome_to_chunk(
     conn: &Connection,
     chunk_id: i64,
@@ -2699,6 +2732,26 @@ pub(crate) fn recent_writing_tasks(
     .collect()
 }
 
+/// Whether the writing task's most recent evaluation (whichever stage ran
+/// last) still has priority issues attached — used as the journey feed's
+/// "needs review" signal for writing checkpoints.
+pub(crate) fn writing_task_has_open_priority_issues(
+    conn: &Connection,
+    writing_task_id: i64,
+) -> rusqlite::Result<bool> {
+    let count: i64 = conn.query_row(
+        "SELECT COUNT(*) FROM writing_priority_issue
+         WHERE writing_evaluation_id = (
+             SELECT id FROM writing_evaluation
+             WHERE writing_task_id = ?1
+             ORDER BY created_at DESC LIMIT 1
+         )",
+        params![writing_task_id],
+        |row| row.get(0),
+    )?;
+    Ok(count > 0)
+}
+
 // ---------------------------------------------------------------------
 // Reading session persistence (reading to writing)
 // ---------------------------------------------------------------------
@@ -2908,6 +2961,39 @@ fn reading_evaluation_by_attempt(
             useful_chunks,
         },
     )))
+}
+
+pub(crate) fn recent_reading_sessions(
+    conn: &Connection,
+    limit: i64,
+) -> rusqlite::Result<Vec<reading::ReadingSessionSummary>> {
+    let mut statement = conn.prepare(
+        "SELECT id, text_id, status, created_at FROM reading_session_attempt
+         ORDER BY created_at DESC LIMIT ?1",
+    )?;
+    let rows = statement.query_map(params![limit], |row| {
+        Ok((
+            row.get::<_, i64>(0)?,
+            row.get::<_, String>(1)?,
+            row.get::<_, String>(2)?,
+            row.get::<_, i64>(3)?,
+        ))
+    })?;
+
+    rows.map(|row| {
+        let (id, text_id, status, created_at) = row?;
+        let evaluation = reading_evaluation_by_attempt(conn, id)?;
+        Ok(reading::ReadingSessionSummary {
+            id,
+            text_id,
+            status: parse_reading_session_status(&status)
+                .map_err(|error| column_conversion_error(2, error))?,
+            created_at,
+            summary_fidelity: evaluation.as_ref().map(|(_, record)| record.summary_fidelity),
+            response_relevance: evaluation.as_ref().map(|(_, record)| record.response_relevance),
+        })
+    })
+    .collect()
 }
 
 pub(crate) fn reading_session_detail(
@@ -4114,14 +4200,14 @@ fn column_conversion_error(column: usize, error: std::io::Error) -> rusqlite::Er
 #[derive(Clone, Debug, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
 pub struct AssessmentSummary {
-    id: i64,
-    started_at: i64,
+    pub(crate) id: i64,
+    pub(crate) started_at: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    completed_at: Option<i64>,
+    pub(crate) completed_at: Option<i64>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    estimated_level: Option<CefrLevel>,
+    pub(crate) estimated_level: Option<CefrLevel>,
     #[serde(skip_serializing_if = "Option::is_none")]
-    confidence: Option<f64>,
+    pub(crate) confidence: Option<f64>,
 }
 
 #[derive(Clone, Debug, Serialize, PartialEq)]
@@ -6956,5 +7042,77 @@ mod tests {
             .expect("latest must query")
             .expect("latest must exist");
         assert_eq!(latest.id, second_id);
+    }
+
+    #[test]
+    fn recent_reading_sessions_orders_newest_first_and_reports_evaluation() {
+        let (_directory, path) = scratch_db();
+        let mut conn = open_connection(&path).expect("connection must open");
+
+        let older_id = insert_reading_session_attempt(&conn, "professional-email-project-delay", 1_000)
+            .expect("attempt must insert");
+        let newer_id = insert_reading_session_attempt(&conn, "professional-email-project-delay", 2_000)
+            .expect("attempt must insert");
+
+        record_reading_production_evaluation(
+            &mut conn,
+            newer_id,
+            "summary text",
+            "response text",
+            &reading::ReadingEvaluationRecord {
+                summary_fidelity: reading::SummaryFidelity::Unfaithful,
+                response_relevance: reading::ResponseRelevance::Relevant,
+                priority_issues: Vec::new(),
+                useful_chunks: Vec::new(),
+            },
+            2_100,
+        )
+        .expect("evaluation must persist");
+
+        let results = recent_reading_sessions(&conn, 10).expect("results must query");
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].id, newer_id);
+        assert_eq!(results[0].summary_fidelity, Some(reading::SummaryFidelity::Unfaithful));
+        assert_eq!(results[1].id, older_id);
+        assert_eq!(results[1].summary_fidelity, None);
+    }
+
+    #[test]
+    fn recent_lexical_chunk_attempts_joins_chunk_text_and_orders_newest_first() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+
+        let (chunk_id, _) =
+            create_chunk_candidate(&conn, sample_chunk_input("concern"), 1_000).expect("chunk must insert");
+
+        record_lexical_chunk_attempt(
+            &conn,
+            chunk_id,
+            ExerciseType::UseInSentence,
+            Modality::Written,
+            "Use \"concern\" in a sentence.",
+            "My main concern is the deadline.",
+            ReviewOutcome::Missed,
+            1_200,
+        )
+        .expect("attempt must record");
+        record_lexical_chunk_attempt(
+            &conn,
+            chunk_id,
+            ExerciseType::UseInSentence,
+            Modality::Written,
+            "Use \"concern\" in a sentence.",
+            "My main concern is the timeline.",
+            ReviewOutcome::Remembered,
+            1_400,
+        )
+        .expect("attempt must record");
+
+        let results = recent_lexical_chunk_attempts(&conn, 10).expect("results must query");
+        assert_eq!(results.len(), 2);
+        assert_eq!(results[0].created_at, 1_400);
+        assert_eq!(results[0].outcome, ReviewOutcome::Remembered);
+        assert_eq!(results[0].chunk_text, "concern");
+        assert_eq!(results[1].outcome, ReviewOutcome::Missed);
     }
 }

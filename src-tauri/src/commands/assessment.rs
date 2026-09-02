@@ -92,6 +92,10 @@ impl AssessmentCommandError {
             technical_message: technical_message.into(),
         }
     }
+
+    pub(crate) fn into_parts(self) -> (&'static str, String, String) {
+        (self.code, self.message, self.technical_message)
+    }
 }
 
 impl From<TutorCommandError> for AssessmentCommandError {
