@@ -1,10 +1,8 @@
-import { IconSquareRoundedPlusFilled } from "@tabler/icons-react";
 import {
   MAC_TRAFFIC_LIGHT_CLEARANCE_PX,
   SIDEBAR_WIDTH_PX,
   TITLEBAR_HEIGHT_PX,
 } from "../lib/layout";
-import { Button } from "./ui/button";
 import { SidebarTrigger, useSidebar } from "./ui/sidebar";
 
 const isMacOverlayWindow =
@@ -20,7 +18,7 @@ type TopBarProps = {
   newSessionDisabled: boolean;
 };
 
-export function TopBar({ eyebrow, title, onNewSession, newSessionDisabled }: TopBarProps) {
+export function TopBar({ eyebrow, title }: TopBarProps) {
   const { state } = useSidebar();
 
   return (
