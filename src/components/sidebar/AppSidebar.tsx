@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import {
+  IconBook2,
   IconBooks,
   IconChartBar,
   IconClipboardCheck,
@@ -51,6 +52,7 @@ export type AppPage =
   | "writing"
   | "reading"
   | "chunks"
+  | "dictionary"
   | "history"
   | "progress"
   | "pronunciation";
@@ -67,6 +69,7 @@ const NAV_ITEMS: {
     { page: "writing", label: "Writing", icon: IconPencil },
     { page: "reading", label: "Reading to Writing", icon: IconBooks },
     { page: "chunks", label: "Chunk bank", icon: IconVocabulary },
+    { page: "dictionary", label: "Dictionary", icon: IconBook2 },
     { page: "history", label: "History", icon: IconHistory },
     { page: "progress", label: "My Progress", icon: IconChartBar },
     { page: "pronunciation", label: "Pronunciation", icon: IconMicrophone },

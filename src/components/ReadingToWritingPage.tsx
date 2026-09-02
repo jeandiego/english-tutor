@@ -17,6 +17,7 @@ import { Checkbox } from "./ui/checkbox";
 import { Field, FieldLabel, FieldLegend, FieldSet } from "./ui/field";
 import { InputGroup, InputGroupTextarea } from "./ui/input-group";
 import { RadioGroup, RadioGroupItem } from "./ui/radio-group";
+import { SelectableText } from "./dictionary/SelectableText";
 import { TalkControl } from "./TalkControl";
 
 type ReadingToWritingPageProps = {
@@ -86,7 +87,9 @@ function ReadingTextCard({ text }: { text: ReadingText }) {
         </div>
       </CardHeader>
       <CardContent>
-        <p className="whitespace-pre-wrap text-body text-foreground">{text.body}</p>
+        <SelectableText className="whitespace-pre-wrap text-body text-foreground" contextTag="reading">
+          {text.body}
+        </SelectableText>
       </CardContent>
     </Card>
   );

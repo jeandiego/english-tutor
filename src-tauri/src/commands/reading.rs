@@ -635,6 +635,7 @@ pub async fn accept_reading_chunks(
                     source_writing_evaluation_id: None,
                     source_reading_session_attempt_id: Some(attempt_id),
                     source_scenario_pack_id: None,
+                    source_dictionary_entry_id: None,
                 },
                 now,
             )?;

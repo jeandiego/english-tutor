@@ -5,6 +5,7 @@ import { AssessmentPage } from "./components/AssessmentPage";
 import { ChunkBankPage } from "./components/ChunkBankPage";
 import { ConversationControls } from "./components/ConversationControls";
 import { ConversationStage } from "./components/ConversationStage";
+import { DictionaryPage } from "./components/DictionaryPage";
 import { HistoryPage } from "./components/HistoryPage";
 import { ProgressPage } from "./components/ProgressPage";
 import { PronunciationPracticePage } from "./components/PronunciationPracticePage";
@@ -30,7 +31,9 @@ import {
 } from "./components/ui/alert-dialog";
 import { Alert, AlertDescription, AlertTitle } from "./components/ui/alert";
 import { Button } from "./components/ui/button";
-import { SidebarInset, SidebarProvider } from "./components/ui/sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "./components/ui/sidebar";
+import { DictionarySidebar } from "./components/dictionary/DictionarySidebar";
+import { DictionarySidebarProvider } from "./hooks/useDictionarySidebar";
 import { useLiveConversation } from "./hooks/useLiveConversation";
 import { useRuntimeSetup } from "./hooks/useRuntimeSetup";
 import { useTutorConversation } from "./hooks/useTutorConversation";
@@ -70,6 +73,7 @@ const PAGE_HEADER: Record<AppPage, { eyebrow: string; title: string }> = {
   writing: { eyebrow: "Writing", title: "Writing gym" },
   reading: { eyebrow: "Reading to Writing", title: "Read, then produce" },
   chunks: { eyebrow: "Chunk bank", title: "Productive vocabulary" },
+  dictionary: { eyebrow: "Dictionary", title: "Saved lookups" },
   history: { eyebrow: "History", title: "Past conversations" },
   progress: { eyebrow: "My Progress", title: "Learning trends" },
   pronunciation: { eyebrow: "Pronunciation", title: "Practice a phrase" },
@@ -78,6 +82,7 @@ const PAGE_HEADER: Record<AppPage, { eyebrow: string; title: string }> = {
 function App() {
   const [activePage, setActivePage] = useState<AppPage>("conversation");
   const [focusSessionId, setFocusSessionId] = useState<number | undefined>();
+  const [dictionarySidebarOpen, setDictionarySidebarOpen] = useState(false);
   const [settingsModalOpen, setSettingsModalOpen] = useState(false);
   const [settingsSection, setSettingsSection] = useState<SettingsSectionId>("transcription");
   const queryClient = useQueryClient();
@@ -239,188 +244,206 @@ function App() {
   };
 
   return (
-    <SidebarProvider
-      className="h-svh"
-      data-page={activePage}
-      style={{ "--sidebar-width": `${SIDEBAR_WIDTH_PX}px` } as CSSProperties}
-    >
-      <AppSidebar
-        activePage={activePage}
-        estimatedLevel={estimatedLevel}
-        healthState={healthState}
-        navigationDisabled={voiceBusy}
-        onNavigate={navigate}
-        onOpenSession={(sessionId) => {
-          setFocusSessionId(sessionId);
-          setActivePage("history");
-        }}
-        onOpenSettings={openSettings}
-        onSelectVoice={(provider, voiceId) => void selectTtsVoice(provider, voiceId)}
-        transcription={transcriptionDiagnostic}
-        ttsState={ttsState}
-        tutor={tutorDiagnostic}
-      />
-      <SidebarInset>
-        <TopBar
-          eyebrow={PAGE_HEADER[activePage].eyebrow}
-          newSessionDisabled={voiceBusy}
-          onNewSession={() => navigate("sessions")}
-          title={PAGE_HEADER[activePage].title}
-        />
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-10">
-          <ErrorBoundary
-            FallbackComponent={PageErrorFallback}
-            onError={(error) => console.error("Page content crashed:", error)}
-            resetKeys={[activePage, focusSessionId]}
-          >
-          {activePage === "conversation" ? (
-        <>
-          <ConversationStage
-            exchanges={conversation.exchanges}
-            historyWarning={liveConversation.startError?.message}
-            loopState={conversation.loopState}
-            onReplay={conversation.replay}
-            onSkipRepair={conversation.skipRepair}
-            replayState={conversation.replayState}
-            resumeBanner={liveConversation.resumeBanner}
-            speaking={conversation.speaking}
-            state={conversation.state}
-            thinking={conversation.thinking}
-          />
-          <ConversationControls
-            currentModel={tutorState.status === "loaded" ? tutorState.setup.settings.modelName : undefined}
-            disabled={voiceBusy || healthState.status !== "ready" || !transcriptionReady || !tutorReady}
-            disabledHint={voiceDisabledHint}
-            modelPickerDisabled={tutorState.status !== "loaded" || tutorState.saving}
-            models={tutorState.status === "loaded" ? tutorState.setup.preflight.availableModels : []}
-            onRecordEnd={(owner) => void conversation.end(owner)}
-            onRecordStart={(owner) => void conversation.begin(owner)}
-            onSelectModel={(name) => void selectTutorModel(name)}
-            onSend={(text) => conversation.sendTypedMessage(text)}
-            recordingState={conversation.state}
-            speaking={conversation.speaking}
-            thinking={conversation.thinking}
-          />
-        </>
-      ) : activePage === "sessions" ? (
-        <SessionsPage
-          currentModel={tutorState.status === "loaded" ? tutorState.setup.settings.modelName : undefined}
-          disabled={
-            healthState.status !== "ready" || !transcriptionReady || !tutorReady
-          }
-          disabledHint={voiceDisabledHint}
-          modelPickerDisabled={tutorState.status !== "loaded" || tutorState.saving}
-          models={tutorState.status === "loaded" ? tutorState.setup.preflight.availableModels : []}
-          onSelectModel={(name) => void selectTutorModel(name)}
-          repairIntensity={repairIntensity}
-        />
-      ) : activePage === "assessment" ? (
-        <AssessmentPage
-          disabled={
-            healthState.status !== "ready" || !transcriptionReady || !tutorReady
-          }
-          disabledHint={voiceDisabledHint}
-          onAssessmentCompleted={() =>
-            void queryClient.invalidateQueries({
-              queryKey: assessmentKeys.latest(),
-            })
-          }
-        />
-      ) : activePage === "writing" ? (
-        <WritingGymPage
-          disabled={healthState.status !== "ready" || !tutorReady}
-          disabledHint={writingDisabledHint}
-        />
-      ) : activePage === "reading" ? (
-        <ReadingToWritingPage
-          disabled={healthState.status !== "ready" || !tutorReady}
-          disabledHint={writingDisabledHint}
-          repairIntensity={repairIntensity}
-          speechDisabled={healthState.status !== "ready" || !transcriptionReady}
-          speechDisabledHint={voiceDisabledHint}
-        />
-      ) : activePage === "chunks" ? (
-        <ChunkBankPage
-          disabled={healthState.status !== "ready" || !tutorReady}
-          disabledHint={writingDisabledHint}
-        />
-      ) : activePage === "history" ? (
-        <HistoryPage
-          focusSessionId={focusSessionId}
-          onContinue={handleContinue}
-          onSelectSession={setFocusSessionId}
-        />
-      ) : activePage === "progress" ? (
-        <ProgressPage />
-      ) : (
-        <PronunciationPracticePage
-          disabled={healthState.status !== "ready" || !transcriptionReady}
-          disabledHint={voiceDisabledHint}
-        />
-      )}
-          </ErrorBoundary>
-        </div>
-      </SidebarInset>
-      <SettingsModal
-        onOpenChange={setSettingsModalOpen}
-        onSectionChange={setSettingsSection}
-        onTranscriptionDraftChange={setSettingsDraft}
-        onTranscriptionReset={resetSettingsDraft}
-        onTranscriptionRetry={reloadTranscriptionSetup}
-        onTranscriptionSave={saveSettings}
-        onTtsDraftChange={setTtsSettingsDraft}
-        onTtsReset={resetTtsSettingsDraft}
-        onTtsRetry={reloadTtsSetup}
-        onTtsSave={saveTtsSettings}
-        onTutorDraftChange={setTutorSettingsDraft}
-        onTutorReset={resetTutorSettingsDraft}
-        onTutorRetry={reloadTutorSetup}
-        onTutorSave={saveTutorSettings}
-        open={settingsModalOpen}
-        section={settingsSection}
-        transcriptionDirty={settingsDirty}
-        transcriptionDraft={settingsDraft}
-        transcriptionState={transcriptionState}
-        ttsDirty={ttsSettingsDirty}
-        ttsDraft={ttsSettingsDraft}
-        ttsState={ttsState}
-        tutorDirty={tutorSettingsDirty}
-        tutorDraft={tutorSettingsDraft}
-        tutorState={tutorState}
-      />
-      <AlertDialog
-        onOpenChange={(open) => {
-          if (!open) {
-            liveConversation.cancelPendingSwitch();
-          }
-        }}
-        open={liveConversation.pendingResume !== undefined}
+    <DictionarySidebarProvider onLookupRequested={() => setDictionarySidebarOpen(true)}>
+      <SidebarProvider
+        className="h-svh"
+        onOpenChange={setDictionarySidebarOpen}
+        open={dictionarySidebarOpen}
       >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Switch your active conversation?</AlertDialogTitle>
-            <AlertDialogDescription>
-              You have an ongoing conversation. Continuing &quot;
-              {liveConversation.pendingResume?.sourceTitle}&quot; will make it your active
-              conversation instead.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel onClick={() => liveConversation.cancelPendingSwitch()}>
-              Cancel
-            </AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                liveConversation.confirmPendingSwitch();
-                navigate("conversation");
+        <SidebarInset>
+          <SidebarProvider
+            className="h-svh"
+            data-page={activePage}
+            style={{ "--sidebar-width": `${SIDEBAR_WIDTH_PX}px` } as CSSProperties}
+          >
+            <AppSidebar
+              activePage={activePage}
+              estimatedLevel={estimatedLevel}
+              healthState={healthState}
+              navigationDisabled={voiceBusy}
+              onNavigate={navigate}
+              onOpenSession={(sessionId) => {
+                setFocusSessionId(sessionId);
+                setActivePage("history");
               }}
+              onOpenSettings={openSettings}
+              onSelectVoice={(provider, voiceId) => void selectTtsVoice(provider, voiceId)}
+              transcription={transcriptionDiagnostic}
+              ttsState={ttsState}
+              tutor={tutorDiagnostic}
+            />
+            <SidebarInset>
+              <TopBar
+                eyebrow={PAGE_HEADER[activePage].eyebrow}
+                newSessionDisabled={voiceBusy}
+                onNewSession={() => navigate("sessions")}
+                title={PAGE_HEADER[activePage].title}
+              />
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden pt-10">
+                <ErrorBoundary
+                  FallbackComponent={PageErrorFallback}
+                  onError={(error) => console.error("Page content crashed:", error)}
+                  resetKeys={[activePage, focusSessionId]}
+                >
+                {activePage === "conversation" ? (
+              <>
+                <ConversationStage
+                  exchanges={conversation.exchanges}
+                  historyWarning={liveConversation.startError?.message}
+                  loopState={conversation.loopState}
+                  onReplay={conversation.replay}
+                  onSkipRepair={conversation.skipRepair}
+                  replayState={conversation.replayState}
+                  resumeBanner={liveConversation.resumeBanner}
+                  speaking={conversation.speaking}
+                  state={conversation.state}
+                  thinking={conversation.thinking}
+                />
+                <ConversationControls
+                  currentModel={tutorState.status === "loaded" ? tutorState.setup.settings.modelName : undefined}
+                  disabled={voiceBusy || healthState.status !== "ready" || !transcriptionReady || !tutorReady}
+                  disabledHint={voiceDisabledHint}
+                  modelPickerDisabled={tutorState.status !== "loaded" || tutorState.saving}
+                  models={tutorState.status === "loaded" ? tutorState.setup.preflight.availableModels : []}
+                  onRecordEnd={(owner) => void conversation.end(owner)}
+                  onRecordStart={(owner) => void conversation.begin(owner)}
+                  onSelectModel={(name) => void selectTutorModel(name)}
+                  onSend={(text) => conversation.sendTypedMessage(text)}
+                  recordingState={conversation.state}
+                  speaking={conversation.speaking}
+                  thinking={conversation.thinking}
+                />
+              </>
+            ) : activePage === "sessions" ? (
+              <SessionsPage
+                currentModel={tutorState.status === "loaded" ? tutorState.setup.settings.modelName : undefined}
+                disabled={
+                  healthState.status !== "ready" || !transcriptionReady || !tutorReady
+                }
+                disabledHint={voiceDisabledHint}
+                modelPickerDisabled={tutorState.status !== "loaded" || tutorState.saving}
+                models={tutorState.status === "loaded" ? tutorState.setup.preflight.availableModels : []}
+                onSelectModel={(name) => void selectTutorModel(name)}
+                repairIntensity={repairIntensity}
+              />
+            ) : activePage === "assessment" ? (
+              <AssessmentPage
+                disabled={
+                  healthState.status !== "ready" || !transcriptionReady || !tutorReady
+                }
+                disabledHint={voiceDisabledHint}
+                onAssessmentCompleted={() =>
+                  void queryClient.invalidateQueries({
+                    queryKey: assessmentKeys.latest(),
+                  })
+                }
+              />
+            ) : activePage === "writing" ? (
+              <WritingGymPage
+                disabled={healthState.status !== "ready" || !tutorReady}
+                disabledHint={writingDisabledHint}
+              />
+            ) : activePage === "reading" ? (
+              <ReadingToWritingPage
+                disabled={healthState.status !== "ready" || !tutorReady}
+                disabledHint={writingDisabledHint}
+                repairIntensity={repairIntensity}
+                speechDisabled={healthState.status !== "ready" || !transcriptionReady}
+                speechDisabledHint={voiceDisabledHint}
+              />
+            ) : activePage === "chunks" ? (
+              <ChunkBankPage
+                disabled={healthState.status !== "ready" || !tutorReady}
+                disabledHint={writingDisabledHint}
+              />
+            ) : activePage === "dictionary" ? (
+              <DictionaryPage />
+            ) : activePage === "history" ? (
+              <HistoryPage
+                focusSessionId={focusSessionId}
+                onContinue={handleContinue}
+                onSelectSession={setFocusSessionId}
+              />
+            ) : activePage === "progress" ? (
+              <ProgressPage />
+            ) : (
+              <PronunciationPracticePage
+                disabled={healthState.status !== "ready" || !transcriptionReady}
+                disabledHint={voiceDisabledHint}
+              />
+            )}
+                </ErrorBoundary>
+              </div>
+            </SidebarInset>
+            <SettingsModal
+              onOpenChange={setSettingsModalOpen}
+              onSectionChange={setSettingsSection}
+              onTranscriptionDraftChange={setSettingsDraft}
+              onTranscriptionReset={resetSettingsDraft}
+              onTranscriptionRetry={reloadTranscriptionSetup}
+              onTranscriptionSave={saveSettings}
+              onTtsDraftChange={setTtsSettingsDraft}
+              onTtsReset={resetTtsSettingsDraft}
+              onTtsRetry={reloadTtsSetup}
+              onTtsSave={saveTtsSettings}
+              onTutorDraftChange={setTutorSettingsDraft}
+              onTutorReset={resetTutorSettingsDraft}
+              onTutorRetry={reloadTutorSetup}
+              onTutorSave={saveTutorSettings}
+              open={settingsModalOpen}
+              section={settingsSection}
+              transcriptionDirty={settingsDirty}
+              transcriptionDraft={settingsDraft}
+              transcriptionState={transcriptionState}
+              ttsDirty={ttsSettingsDirty}
+              ttsDraft={ttsSettingsDraft}
+              ttsState={ttsState}
+              tutorDirty={tutorSettingsDirty}
+              tutorDraft={tutorSettingsDraft}
+              tutorState={tutorState}
+            />
+            <AlertDialog
+              onOpenChange={(open) => {
+                if (!open) {
+                  liveConversation.cancelPendingSwitch();
+                }
+              }}
+              open={liveConversation.pendingResume !== undefined}
             >
-              Switch conversation
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </SidebarProvider>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Switch your active conversation?</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    You have an ongoing conversation. Continuing &quot;
+                    {liveConversation.pendingResume?.sourceTitle}&quot; will make it your active
+                    conversation instead.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel onClick={() => liveConversation.cancelPendingSwitch()}>
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={() => {
+                      liveConversation.confirmPendingSwitch();
+                      navigate("conversation");
+                    }}
+                  >
+                    Switch conversation
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </SidebarProvider>
+        </SidebarInset>
+        <SidebarTrigger
+          className="fixed top-1.5 right-3 z-40 text-foreground/60 hover:bg-transparent hover:text-foreground"
+          size="icon-sm"
+          variant="ghost"
+        />
+        <DictionarySidebar />
+      </SidebarProvider>
+    </DictionarySidebarProvider>
   );
 }
 

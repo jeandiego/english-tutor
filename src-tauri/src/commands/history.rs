@@ -11,6 +11,7 @@ use tauri::{AppHandle, Manager};
 
 use super::assessment::{cefr_level_str, competency_label, AssessmentCompetency, CefrLevel};
 use super::chunk::{self, ChunkCandidateInput, ChunkOrigin, ExerciseType, LexicalChunkType, Modality, ProductiveStatus};
+use super::dictionary::{self, DictionaryContextTag};
 use super::listening::ListeningCheckType;
 use super::pronunciation::{self, PronunciationProblemCategory, PronunciationTargetSource};
 use super::reading;
@@ -26,7 +27,7 @@ use super::tutor::{
 };
 
 const DB_FILE_NAME: &str = "history.sqlite3";
-const SCHEMA_VERSION: i32 = 15;
+const SCHEMA_VERSION: i32 = 16;
 const ALL_TIME_CATEGORY_LIMIT: i64 = 100_000;
 const DEFAULT_LIST_LIMIT: i64 = 10;
 const MAX_LIST_LIMIT: i64 = 100;
@@ -1214,6 +1215,84 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         )?;
     }
 
+    if current_version < 16 {
+        conn.execute_batch(
+            "CREATE TABLE dictionary_entry (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chunk_type TEXT NOT NULL CHECK (chunk_type IN (
+                    'single_word', 'collocation', 'phrase', 'discourse_marker',
+                    'hedging_expression', 'stance_phrase', 'register_specific_expression',
+                    'domain_specific_expression'
+                )),
+                text TEXT NOT NULL,
+                normalized_text TEXT NOT NULL UNIQUE,
+                meaning TEXT NOT NULL,
+                examples_json TEXT NOT NULL,
+                context_tag TEXT NOT NULL CHECK (context_tag IN ('reading', 'writing', 'conversation')),
+                source_session_id INTEGER,
+                excluded INTEGER NOT NULL DEFAULT 0 CHECK (excluded IN (0, 1)),
+                promoted_lexical_chunk_id INTEGER REFERENCES lexical_chunk(id) ON DELETE SET NULL,
+                created_at INTEGER NOT NULL,
+                last_looked_up_at INTEGER NOT NULL
+            );
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_dictionary_entry_normalized_text ON dictionary_entry(normalized_text);
+            CREATE INDEX IF NOT EXISTS idx_dictionary_entry_excluded ON dictionary_entry(excluded, created_at);
+
+            PRAGMA foreign_keys = OFF;
+
+            CREATE TABLE lexical_chunk_v16 (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chunk_type TEXT NOT NULL CHECK (chunk_type IN (
+                    'single_word', 'collocation', 'phrase', 'discourse_marker',
+                    'hedging_expression', 'stance_phrase', 'register_specific_expression',
+                    'domain_specific_expression'
+                )),
+                text TEXT NOT NULL,
+                normalized_text TEXT NOT NULL UNIQUE,
+                meaning TEXT NOT NULL,
+                register TEXT NOT NULL,
+                target_level TEXT NOT NULL CHECK (target_level IN ('A1','A2','B1','B2','C1','C2')),
+                domain TEXT,
+                examples_json TEXT NOT NULL,
+                common_error TEXT,
+                origin TEXT NOT NULL CHECK (origin IN (
+                    'correction', 'better_expression', 'repair_event', 'writing_task', 'reading_session',
+                    'manual', 'scenario_pack', 'dictionary_lookup'
+                )),
+                source_correction_id INTEGER REFERENCES correction(id) ON DELETE SET NULL,
+                source_expression_id INTEGER REFERENCES expression(id) ON DELETE SET NULL,
+                source_repair_event_id INTEGER REFERENCES repair_event(id) ON DELETE SET NULL,
+                source_writing_evaluation_id INTEGER REFERENCES writing_evaluation(id) ON DELETE SET NULL,
+                source_reading_session_attempt_id INTEGER REFERENCES reading_session_attempt(id) ON DELETE SET NULL,
+                source_scenario_pack_id TEXT,
+                source_dictionary_entry_id INTEGER REFERENCES dictionary_entry(id) ON DELETE SET NULL,
+                productive_status TEXT NOT NULL DEFAULT 'not_tried' CHECK (productive_status IN (
+                    'not_tried', 'recognized', 'used_with_help', 'used_independently', 'automatic'
+                )),
+                review_item_id INTEGER REFERENCES review_item(id) ON DELETE SET NULL,
+                last_used_at INTEGER,
+                created_at INTEGER NOT NULL
+            );
+            INSERT INTO lexical_chunk_v16
+                (id, chunk_type, text, normalized_text, meaning, register, target_level, domain, examples_json,
+                 common_error, origin, source_correction_id, source_expression_id, source_repair_event_id,
+                 source_writing_evaluation_id, source_reading_session_attempt_id, source_scenario_pack_id,
+                 source_dictionary_entry_id, productive_status, review_item_id, last_used_at, created_at)
+            SELECT
+                id, chunk_type, text, normalized_text, meaning, register, target_level, domain, examples_json,
+                common_error, origin, source_correction_id, source_expression_id, source_repair_event_id,
+                source_writing_evaluation_id, source_reading_session_attempt_id, source_scenario_pack_id,
+                NULL, productive_status, review_item_id, last_used_at, created_at
+            FROM lexical_chunk;
+            DROP TABLE lexical_chunk;
+            ALTER TABLE lexical_chunk_v16 RENAME TO lexical_chunk;
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_lexical_chunk_normalized_text ON lexical_chunk(normalized_text);
+            CREATE INDEX IF NOT EXISTS idx_lexical_chunk_status ON lexical_chunk(productive_status);
+
+            PRAGMA foreign_keys = ON;",
+        )?;
+    }
+
     conn.pragma_update(None, "user_version", SCHEMA_VERSION)?;
     Ok(())
 }
@@ -1479,6 +1558,7 @@ pub(crate) fn record_turn_pair(
                     source_writing_evaluation_id: None,
                     source_reading_session_attempt_id: None,
                     source_scenario_pack_id: None,
+                    source_dictionary_entry_id: None,
                 },
                 now_ms,
             )?;
@@ -1520,6 +1600,7 @@ pub(crate) fn record_turn_pair(
                 source_writing_evaluation_id: None,
                 source_reading_session_attempt_id: None,
                 source_scenario_pack_id: None,
+                source_dictionary_entry_id: None,
             },
             now_ms,
         )?;
@@ -1713,6 +1794,7 @@ fn chunk_origin_str(origin: ChunkOrigin) -> &'static str {
         ChunkOrigin::ReadingSession => "reading_session",
         ChunkOrigin::Manual => "manual",
         ChunkOrigin::ScenarioPack => "scenario_pack",
+        ChunkOrigin::DictionaryLookup => "dictionary_lookup",
     }
 }
 
@@ -1725,6 +1807,7 @@ fn parse_chunk_origin(value: &str) -> Result<ChunkOrigin, std::io::Error> {
         "reading_session" => Ok(ChunkOrigin::ReadingSession),
         "manual" => Ok(ChunkOrigin::Manual),
         "scenario_pack" => Ok(ChunkOrigin::ScenarioPack),
+        "dictionary_lookup" => Ok(ChunkOrigin::DictionaryLookup),
         other => Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
             format!("unknown chunk origin: {other}"),
@@ -1861,8 +1944,8 @@ pub(crate) fn create_chunk_candidate(
             (chunk_type, text, normalized_text, meaning, register, target_level, domain, examples_json,
              common_error, origin, source_correction_id, source_expression_id, source_repair_event_id,
              source_writing_evaluation_id, source_reading_session_attempt_id, source_scenario_pack_id,
-             productive_status, review_item_id, last_used_at, created_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, 'not_tried', NULL, NULL, ?17)",
+             source_dictionary_entry_id, productive_status, review_item_id, last_used_at, created_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, 'not_tried', NULL, NULL, ?18)",
         params![
             lexical_chunk_type_str(input.chunk_type),
             input.text,
@@ -1880,6 +1963,7 @@ pub(crate) fn create_chunk_candidate(
             input.source_writing_evaluation_id,
             input.source_reading_session_attempt_id,
             input.source_scenario_pack_id,
+            input.source_dictionary_entry_id,
             now_ms,
         ],
     )?;
@@ -2002,6 +2086,245 @@ fn apply_outcome_to_chunk(
         params![productive_status_str(new_status), now_ms, chunk_id],
     )?;
     Ok(())
+}
+
+// ---------------------------------------------------------------------
+// dictionary_entry — the select-to-explain personal dictionary. Kept
+// standalone from lexical_chunk (see chunk::ChunkOrigin::DictionaryLookup
+// doc comment for why): a lookup only needs word/meaning/examples, not the
+// register/target_level/domain the practice pipeline requires. A lookup
+// can be one-way "promoted" into lexical_chunk via
+// `promote_dictionary_entry_to_chunk` when the learner wants to drill it.
+// ---------------------------------------------------------------------
+
+fn dictionary_context_tag_str(tag: DictionaryContextTag) -> &'static str {
+    match tag {
+        DictionaryContextTag::Reading => "reading",
+        DictionaryContextTag::Writing => "writing",
+        DictionaryContextTag::Conversation => "conversation",
+    }
+}
+
+fn parse_dictionary_context_tag(value: &str) -> Result<DictionaryContextTag, std::io::Error> {
+    match value {
+        "reading" => Ok(DictionaryContextTag::Reading),
+        "writing" => Ok(DictionaryContextTag::Writing),
+        "conversation" => Ok(DictionaryContextTag::Conversation),
+        other => Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("unknown dictionary context tag: {other}"),
+        )),
+    }
+}
+
+const DICTIONARY_ENTRY_COLUMNS: &str = "id, chunk_type, text, meaning, examples_json, context_tag, \
+     source_session_id, excluded, promoted_lexical_chunk_id, created_at, last_looked_up_at";
+
+fn dictionary_entry_from_row(row: &rusqlite::Row) -> rusqlite::Result<dictionary::DictionaryEntry> {
+    let chunk_type: String = row.get(1)?;
+    let examples_json: String = row.get(4)?;
+    let context_tag: String = row.get(5)?;
+    let excluded: i64 = row.get(7)?;
+    let examples: Vec<String> = serde_json::from_str(&examples_json).unwrap_or_default();
+    Ok(dictionary::DictionaryEntry {
+        id: row.get(0)?,
+        chunk_type: parse_lexical_chunk_type(&chunk_type).map_err(|error| column_conversion_error(1, error))?,
+        text: row.get(2)?,
+        meaning: row.get(3)?,
+        examples,
+        context_tag: parse_dictionary_context_tag(&context_tag)
+            .map_err(|error| column_conversion_error(5, error))?,
+        source_session_id: row.get(6)?,
+        excluded: excluded != 0,
+        promoted_lexical_chunk_id: row.get(8)?,
+        created_at: row.get(9)?,
+        last_looked_up_at: row.get(10)?,
+    })
+}
+
+pub(crate) fn dictionary_entry_by_id(
+    conn: &Connection,
+    entry_id: i64,
+) -> rusqlite::Result<Option<dictionary::DictionaryEntry>> {
+    conn.query_row(
+        &format!("SELECT {DICTIONARY_ENTRY_COLUMNS} FROM dictionary_entry WHERE id = ?1"),
+        params![entry_id],
+        dictionary_entry_from_row,
+    )
+    .optional()
+}
+
+fn find_dictionary_entry_by_normalized_text(
+    conn: &Connection,
+    normalized_text: &str,
+) -> rusqlite::Result<Option<i64>> {
+    conn.query_row(
+        "SELECT id FROM dictionary_entry WHERE normalized_text = ?1",
+        params![normalized_text],
+        |row| row.get(0),
+    )
+    .optional()
+}
+
+/// Every successful lookup auto-saves (per spec — no separate "save"
+/// step). Repeated lookups of the same word refresh the stored
+/// explanation/context/timestamp in place rather than accumulating
+/// duplicate rows, mirroring `create_chunk_candidate`'s dedup-by-
+/// `normalized_text` approach.
+#[allow(clippy::too_many_arguments)]
+pub(crate) fn upsert_dictionary_entry(
+    conn: &Connection,
+    chunk_type: LexicalChunkType,
+    text: &str,
+    meaning: &str,
+    examples: &[String],
+    context_tag: DictionaryContextTag,
+    source_session_id: Option<i64>,
+    now_ms: i64,
+) -> rusqlite::Result<i64> {
+    let normalized_text = chunk::normalize_chunk_text(text);
+    let examples_json = serde_json::to_string(examples).unwrap_or_else(|_| "[]".to_string());
+
+    if let Some(existing_id) = find_dictionary_entry_by_normalized_text(conn, &normalized_text)? {
+        conn.execute(
+            "UPDATE dictionary_entry
+             SET chunk_type = ?1, meaning = ?2, examples_json = ?3, context_tag = ?4,
+                 source_session_id = ?5, last_looked_up_at = ?6
+             WHERE id = ?7",
+            params![
+                lexical_chunk_type_str(chunk_type),
+                meaning,
+                examples_json,
+                dictionary_context_tag_str(context_tag),
+                source_session_id,
+                now_ms,
+                existing_id,
+            ],
+        )?;
+        return Ok(existing_id);
+    }
+
+    conn.execute(
+        "INSERT INTO dictionary_entry
+            (chunk_type, text, normalized_text, meaning, examples_json, context_tag, source_session_id,
+             excluded, created_at, last_looked_up_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, 0, ?8, ?8)",
+        params![
+            lexical_chunk_type_str(chunk_type),
+            text,
+            normalized_text,
+            meaning,
+            examples_json,
+            dictionary_context_tag_str(context_tag),
+            source_session_id,
+            now_ms,
+        ],
+    )?;
+    Ok(conn.last_insert_rowid())
+}
+
+pub(crate) fn list_dictionary_entries(
+    conn: &Connection,
+    context_tag: Option<DictionaryContextTag>,
+    include_excluded: bool,
+    limit: i64,
+) -> rusqlite::Result<Vec<dictionary::DictionaryEntry>> {
+    let context_tag_str = context_tag.map(dictionary_context_tag_str);
+    let mut statement = conn.prepare(&format!(
+        "SELECT {DICTIONARY_ENTRY_COLUMNS} FROM dictionary_entry \
+         WHERE (?1 IS NULL OR context_tag = ?1) AND (?2 = 1 OR excluded = 0) \
+         ORDER BY created_at DESC LIMIT ?3"
+    ))?;
+    let rows = statement.query_map(
+        params![context_tag_str, include_excluded as i64, limit],
+        dictionary_entry_from_row,
+    )?;
+    rows.collect()
+}
+
+pub(crate) fn set_dictionary_entry_excluded(
+    conn: &Connection,
+    entry_id: i64,
+    excluded: bool,
+) -> Result<dictionary::DictionaryEntry, HistoryCommandError> {
+    conn.execute(
+        "UPDATE dictionary_entry SET excluded = ?1 WHERE id = ?2",
+        params![excluded as i64, entry_id],
+    )?;
+    dictionary_entry_by_id(conn, entry_id)?.ok_or_else(|| {
+        HistoryCommandError::new(
+            "not-found",
+            "That dictionary entry no longer exists.",
+            format!("dictionary_entry {entry_id} not found"),
+        )
+    })
+}
+
+/// Bridges a dictionary lookup into the existing practice/SRS pipeline —
+/// one-way and optional. Defaults `register`/`target_level`/`domain`
+/// since a quick lookup doesn't naturally produce them (unlike
+/// corrections/writing feedback, which do); the learner can still refine
+/// a promoted chunk from the Chunk Bank like any manually-added one.
+/// Idempotent: re-promoting an already-promoted entry just returns the
+/// existing linked chunk instead of erroring or duplicating.
+pub(crate) fn promote_dictionary_entry_to_chunk(
+    conn: &Connection,
+    entry_id: i64,
+    now_ms: i64,
+) -> Result<chunk::LexicalChunk, HistoryCommandError> {
+    let entry = dictionary_entry_by_id(conn, entry_id)?.ok_or_else(|| {
+        HistoryCommandError::new(
+            "not-found",
+            "That dictionary entry no longer exists.",
+            format!("dictionary_entry {entry_id} not found"),
+        )
+    })?;
+    if let Some(chunk_id) = entry.promoted_lexical_chunk_id {
+        return lexical_chunk_by_id(conn, chunk_id)?.ok_or_else(|| {
+            HistoryCommandError::new(
+                "chunk-task-failed",
+                "The promoted chunk could not be found.",
+                format!("lexical_chunk {chunk_id} vanished after promotion"),
+            )
+        });
+    }
+
+    const DEFAULT_REGISTER: &str = "neutral";
+    const DEFAULT_TARGET_LEVEL: CefrLevel = CefrLevel::B2;
+
+    let (chunk_id, _created) = create_chunk_candidate(
+        conn,
+        ChunkCandidateInput {
+            chunk_type: entry.chunk_type,
+            text: &entry.text,
+            meaning: &entry.meaning,
+            register: DEFAULT_REGISTER,
+            target_level: DEFAULT_TARGET_LEVEL,
+            domain: None,
+            examples: &entry.examples,
+            common_error: None,
+            origin: ChunkOrigin::DictionaryLookup,
+            source_correction_id: None,
+            source_expression_id: None,
+            source_repair_event_id: None,
+            source_writing_evaluation_id: None,
+            source_reading_session_attempt_id: None,
+            source_scenario_pack_id: None,
+            source_dictionary_entry_id: Some(entry_id),
+        },
+        now_ms,
+    )?;
+    conn.execute(
+        "UPDATE dictionary_entry SET promoted_lexical_chunk_id = ?1 WHERE id = ?2",
+        params![chunk_id, entry_id],
+    )?;
+    lexical_chunk_by_id(conn, chunk_id)?.ok_or_else(|| {
+        HistoryCommandError::new(
+            "chunk-task-failed",
+            "The word could not be promoted to practice.",
+            format!("lexical_chunk {chunk_id} vanished after promotion"),
+        )
+    })
 }
 
 /// Called from `record_review_event_and_reschedule` right after a review
@@ -2139,6 +2462,7 @@ fn insert_writing_evaluation_tx(
                 source_writing_evaluation_id: Some(evaluation_id),
                 source_reading_session_attempt_id: None,
                 source_scenario_pack_id: None,
+                source_dictionary_entry_id: None,
             },
             now_ms,
         )?;
@@ -5065,6 +5389,7 @@ mod tests {
             source_writing_evaluation_id: None,
             source_reading_session_attempt_id: None,
             source_scenario_pack_id: None,
+            source_dictionary_entry_id: None,
         }
     }
 
@@ -5113,6 +5438,130 @@ mod tests {
         let error =
             promote_chunk_to_review(&conn, chunk_id, 2_000).expect_err("second promotion must fail");
         assert_eq!(error.into_parts().0, "already-promoted");
+    }
+
+    #[test]
+    fn upsert_dictionary_entry_dedups_by_normalized_text_and_refreshes_content() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+
+        let first_id = upsert_dictionary_entry(
+            &conn,
+            LexicalChunkType::Phrase,
+            "  Table This  ",
+            "an old meaning",
+            &["Old example.".to_string()],
+            DictionaryContextTag::Reading,
+            Some(42),
+            1_000,
+        )
+        .expect("first lookup must insert");
+
+        let second_id = upsert_dictionary_entry(
+            &conn,
+            LexicalChunkType::Phrase,
+            "table this",
+            "to postpone something until later",
+            &["Let's table this for now.".to_string()],
+            DictionaryContextTag::Conversation,
+            Some(99),
+            2_000,
+        )
+        .expect("second lookup must dedup");
+        assert_eq!(second_id, first_id);
+
+        let entries = list_dictionary_entries(&conn, None, false, 10).expect("entries must list");
+        assert_eq!(entries.len(), 1);
+        assert_eq!(entries[0].meaning, "to postpone something until later");
+        assert_eq!(entries[0].context_tag, DictionaryContextTag::Conversation);
+        assert_eq!(entries[0].last_looked_up_at, 2_000);
+    }
+
+    #[test]
+    fn list_dictionary_entries_filters_by_context_tag_and_excluded() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+
+        upsert_dictionary_entry(
+            &conn,
+            LexicalChunkType::SingleWord,
+            "ubiquitous",
+            "present everywhere",
+            &["Smartphones are ubiquitous.".to_string()],
+            DictionaryContextTag::Reading,
+            None,
+            1_000,
+        )
+        .expect("reading entry must insert");
+        let writing_id = upsert_dictionary_entry(
+            &conn,
+            LexicalChunkType::SingleWord,
+            "concise",
+            "brief and clear",
+            &["A concise summary.".to_string()],
+            DictionaryContextTag::Writing,
+            None,
+            1_100,
+        )
+        .expect("writing entry must insert");
+
+        assert_eq!(
+            list_dictionary_entries(&conn, Some(DictionaryContextTag::Writing), false, 10)
+                .expect("filtered list must query")
+                .len(),
+            1
+        );
+        assert_eq!(
+            list_dictionary_entries(&conn, None, false, 10)
+                .expect("unfiltered list must query")
+                .len(),
+            2
+        );
+
+        set_dictionary_entry_excluded(&conn, writing_id, true).expect("entry must exclude");
+        assert_eq!(
+            list_dictionary_entries(&conn, None, false, 10)
+                .expect("list excluding hidden entries must query")
+                .len(),
+            1
+        );
+        assert_eq!(
+            list_dictionary_entries(&conn, None, true, 10)
+                .expect("list including hidden entries must query")
+                .len(),
+            2
+        );
+    }
+
+    #[test]
+    fn promote_dictionary_entry_to_chunk_is_idempotent_and_links_back() {
+        let (_directory, path) = scratch_db();
+        let conn = open_connection(&path).expect("connection must open");
+
+        let entry_id = upsert_dictionary_entry(
+            &conn,
+            LexicalChunkType::Phrase,
+            "a growing concern",
+            "an issue that is becoming more serious",
+            &["This has become a growing concern.".to_string()],
+            DictionaryContextTag::Reading,
+            None,
+            1_000,
+        )
+        .expect("entry must insert");
+
+        let chunk = promote_dictionary_entry_to_chunk(&conn, entry_id, 1_500).expect("entry must promote");
+        assert_eq!(chunk.origin, ChunkOrigin::DictionaryLookup);
+        assert!(!chunk.is_promoted);
+
+        let again = promote_dictionary_entry_to_chunk(&conn, entry_id, 2_000)
+            .expect("re-promoting must return the existing chunk");
+        assert_eq!(again.id, chunk.id);
+
+        let entry = dictionary_entry_by_id(&conn, entry_id)
+            .expect("entry must query")
+            .expect("entry must exist");
+        assert_eq!(entry.promoted_lexical_chunk_id, Some(chunk.id));
     }
 
     #[test]
@@ -5287,6 +5736,7 @@ mod tests {
                 source_writing_evaluation_id: None,
                 source_reading_session_attempt_id: Some(attempt_id),
                 source_scenario_pack_id: None,
+                source_dictionary_entry_id: None,
             },
             1_200,
         )
@@ -5407,6 +5857,29 @@ mod tests {
                     reading_session_attempt_id INTEGER NOT NULL,
                     summary_fidelity TEXT NOT NULL,
                     response_relevance TEXT NOT NULL,
+                    created_at INTEGER NOT NULL
+                );
+                CREATE TABLE lexical_chunk (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    chunk_type TEXT NOT NULL,
+                    text TEXT NOT NULL,
+                    normalized_text TEXT NOT NULL UNIQUE,
+                    meaning TEXT NOT NULL,
+                    register TEXT NOT NULL,
+                    target_level TEXT NOT NULL,
+                    domain TEXT,
+                    examples_json TEXT NOT NULL,
+                    common_error TEXT,
+                    origin TEXT NOT NULL,
+                    source_correction_id INTEGER,
+                    source_expression_id INTEGER,
+                    source_repair_event_id INTEGER,
+                    source_writing_evaluation_id INTEGER,
+                    source_reading_session_attempt_id INTEGER,
+                    source_scenario_pack_id TEXT,
+                    productive_status TEXT NOT NULL DEFAULT 'not_tried',
+                    review_item_id INTEGER,
+                    last_used_at INTEGER,
                     created_at INTEGER NOT NULL
                 );
                 INSERT INTO reading_session_attempt (text_id, status, created_at)

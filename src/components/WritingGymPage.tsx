@@ -17,6 +17,7 @@ import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { Card, CardContent, CardHeader } from "./ui/card";
 import { InputGroup, InputGroupTextarea } from "./ui/input-group";
+import { SelectableText } from "./dictionary/SelectableText";
 
 type WritingGymPageProps = {
   disabled: boolean;
@@ -79,7 +80,9 @@ function TaskBrief({ blueprint }: { blueprint: WritingTaskBlueprint }) {
           <span className="text-body-lg font-medium text-foreground">{blueprint.label}</span>
           <Badge variant="outline">{blueprint.targetLevel}</Badge>
         </div>
-        <p className="text-body text-muted-foreground">{blueprint.communicativeGoal}</p>
+        <SelectableText className="text-body text-muted-foreground" contextTag="writing">
+          {blueprint.communicativeGoal}
+        </SelectableText>
         <div className="flex flex-col gap-1">
           <h4 className="text-caption font-medium text-muted-foreground">Success criteria</h4>
           <ul className="flex flex-col gap-0.5 text-body text-foreground">
@@ -329,7 +332,9 @@ function ComparisonView({
             <h4 className="text-caption font-medium text-muted-foreground">Draft</h4>
           </CardHeader>
           <CardContent>
-            <p className="whitespace-pre-wrap text-body text-foreground">{draftText}</p>
+            <SelectableText className="whitespace-pre-wrap text-body text-foreground" contextTag="writing">
+              {draftText}
+            </SelectableText>
           </CardContent>
         </Card>
         <Card>
@@ -337,7 +342,9 @@ function ComparisonView({
             <h4 className="text-caption font-medium text-muted-foreground">Rewrite</h4>
           </CardHeader>
           <CardContent>
-            <p className="whitespace-pre-wrap text-body text-foreground">{rewriteText}</p>
+            <SelectableText className="whitespace-pre-wrap text-body text-foreground" contextTag="writing">
+              {rewriteText}
+            </SelectableText>
           </CardContent>
         </Card>
       </div>

@@ -24,6 +24,7 @@ import { Button } from "./ui/button";
 import { Card, CardContent } from "./ui/card";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "./ui/collapsible";
 import { Input } from "./ui/input";
+import { SelectableText } from "./dictionary/SelectableText";
 import { cn } from "../lib/utils";
 
 type ConversationStageProps = {
@@ -257,15 +258,17 @@ export function Corrections({ corrections }: { corrections: TutorCorrection[] })
           <Badge variant="outline">
             {capitalize(correction.category)} · {capitalize(correction.severity)}
           </Badge>
-          <p className="text-body">
+          <SelectableText className="text-body" contextTag="conversation">
             <span className="text-muted-foreground">You said </span>
             <span className="text-foreground">“{correction.original}”</span>
-          </p>
-          <p className="text-body">
+          </SelectableText>
+          <SelectableText className="text-body" contextTag="conversation">
             <span className="text-muted-foreground">Better </span>
             <span className="font-medium text-success">“{correction.correction}”</span>
-          </p>
-          <p className="text-caption text-muted-foreground">{correction.explanation}</p>
+          </SelectableText>
+          <SelectableText className="text-caption text-muted-foreground" contextTag="conversation">
+            {correction.explanation}
+          </SelectableText>
         </li>
       ))}
     </ul>
@@ -285,17 +288,19 @@ export function BetterExpressions({ expressions }: { expressions: BetterExpressi
           key={index}
         >
           {expression.original && (
-            <p className="text-body">
+            <SelectableText className="text-body" contextTag="conversation">
               <span className="text-muted-foreground">Instead of </span>
               <span className="text-foreground">“{expression.original}”</span>
-            </p>
+            </SelectableText>
           )}
-          <p className="text-body">
+          <SelectableText className="text-body" contextTag="conversation">
             <span className="text-muted-foreground">Try </span>
             <span className="font-medium text-success">“{expression.suggestion}”</span>
-          </p>
+          </SelectableText>
           {expression.explanation && (
-            <p className="text-caption text-muted-foreground">{expression.explanation}</p>
+            <SelectableText className="text-caption text-muted-foreground" contextTag="conversation">
+              {expression.explanation}
+            </SelectableText>
           )}
         </li>
       ))}
@@ -769,7 +774,9 @@ function ConversationLog({
             {exchange.transcript && (
               <div className="flex flex-col gap-1.5">
                 <p className="text-[11px] font-medium text-muted-foreground">You</p>
-                <p className="text-body text-foreground">{exchange.transcript}</p>
+                <SelectableText className="text-body text-foreground" contextTag="conversation">
+                  {exchange.transcript}
+                </SelectableText>
                 {latestRecording && (
                   <RecordingPlayback recording={latestRecording} title="Recorded audio" />
                 )}
@@ -780,7 +787,9 @@ function ConversationLog({
               <div className="flex flex-col gap-1.5">
                 <p className="text-[11px] font-medium text-muted-foreground">Tutor</p>
                 <div className="flex flex-col gap-2">
-                  <p className="text-body text-foreground">{exchange.tutorTurn.reply}</p>
+                  <SelectableText className="text-body text-foreground" contextTag="conversation">
+                    {exchange.tutorTurn.reply}
+                  </SelectableText>
                   {(exchange.responseTimeMs !== undefined || onReplay) && (
                     <div className="flex flex-wrap items-center gap-3">
                       {exchange.responseTimeMs !== undefined && (
