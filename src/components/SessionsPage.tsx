@@ -12,6 +12,7 @@ import { DURATION_PRESETS, type DurationPresetId } from "../sessions/catalog";
 import { PACK_CATALOG } from "../sessions/loadPacks";
 import { toSessionSource, type ScenarioPack, type SessionSource } from "../types/scenarioPack";
 import type { RepairIntensity, RepairOutcome, RepairPriority } from "../types/repair";
+import type { ReviewItemType } from "../types/review";
 import type { TutorModel } from "../types/tutor";
 import { Alert, AlertDescription, AlertTitle } from "./ui/alert";
 import { Badge } from "./ui/badge";
@@ -50,6 +51,14 @@ const REPAIR_OUTCOME_LABELS: Record<RepairOutcome, string> = {
 };
 
 const CEFR_LEVELS: CefrLevel[] = ["A1", "A2", "B1", "B2", "C1", "C2"];
+
+const REVIEW_TYPE_LABELS: Record<ReviewItemType, string> = {
+  grammar_pattern: "Grammar",
+  vocabulary: "Vocabulary",
+  phrase: "Phrase",
+  pronunciation_target: "Pronunciation",
+  conversation_strategy: "Conversation",
+};
 
 function SummarySection({ heading, items }: { heading: string; items: string[] }) {
   if (items.length === 0) {
@@ -90,12 +99,18 @@ function DueReviewItems() {
   }
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <h4 className="text-caption font-medium text-muted-foreground">Due for review</h4>
-      <ul className="flex flex-wrap gap-1.5">
+    <div className="flex flex-col gap-2 rounded-lg bg-muted px-3 py-2.5" role="status">
+      <div className="flex items-baseline justify-between gap-2">
+        <h4 className="text-caption font-medium text-muted-foreground">Due for review</h4>
+        <span className="text-caption text-muted-foreground">Woven into your next session</span>
+      </div>
+      <ul className="flex flex-col gap-1.5">
         {query.data.map((item) => (
-          <li key={item.id}>
-            <Badge variant="outline">{item.content}</Badge>
+          <li className="flex items-baseline gap-2" key={item.id}>
+            <Badge className="shrink-0" variant="outline">
+              {REVIEW_TYPE_LABELS[item.type]}
+            </Badge>
+            <span className="text-body text-foreground">{item.content}</span>
           </li>
         ))}
       </ul>
