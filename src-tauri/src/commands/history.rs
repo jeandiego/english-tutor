@@ -3525,6 +3525,7 @@ fn recent_sessions(conn: &Connection, limit: i64) -> rusqlite::Result<Vec<Sessio
                 (SELECT t.text FROM turn t WHERE t.session_id = s.id AND t.role = 'user'
                  ORDER BY t.timestamp ASC, t.id ASC LIMIT 1) AS first_user_turn
          FROM session s
+         WHERE EXISTS (SELECT 1 FROM turn t WHERE t.session_id = s.id AND t.role = 'user')
          ORDER BY s.started_at DESC
          LIMIT ?1",
     )?;
@@ -6008,8 +6009,9 @@ mod tests {
         )
         .expect("session must create");
 
-        let sessions = recent_sessions(&conn, 10).expect("sessions must list");
-        let session = sessions.iter().find(|s| s.id == session_id).expect("session must exist");
+        let session = session_detail(&conn, session_id)
+            .expect("detail must query")
+            .expect("session must exist");
         assert_eq!(session.mode.as_deref(), Some("daily_standup"));
         assert_eq!(session.topic.as_deref(), Some("focus on past tense"));
         assert_eq!(session.difficulty, Some(CefrLevel::B1));
@@ -6044,8 +6046,9 @@ mod tests {
         )
         .expect("session must complete");
 
-        let sessions = recent_sessions(&conn, 10).expect("sessions must list");
-        let session = sessions.iter().find(|s| s.id == session_id).expect("session must exist");
+        let session = session_detail(&conn, session_id)
+            .expect("detail must query")
+            .expect("session must exist");
         assert_eq!(session.status, SessionRunStatus::Completed);
         assert_eq!(session.ended_at, 5_000);
         let persisted_summary = session.summary.as_ref().expect("summary must persist");
@@ -6067,8 +6070,9 @@ mod tests {
         assert!(continuation.prior_summary.is_none());
         assert!(continuation.recent_messages.is_empty());
 
-        let sessions = recent_sessions(&conn, 10).expect("sessions must list");
-        let session = sessions.iter().find(|s| s.id == session_id).expect("session must exist");
+        let session = session_detail(&conn, session_id)
+            .expect("detail must query")
+            .expect("session must exist");
         assert_eq!(session.status, SessionRunStatus::Active);
     }
 
@@ -6642,9 +6646,11 @@ mod tests {
 
         let sessions = recent_sessions(&conn, 10).expect("sessions must list");
         let with_turn_summary = sessions.iter().find(|s| s.id == with_turn).unwrap();
-        let without_turn_summary = sessions.iter().find(|s| s.id == without_turn).unwrap();
         assert_eq!(with_turn_summary.first_user_turn.as_deref(), Some("hello there"));
-        assert_eq!(without_turn_summary.first_user_turn, None);
+        assert!(
+            sessions.iter().all(|s| s.id != without_turn),
+            "sessions with no turns must not be listed"
+        );
     }
 
     #[test]
